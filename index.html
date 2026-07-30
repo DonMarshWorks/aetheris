@@ -2,24 +2,24 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Aetheris — a world, slowly becoming</title>
 <meta name="description" content="A procedural planet that never stops changing. Coastlines drift, forests spread and give way to desert, ice advances and retreats — held in balance so no environment ever vanishes or takes over. Runs in the browser, no dependencies.">
 <meta name="author" content="Don Marsh">
 <meta name="theme-color" content="#000000">
-<link rel="canonical" href="https://DonMarshWorks.github.io/aetheris/">
+<link rel="canonical" href="https://donmarshworks.github.io/aetheris/">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="Aetheris — a world, slowly becoming">
 <meta property="og:description" content="A procedural planet that never stops changing. Coastlines drift, forests give way to desert, ice advances and retreats — held in balance so no environment ever vanishes or takes over.">
-<meta property="og:url" content="https://DonMarshWorks.github.io/aetheris/">
-<meta property="og:image" content="https://DonMarshWorks.github.io/aetheris/preview.jpg">
+<meta property="og:url" content="https://donmarshworks.github.io/aetheris/">
+<meta property="og:image" content="https://donmarshworks.github.io/aetheris/preview.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Aetheris — a world, slowly becoming">
 <meta name="twitter:description" content="A procedural planet that never stops changing, held in climatic balance so no environment ever vanishes or takes over.">
-<meta name="twitter:image" content="https://DonMarshWorks.github.io/aetheris/preview.jpg">
+<meta name="twitter:image" content="https://donmarshworks.github.io/aetheris/preview.jpg">
 
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cdefs%3E%3CradialGradient id=%27g%27 cx=%270.35%27 cy=%270.3%27%3E%3Cstop offset=%270%27 stop-color=%27%234da3d8%27/%3E%3Cstop offset=%270.55%27 stop-color=%27%231b4f7a%27/%3E%3Cstop offset=%271%27 stop-color=%27%2306121f%27/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2713%27 fill=%27url(%23g)%27/%3E%3Cpath d=%27M7 14c3-2 6 1 9-1s5 1 8-1%27 stroke=%27%235f9c4a%27 stroke-width=%272.4%27 fill=%27none%27 opacity=%27.85%27/%3E%3Cpath d=%27M9 21c3-1.5 7 .5 11-1.5%27 stroke=%27%23c2a870%27 stroke-width=%272%27 fill=%27none%27 opacity=%27.75%27/%3E%3C/svg%3E">
 <style>
@@ -29,23 +29,37 @@
     --faint: rgba(233,240,255,.30);
   }
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}
+  html,body{
+    margin:0;padding:0;height:100%;background:#000;
+    overflow:hidden;overscroll-behavior:none;
+    /* the browser must not claim pan, pinch or double-tap: the canvas
+       handles all of them, and letting the page zoom scaled the interface
+       along with the planet */
+    touch-action:none;-ms-touch-action:none;
+    -webkit-text-size-adjust:100%;text-size-adjust:100%;
+  }
   body{
     font-family: ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
     color:var(--ink); -webkit-font-smoothing:antialiased;
+    position:fixed;inset:0;width:100%;
+    -webkit-tap-highlight-color:transparent;
   }
-  canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab}
+  canvas#gl{
+    position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab;
+    touch-action:none;-webkit-user-select:none;user-select:none;
+  }
   canvas#gl.dragging{cursor:grabbing}
 
   #hud{position:fixed;inset:0;pointer-events:none;transition:opacity 1.2s ease;opacity:1;
     text-shadow:0 1px 4px rgba(0,0,8,.85), 0 0 14px rgba(0,0,8,.55)}
-  #hud.faded{opacity:0}
   #hud.hidden{opacity:0 !important}
+  /* a hidden interface must not keep swallowing clicks */
+  #hud.hidden, #hud.hidden *{pointer-events:none !important}
 
   .corner{position:absolute;padding:22px 26px}
   .bl{left:0;bottom:0}
-  .br{right:0;bottom:0;text-align:right}
   .tl{left:0;top:0}
+  .tr{right:0;top:0;text-align:right}
 
   .title{
     font-size:11px;letter-spacing:.42em;text-transform:uppercase;
@@ -56,17 +70,26 @@
     text-transform:uppercase;font-weight:400;
   }
 
+  .clockrow{display:flex;align-items:center;gap:14px}
   .clock{font-size:26px;font-weight:200;letter-spacing:.06em;font-variant-numeric:tabular-nums;line-height:1}
+  #playpause{
+    pointer-events:auto;flex:0 0 34px;width:34px;height:34px;padding:0;
+    display:flex;align-items:center;justify-content:center;
+    background:transparent;border:1px solid var(--faint);border-radius:50%;
+    color:var(--ink);cursor:pointer;transition:.25s;
+  }
+  #playpause:hover{border-color:rgba(233,240,255,.60);background:rgba(233,240,255,.10)}
+  #playpause svg{width:12px;height:12px;display:block}
   .clocklabel{margin-top:8px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
 
-  .bars{margin-top:16px;display:flex;gap:14px;align-items:flex-end}
-  .bar{width:34px}
+  .bars{margin-top:16px;display:flex;gap:9px;align-items:flex-end}
+  .bar{width:46px}
   .bar .track{height:2px;background:var(--faint);position:relative;overflow:hidden}
   .bar .fill{position:absolute;left:0;top:0;bottom:0;transition:width .8s ease}
-  .bar .lab{margin-top:6px;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+  .bar .lab{margin-top:6px;font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);white-space:nowrap}
   .bar .val{font-size:11px;color:var(--ink);font-variant-numeric:tabular-nums;margin-bottom:5px}
   .scales{margin-top:15px;font-size:10px;letter-spacing:.13em;text-transform:uppercase;
-    color:rgba(233,240,255,.56);font-variant-numeric:tabular-nums;max-width:74em;line-height:1.8}
+    color:rgba(233,240,255,.56);font-variant-numeric:tabular-nums;line-height:1.85}
 
   .speeds{pointer-events:auto;display:flex;gap:2px;justify-content:flex-end}
   .sp{
@@ -77,7 +100,6 @@
   .sp:first-child{border-left-width:1px}
   .sp:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
   .sp.on{color:#0a0d14;background:rgba(233,240,255,.86);border-color:rgba(233,240,255,.86)}
-  .hint{margin-top:12px;font-size:10px;letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
 
   #splash{
     position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
@@ -89,6 +111,22 @@
   #splash .d::after{content:"";position:absolute;inset:0;background:var(--ink);
     animation:sweep 1.4s ease-in-out infinite}
   @keyframes sweep{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+
+  @media (max-width: 620px), (max-height: 520px){
+    .corner{padding:15px 17px}
+    .title{font-size:10px;letter-spacing:.32em}
+    .sub{font-size:9.5px;margin-top:5px}
+    .clock{font-size:21px}
+    .clockrow{gap:11px}
+    #playpause{flex:0 0 30px;width:30px;height:30px}
+    .clocklabel{font-size:9.5px;letter-spacing:.13em;margin-top:6px}
+    .bars{gap:6px;margin-top:12px}
+    .bar{width:44px}
+    .bar .lab{font-size:8.5px;letter-spacing:.05em}
+    .bar .val{font-size:10px}
+    .scales{font-size:9.5px;letter-spacing:.09em;margin-top:12px;line-height:1.75}
+    .sp{padding:7px 12px;font-size:11px}
+  }
 
   #fail{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
     text-align:center;padding:40px;font-size:14px;line-height:1.7;color:var(--dim);z-index:20}
@@ -103,20 +141,24 @@
     <div class="sub">world simulation</div>
   </div>
 
-  <div class="corner bl">
-    <div class="clock" id="clock">0:00:00</div>
-    <div class="clocklabel" id="clocklabel">elapsed</div>
-    <div class="bars" id="bars"></div>
-    <div class="scales" id="scales"></div>
-  </div>
-
-  <div class="corner br">
+  <div class="corner tr">
     <div class="speeds">
       <button class="sp on" data-s="1">&times;1</button>
       <button class="sp" data-s="20">&times;20</button>
       <button class="sp" data-s="100">&times;100</button>
     </div>
-    <div class="hint">drag &middot; scroll &middot; space &middot; h</div>
+  </div>
+
+  <div class="corner bl">
+    <div class="clockrow">
+      <button id="playpause" type="button" aria-label="pause" title="pause"></button>
+      <div class="clock" id="clock">0:00:00</div>
+    </div>
+    <div class="clocklabel" id="clocklabel">elapsed</div>
+    <div class="bars" id="bars"></div>
+    <div class="scales" id="scales">
+      <div id="sc1"></div><div id="sc2"></div><div id="sc3"></div>
+    </div>
   </div>
 </div>
 
@@ -1142,43 +1184,155 @@ function fitDist(){
   return 1.0/Math.sin(Math.min(vHalf,hHalf)*0.82);
 }
 const CAM = {yaw:1.42, pitch:0.26, dist:3.4, tDist:3.4, zoom:1.0};
-let dragging=false, lastX=0, lastY=0, lastInteract=performance.now();
-let paused=false, speed=1, hudHidden=false;
-
-function touch(){ lastInteract=performance.now(); hud.classList.remove("faded"); }
+let dragging=false, lastX=0, lastY=0;
+let paused=false, speed=1;
 const hud=document.getElementById("hud");
 
+/* the interface is shown or hidden by a click on the world; it never
+   disappears on a timer */
+let hudShown=true;
+function setHud(v){ hudShown=v; hud.classList.toggle("hidden", !v); }
+
+const ICON_PAUSE='<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.1" y="1.4" width="3" height="9.2" fill="currentColor"/><rect x="6.9" y="1.4" width="3" height="9.2" fill="currentColor"/></svg>';
+const ICON_PLAY ='<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.2 1.3 L10.4 6 L3.2 10.7 Z" fill="currentColor"/></svg>';
+const ppBtn = document.getElementById("playpause");
+function setPaused(v){
+  paused = v;
+  ppBtn.innerHTML = paused ? ICON_PLAY : ICON_PAUSE;
+  ppBtn.setAttribute("aria-label", paused ? "play" : "pause");
+  ppBtn.title = paused ? "play" : "pause";
+}
+setPaused(false);
+ppBtn.addEventListener("click", e=>{ e.stopPropagation(); setPaused(!paused); });
+
+/* ── input ─────────────────────────────────────────────────────────────
+   One pointer orbits, two pinch to zoom. Every transition between those
+   states re-baselines the deltas, because reusing a stale baseline when a
+   second finger lands is exactly what made the planet jump at the start of
+   a pinch. Pointers are tracked by id rather than assuming one at a time. */
+const ptrs = new Map();
+let mode = 0;                       // 0 idle · 1 orbit · 2 pinch
+let pinchSpread = 0, pinchZoom0 = 1;
+let cx0 = 0, cy0 = 0;               // pinch centroid baseline
+let downX=0, downY=0, downT=0, travel=0, didPinch=false;
+
+function centroid(){
+  let x=0,y=0;
+  for(const p of ptrs.values()){ x+=p.x; y+=p.y; }
+  const k = ptrs.size || 1;
+  return {x:x/k, y:y/k};
+}
+function spread(){
+  const a = [...ptrs.values()];
+  if(a.length < 2) return 0;
+  return Math.hypot(a[0].x-a[1].x, a[0].y-a[1].y);
+}
+function orbitBy(dx, dy){
+  CAM.yaw   -= dx*0.0055;
+  CAM.pitch  = clamp(CAM.pitch + dy*0.0055, -1.35, 1.35);
+}
+/* called whenever the number of pointers changes */
+function rebase(){
+  if(ptrs.size === 1){
+    mode = 1;
+    const p = ptrs.values().next().value;
+    lastX = p.x; lastY = p.y;
+  } else if(ptrs.size >= 2){
+    mode = 2;
+    pinchSpread = spread() || 1;
+    pinchZoom0  = CAM.zoom;
+    const c = centroid(); cx0 = c.x; cy0 = c.y;
+  } else {
+    mode = 0;
+  }
+  dragging = ptrs.size > 0;
+  canvas.classList.toggle("dragging", dragging);
+}
+
 canvas.addEventListener("pointerdown",e=>{
-  dragging=true; lastX=e.clientX; lastY=e.clientY; canvas.classList.add("dragging");
-  canvas.setPointerCapture(e.pointerId); touch();
-});
-canvas.addEventListener("pointermove",e=>{
-  if(!dragging) return;
-  CAM.yaw   -= (e.clientX-lastX)*0.0055;
-  CAM.pitch += (e.clientY-lastY)*0.0055;
-  CAM.pitch = clamp(CAM.pitch,-1.35,1.35);
-  lastX=e.clientX; lastY=e.clientY; touch();
-});
-const endDrag=()=>{dragging=false;canvas.classList.remove("dragging");};
-canvas.addEventListener("pointerup",endDrag);
-canvas.addEventListener("pointercancel",endDrag);
+  if(ptrs.size === 0){
+    downX=e.clientX; downY=e.clientY; downT=performance.now();
+    travel=0; didPinch=false;
+  }
+  ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if(ptrs.size >= 2) didPinch = true;
+  rebase();
+  e.preventDefault();
+},{passive:false});
+
+/* on window, so a drag that leaves the canvas still tracks */
+addEventListener("pointermove",e=>{
+  if(!ptrs.has(e.pointerId)) return;
+  ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+
+  if(mode === 1){
+    travel += Math.abs(e.clientX-lastX) + Math.abs(e.clientY-lastY);
+    orbitBy(e.clientX-lastX, e.clientY-lastY);
+    lastX = e.clientX; lastY = e.clientY;
+  } else if(mode === 2){
+    const d = spread();
+    if(d > 12 && pinchSpread > 12){
+      /* fingers apart -> closer to the planet -> smaller camera distance */
+      CAM.zoom  = clamp(pinchZoom0*(pinchSpread/d), 0.44, 2.6);
+      CAM.tDist = fitDist()*CAM.zoom;
+    }
+    const c = centroid();
+    orbitBy(c.x-cx0, c.y-cy0);
+    cx0 = c.x; cy0 = c.y;
+  }
+},{passive:false});
+
+function liftPointer(e){
+  const rec = ptrs.get(e.pointerId);
+  if(!rec) return;
+  ptrs.delete(e.pointerId);
+  const wasLast = ptrs.size === 0;
+  rebase();
+  /* Use the last position we tracked for this pointer, not the coordinates
+     on the release event: some touch stacks report those as zero. Movement
+     is the real test of tap-versus-drag; the time limit is generous so that
+     a slow device cannot turn a tap into a non-event. */
+  if(wasLast && !didPinch
+     && performance.now()-downT < 1500
+     && Math.hypot(rec.x-downX, rec.y-downY) < 12 && travel < 18){
+    setHud(!hudShown);
+  }
+}
+addEventListener("pointerup", liftPointer);
+addEventListener("pointercancel", liftPointer);
+
+/* If a release is ever lost — the OS claims the gesture, the user switches
+   apps mid-pinch — the tracked pointers would stick and input would stay
+   jammed. Drop them whenever we lose the window. */
+function clearPointers(){ if(ptrs.size){ ptrs.clear(); rebase(); } }
+addEventListener("blur", clearPointers);
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden) clearPointers(); });
+
 canvas.addEventListener("wheel",e=>{
   e.preventDefault();
   CAM.zoom = clamp(CAM.zoom*Math.exp(e.deltaY*0.0011), 0.44, 2.6);
   CAM.tDist = fitDist()*CAM.zoom;
-  touch();
 },{passive:false});
 
+/* Belt and braces against the browser zooming the whole page: trackpad
+   pinch arrives as ctrl+wheel, and Safari sends its own gesture events. */
+addEventListener("wheel", e=>{ if(e.ctrlKey) e.preventDefault(); }, {passive:false});
+["gesturestart","gesturechange","gestureend"].forEach(t=>
+  addEventListener(t, e=>e.preventDefault(), {passive:false}));
+document.addEventListener("dblclick", e=>e.preventDefault());
+document.addEventListener("contextmenu", e=>{ if(e.target===canvas) e.preventDefault(); });
+
 document.querySelectorAll(".sp").forEach(b=>{
-  b.addEventListener("click",()=>{
+  b.addEventListener("click",e=>{
+    e.stopPropagation();
     speed=parseFloat(b.dataset.s);
     document.querySelectorAll(".sp").forEach(x=>x.classList.toggle("on",x===b));
-    touch();
+    updateHUD();
   });
 });
 addEventListener("keydown",e=>{
-  if(e.code==="Space"){ e.preventDefault(); paused=!paused; touch(); }
-  else if(e.key==="h"||e.key==="H"){ hudHidden=!hudHidden; hud.classList.toggle("hidden",hudHidden); }
+  if(e.code==="Space"){ e.preventDefault(); setPaused(!paused); }
+  else if(e.key==="h"||e.key==="H"){ setHud(!hudShown); }
   else if(e.key==="1"||e.key==="2"||e.key==="3"){
     const b=document.querySelectorAll(".sp")[+e.key-1]; if(b) b.click();
   }
@@ -1217,16 +1371,17 @@ function updateHUD(){
   const sl=S.solarLat;
   const season = sl >  TILT*0.35 ? "northern summer"
               : (sl < -TILT*0.35 ? "southern summer" : "equinox");
+  const meanF = S.stats.temp*9/5 + 32;
   document.getElementById("clocklabel").textContent =
-    "watching · year "+yr+" · "+season+" · mean "+S.stats.temp.toFixed(1)+"°";
+    "watching · year "+yr+" · "+season+" · mean "+Math.round(meanF)+"°F";
 
   /* The three processes are compressed by deliberately different factors,
      so there is no single geological clock to show. State the rates instead. */
-  document.getElementById("scales").textContent =
-    "a day is "+dur(DAY)
-    +"  ·  a year is "+dur(YEAR/speed)
-    +"  ·  continents look different after ~"+dur(2400/speed)
-    +(speed>1 ? "  (×"+speed+"; rotation not sped up)" : "");
+  /* three short lines rather than one long one, so it survives a phone */
+  document.getElementById("sc1").textContent =
+    "a day is "+dur(DAY)+(speed>1 ? "   (×"+speed+" — rotation not sped up)" : "");
+  document.getElementById("sc2").textContent = "a year is "+dur(YEAR/speed);
+  document.getElementById("sc3").textContent = "continents change in "+dur(2400/speed);
   BARDEF.forEach(b=>{
     const v=(S.stats[b.k]||0);
     b.el.querySelector(".fill").style.width=Math.min(100,v*100/0.7)+"%";
@@ -1296,13 +1451,22 @@ let last=performance.now();
 let started=false;
 
 function resize(){
-  const w=Math.max(1,Math.round(innerWidth*dpr)), h=Math.max(1,Math.round(innerHeight*dpr));
+  /* measure the canvas box itself rather than innerHeight: on phones the
+     address bar makes innerHeight disagree with what is actually painted */
+  const cw = canvas.clientWidth  || innerWidth;
+  const ch = canvas.clientHeight || innerHeight;
+  const w=Math.max(1,Math.round(cw*dpr)), h=Math.max(1,Math.round(ch*dpr));
   if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; }
 }
-addEventListener("resize",()=>{
+function relayout(){
   dpr=Math.min(devicePixelRatio||1,2); resize();
   CAM.tDist = fitDist()*CAM.zoom;
-});
+}
+addEventListener("resize", relayout);
+addEventListener("orientationchange", ()=>setTimeout(relayout,220));
+if(window.visualViewport){
+  visualViewport.addEventListener("resize", relayout);
+}
 
 function frame(now){
   requestAnimationFrame(frame);
@@ -1338,8 +1502,6 @@ function frame(now){
     packTexture(); uploadData();
     hudAcc++; if(hudAcc>=4){ hudAcc=0; updateHUD(); }
   }
-
-  if(!hudHidden && now-lastInteract>5000) hud.classList.add("faded");
 
   updateSun();
 
@@ -1457,6 +1619,8 @@ window.__world = {
   freeze(v){ spin=v; frozen=true; },
   setView(y,pi,z){ CAM.yaw=y; CAM.pitch=pi; if(z){CAM.zoom=z;} CAM.tDist=fitDist()*CAM.zoom; },
   sunDir(){ return [SUN[0],SUN[1],SUN[2]]; },
+  cam(){ return CAM; },
+  pointerCount(){ return ptrs.size; },
   advance(seconds, chunks){
     chunks = chunks || Math.max(1, Math.round(seconds/8));
     const step = seconds/chunks;

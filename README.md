@@ -2,7 +2,7 @@
 
 **A world, slowly becoming.** A procedural planet that never stops changing — and never runs away.
 
-**→ [See it live](https://DonMarshWorks.github.io/aetheris/)**
+**→ [See it live](https://donmarshworks.github.io/aetheris/)**
 
 ![Aetheris](screenshot.jpg)
 
@@ -19,15 +19,19 @@ If you want to see the change without waiting, the ×20 and ×100 controls compr
 | | |
 |---|---|
 | **drag** | orbit the camera |
-| **scroll** | zoom (close in and the clouds dissolve) |
-| **space** | pause |
-| **H** | hide the interface |
-| **1 / 2 / 3** | time-lapse ×1, ×20, ×100 |
+| **scroll** or **pinch** | zoom (close in and the clouds dissolve) |
+| **click / tap** | show or hide the interface |
+| **play button** or **space** | pause |
+| **×1 / ×20 / ×100** or **1 / 2 / 3** | time-lapse |
+
+On touch devices one finger orbits and two pinch to zoom. The page itself
+cannot be zoomed or scrolled — the interface stays a fixed size while only
+the planet scales.
 
 Every visit generates a different world. To return to a particular one, append its seed to the URL:
 
 ```
-https://DonMarshWorks.github.io/aetheris/#seed=31337
+https://donmarshworks.github.io/aetheris/#seed=31337
 ```
 
 ## The part that took the thinking
@@ -72,7 +76,7 @@ Erosion is not modelled. Neither is plate tectonics proper — the drifting nois
 
 ## Requirements
 
-A browser with WebGL2 — any current Chrome, Edge, Firefox or Safari — and hardware acceleration enabled. Resolution adapts automatically if the frame rate drops. It is comfortable on integrated graphics.
+A browser with WebGL2 — any current Chrome, Edge, Firefox or Safari — and hardware acceleration enabled. Resolution adapts automatically if the frame rate drops. It is comfortable on integrated graphics, and works on phones.
 
 ## Publishing your own copy
 
