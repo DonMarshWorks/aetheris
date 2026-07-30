@@ -229,6 +229,14 @@ async function touch(browser) {
   page.on('pageerror', e => errs.push(e.message));
   await page.goto('file://' + PAGE + '#seed=31337');
   await page.waitForFunction(() => window.__world && window.__world.S.epoch0 > 0, { timeout: 180000 });
+  // The splash covers the canvas and only stops taking pointer events a moment
+  // after the world is ready. These are real dispatched touches, so they hit
+  // whatever is on top: fire them too early and the splash swallows the pinch,
+  // the camera never moves, and the run fails on code that is perfectly fine.
+  await page.waitForFunction(() => {
+    const s = document.getElementById('splash');
+    return !s || s.classList.contains('gone');
+  }, { timeout: 30000 });
   await page.evaluate(() => window.__world.freeze(1.1));
 
   const box = await page.evaluate(() => ({
