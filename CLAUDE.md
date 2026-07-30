@@ -155,5 +155,8 @@ modelled — don't claim otherwise in the README.
 
 ## Next feature
 
-Evolving plants competing for exclusive area. See `docs/plants-design.md` for the
-agreed model and open questions. Read it before starting that work.
+Evolving plants competing for exclusive area — branching growth in continuous
+position, not a grid mosaic. See `docs/plants-design.md` for the agreed model and
+open questions, and read it before starting that work. **Start at stage 0**: one
+plant, hand-written formulas, static planet, rendered. It is the only stage that
+can invalidate all the others, and it is the cheapest.
