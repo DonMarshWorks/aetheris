@@ -15,12 +15,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repo = 'aetheris'
+# github.io hostnames are lowercase; the repo path keeps its casing
+$hostName = $GitHubUser.ToLower()
 
 # Bake the real URLs into the social-preview metadata.
 foreach ($f in @('index.html', 'README.md')) {
   $text = Get-Content -Raw -Encoding UTF8 $f
   if ($text -match 'REPLACE_USER') {
-    $text = $text -replace 'REPLACE_USER', $GitHubUser
+    $text = $text -replace 'REPLACE_USER', $hostName
     # write without a BOM, so the HTML stays byte-clean
     [IO.File]::WriteAllText((Resolve-Path $f), $text, (New-Object Text.UTF8Encoding $false))
     Write-Host "updated $f"
@@ -55,6 +57,6 @@ Committed. Three steps left:
 
 Your site will be live in a minute or two at:
 
-     https://$GitHubUser.github.io/$repo/
+     https://$hostName.github.io/$repo/
 
 "@

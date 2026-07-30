@@ -8,12 +8,14 @@ if [ $# -lt 1 ]; then
   exit 1
 fi
 USER_NAME="$1"
+# github.io hostnames are lowercase; the repo path keeps its casing
+HOST_NAME="$(printf '%s' "$USER_NAME" | tr '[:upper:]' '[:lower:]')"
 REPO="aetheris"
 
 # Bake the real URLs into the social-preview metadata.
 for f in index.html README.md; do
   if grep -q REPLACE_USER "$f"; then
-    sed -i.bak "s|REPLACE_USER|${USER_NAME}|g" "$f" && rm -f "$f.bak"
+    sed -i.bak "s|REPLACE_USER|${HOST_NAME}|g" "$f" && rm -f "$f.bak"
     echo "updated $f"
   fi
 done
@@ -45,6 +47,6 @@ Committed. Three steps left:
 
 Your site will be live in a minute or two at:
 
-     https://${USER_NAME}.github.io/${REPO}/
+     https://${HOST_NAME}.github.io/${REPO}/
 
 MSG
