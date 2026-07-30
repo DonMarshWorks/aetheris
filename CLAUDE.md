@@ -33,8 +33,8 @@ requests**. Published to GitHub Pages at https://donmarshworks.github.io/aetheri
 
 Single file, in this order: CSS → HUD markup → math helpers → CPU Perlin noise →
 simulation (grid, fields, controller) → WebGL setup → shaders (sky bake,
-background/stars, planet, clouds, atmosphere) → camera/input → HUD → boot →
-frame loop.
+background/stars, planet, clouds, ring, atmosphere) → camera/input → HUD →
+boot → frame loop.
 
 **Simulation.** A 320×160 lat/lon grid stepped ~12×/second. Terrain is six
 octaves of Perlin noise on the sphere, each slowly rotating on its own axis and
@@ -51,6 +51,23 @@ hands the loop enormous timesteps. If you change gains, re-check bounds at ×100
 analytic derivatives, and adds fractal detail so a coarse grid yields organic
 coastlines.
 
+**The ring** lies in the equatorial plane, which is fixed in space — so its
+mesh is built once in world coordinates from `POLE` and never transformed
+again. Drive it from `uRot` and it would spin with the surface every 2½
+minutes. `GLSL_RING` is shared by the ring, the planet and the clouds so that
+one radial density profile decides both how solid the ring looks and how dark
+the shadow it throws is; they cannot drift apart. The radii stand well off the
+planet on purpose — held close the ring borrows this world's Earth-like scale
+and both read as small — which costs framing at the edges. See the comment on
+`RING_R0`.
+
+**The ring's shadow** must floor its divide by `dot(sun, POLE)`. Twice a year
+the sun crosses the ring plane, the sunlight's path through the ring runs to
+infinity, and an honest divide saturates the band into a hard black stripe at
+exactly equinox. It is also penumbra-blurred in proportion to how far the
+shadow has been thrown, or the ring's fine banding survives to the ground and
+the band lands with cut edges.
+
 **Test hooks.** `window.__world` exposes `S` (state), `advance()`, `freeze()`,
 `setView()`, `sunDir()`, `cam()`, `pointerCount()`, `debug()`. Used by
 `verify.js`. Keep them working.
@@ -62,6 +79,11 @@ easy to reintroduce.
 
 **GLSL**
 
+- **Never write a backtick inside shader source**, including in comments. The
+  shaders live in JS template literals, so a backtick closes the literal and
+  the rest of the shader is parsed as JavaScript. The failure is a syntax error
+  somewhere else entirely and the offending line looks like ordinary prose.
+  `verify.js` checks statically that every shader reaches its `void main`.
 - `smoothstep(a, b, x)` with `a > b` is **undefined behaviour**, not a reversed
   ramp. Always ascending; use `1.0 - smoothstep(lo, hi, x)` to descend. Symptom:
   the feature silently vanishes on some drivers (this hid the entire starfield).
@@ -79,6 +101,14 @@ easy to reintroduce.
 - Sphere triangles must wind **counter-clockwise seen from outside**. Backwards
   winding makes `cullFace` render the far hemisphere and the atmosphere shell
   paint over the whole disc.
+- **A flat thing seen edge-on has no thickness to rasterise.** Band-limiting
+  the density cannot save it — the rasteriser never generates the fragments, so
+  the ring breaks into crawling dashes. Fix it at the vertex stage: push the
+  proxy apart by a fixed number of *pixels* (not world units, so it survives
+  resolution changes and the adaptive DPR), shade from the view ray, and taper
+  the alpha across that push — but only once the ring is thin enough for the
+  rim to be what is covering, or the taper eats the cap at every ordinary
+  angle and the ring vanishes at 45°.
 
 **Looking like a planet, not a terrain demo**
 

@@ -1,0 +1,31 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Started automatically by the Run and Debug button. It stays running in
+      // the background, so VS Code needs a pattern telling it when the server
+      // is up rather than waiting for the process to exit.
+      "label": "aetheris: serve",
+      "type": "shell",
+      "command": "node tools/serve.js",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "aetheris",
+        "pattern": { "regexp": "^(.*)$", "file": 1, "location": 1, "message": 1 },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^aetheris: starting",
+          "endsPattern": "^aetheris: listening on"
+        }
+      },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "aetheris: verify",
+      "type": "shell",
+      "command": "npm run verify",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    }
+  ]
+}

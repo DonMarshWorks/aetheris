@@ -346,6 +346,14 @@ const TARGET = {ocean:0.635, ice:0.090, desertOfLand:0.225};
 const YEAR = 900;           // simulated seconds per orbit
 const TILT = 24*Math.PI/180;
 
+/* Which way the axis leans. The daily spin turns about this, so the axis
+   itself is fixed in space — which is why the ring, which shares the plane,
+   can be built once and never touched again. */
+const AZ0 = 0.34;
+const POLE = (()=>{ const ct=Math.cos(TILT), st=Math.sin(TILT),
+                    ca=Math.cos(AZ0), sa=Math.sin(AZ0);
+  return [-st*ca, ct, st*sa]; })();
+
 const rotsPerOct = [];
 for(let o=0;o<OCT;o++) rotsPerOct.push(new Float32Array(9));
 const ridgeM = new Float32Array(9);
@@ -656,6 +664,59 @@ gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,sphIBO);
 gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,SPH.idx,gl.STATIC_DRAW);
 gl.bindVertexArray(null);
 
+/* ---------- ring geometry ----------
+   Held in tight against the planet the ring reads as small, because this world
+   already looks Earth-sized and a close ring borrows that scale. Standing it
+   further off buys back the sense that both are enormous. It costs framing:
+   fitDist puts the edge of a square window at about 1.3 radii, so seen exactly
+   edge-on in a narrow window the ring can fall outside the picture entirely.
+   Worth it — in any ordinary landscape window it is all there, and the shape
+   is what sells the size. The mesh is only a proxy for the rasteriser:
+   every fragment works out its own radius from the view ray, so neither these
+   radii nor the thickness the vertex shader gives it ever show in the picture.
+   What they do decide is where fragments get generated at all. */
+const RING_R0 = 1.36, RING_R1 = 2.18;
+function makeRing(seg, r0, r1){
+  /* a frame spanning the ring plane; any pair perpendicular to the axis does */
+  const U = (()=>{ const a = Math.abs(POLE[1])<0.9 ? [0,1,0] : [1,0,0];
+    const c = [POLE[1]*a[2]-POLE[2]*a[1], POLE[2]*a[0]-POLE[0]*a[2], POLE[0]*a[1]-POLE[1]*a[0]];
+    const l = 1/Math.hypot(c[0],c[1],c[2]); return [c[0]*l,c[1]*l,c[2]*l]; })();
+  const W = [POLE[1]*U[2]-POLE[2]*U[1], POLE[2]*U[0]-POLE[0]*U[2], POLE[0]*U[1]-POLE[1]*U[0]];
+  const pos=[], side=[], idx=[];
+  /* four rings of vertices: inner and outer, each on both faces of the slab */
+  for(const rs of [[r0,1],[r1,1],[r0,-1],[r1,-1]]){
+    for(let i=0;i<=seg;i++){
+      const th=i/seg*Math.PI*2, c=Math.cos(th), s=Math.sin(th);
+      pos.push((U[0]*c+W[0]*s)*rs[0], (U[1]*c+W[1]*s)*rs[0], (U[2]*c+W[2]*s)*rs[0]);
+      side.push(rs[1]);
+    }
+  }
+  const N=seg+1;
+  /* counter-clockwise seen from outside each of the four faces, or back-face
+     culling renders the far side of the slab and the shading doubles up */
+  for(let i=0;i<seg;i++){
+    const it=i, ot=N+i, ib=2*N+i, ob=3*N+i;
+    idx.push(it, ot, ot+1,   it, ot+1, it+1);      // face toward the north pole
+    idx.push(ib, ib+1, ob+1, ib, ob+1, ob);        // face toward the south pole
+    idx.push(ot, ob, ob+1,   ot, ob+1, ot+1);      // outer rim
+    idx.push(it, ib+1, ib,   it, it+1, ib+1);      // inner rim
+  }
+  return {pos:new Float32Array(pos), side:new Float32Array(side), idx:new Uint32Array(idx)};
+}
+const RING = makeRing(256, RING_R0, RING_R1);
+const ringVAO = gl.createVertexArray();
+gl.bindVertexArray(ringVAO);
+const ringVBO=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,ringVBO); gl.bufferData(gl.ARRAY_BUFFER,RING.pos,gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
+const ringSVBO=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,ringSVBO); gl.bufferData(gl.ARRAY_BUFFER,RING.side,gl.STATIC_DRAW);
+gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,1,gl.FLOAT,false,0,0);
+const ringIBO=gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ringIBO);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,RING.idx,gl.STATIC_DRAW);
+gl.bindVertexArray(null);
+
 const quadVAO=gl.createVertexArray();   /* fullscreen triangle, no attribs */
 
 /* ---------- data texture ---------- */
@@ -798,6 +859,67 @@ void main(){
   o = vec4(col,1.0);
 }`);
 
+/* ---------- ring: shared by the ring itself and by everything it shadows ---------- */
+const GLSL_RING = `
+uniform vec3 uRingN;        /* ring plane normal — the axis, without the spin */
+uniform float uRingFade;
+const float RR0 = ${RING_R0}, RR1 = ${RING_R1};
+
+/* Optical depth across the ring as a function of radius. One profile serves
+   both the ring and the shadow it throws, so a faint ring can never cast a
+   strong band. pw is how much radius one pixel spans: structure finer than
+   that is faded to its own mean rather than left to alias, which is the whole
+   difference between a ring that looks expensive and one that shimmers. The
+   profile reaches zero at both edges, so the rim of the proxy mesh carries no
+   density and cannot draw a hard line of its own. */
+float ringTau(float r, float pw){
+  float u  = (r - RR0)/(RR1 - RR0);
+  if(u < 0.0 || u > 1.0) return 0.0;
+  float du = pw/(RR1 - RR0);
+
+  /* The edges soften with the footprint too, not just the banding inside them.
+     The shadow is sampled with a wide penumbra, and if only the fine structure
+     washed out the band would still land with cut edges. */
+  float env  = smoothstep(0.0, 0.14 + du*1.7, u)*(1.0 - smoothstep(1.0 - (0.22 + du*1.7), 1.0, u));
+  float fine = 1.0 - smoothstep(0.012, 0.055, du);
+  float band = 1.0 + 0.26*fine*sin(u*15.0 + 0.6);
+  float gapF = 1.0 - smoothstep(0.020, 0.075, du);
+  float gx   = (u - 0.63)/0.040;
+  float gap  = 1.0 - 0.90*gapF*exp(-gx*gx);
+  /* Low enough that the planet shows through the near half at any ordinary
+     angle. Because the slant term below divides by the view angle, a value
+     that reads as translucent face-on still closes up into a solid line
+     edge-on, which is what a ring actually does. */
+  return env*band*gap*0.155;
+}
+
+/* How much sunlight still reaches P after crossing the ring plane. Sunlight
+   hits the ring at an angle, so a shallow sun means a longer path through the
+   same material and a darker band — and because the axis is tilted, that band
+   migrates north and south across the year on its own. The crossing radius is
+   found without branching so the derivative below is taken in uniform flow. */
+float ringShade(vec3 P, vec3 L){
+  float dN = dot(L, uRingN);
+  float sd = max(abs(dN), 0.02)*(dN < 0.0 ? -1.0 : 1.0);
+  float t  = -dot(P, uRingN)/sd;
+  vec3  X  = P + L*max(t, 0.0);
+  float r  = length(X - uRingN*dot(X, uRingN));
+  float pw = fwidth(r);
+  if(t <= 0.0) return 1.0;
+  /* The star is a disc, not a point, so the shadow carries a penumbra that
+     widens with the distance it has been thrown. Without it the ring's fine
+     banding survives all the way down to the ground and the shadow lands as
+     a flat slab with cut edges instead of a band.
+     The floor on dN matters more. Twice a year the sun crosses the ring plane,
+     and there the sunlight's path through the ring runs to infinity: divide by
+     it honestly and the band saturates into a hard black stripe exactly at
+     equinox. Real ring shadows do sharpen then; a coarse grid and a thin ring
+     make it read as a rendering fault instead. Capped, and capped again on the
+     way out so the ring can never take more than a third of the daylight. */
+  float tau = ringTau(r, pw + 0.05*t)/max(abs(dN), 0.19);
+  return 1.0 - uRingFade*0.34*(1.0 - exp(-tau*0.85));
+}`;
+
 /* ---------- planet ---------- */
 const VS_SPH=`#version 300 es
 layout(location=0) in vec3 aPos;
@@ -819,6 +941,7 @@ uniform vec3 uSun, uCam;
 uniform float uSea, uSolarLat, uGT, uT;
 uniform int uDebug;
 ${GLSL_NOISE}
+${GLSL_RING}
 
 const vec2 RES = vec2(${GW}.0,${GH}.0);
 
@@ -1057,12 +1180,16 @@ void main(){
   vec3 sunLow  = vec3(1.00,0.560,0.300);
   vec3 sunCol  = mix(sunLow, sunHigh, smoothstep(0.0,0.40,ndlS));
 
-  vec3 col = albedo*sunCol*lam*1.14;
+  /* The ring blocks direct sun only — skylight still reaches the band, so it
+     reads as a soft dark stripe rather than a hole punched in the day side. */
+  float rShade = ringShade(vWorld, L);
+
+  vec3 col = albedo*sunCol*lam*1.14*rShade;
 
   vec3 Hv = normalize(L+V);
   vec3  Ns   = normalize(mix(Nw, N, reliefMix));
   float spec = pow(max(dot(Ns,Hv),0.0), mix(24.0,120.0,gloss))*gloss*lam;
-  col += sunCol*spec*0.55;
+  col += sunCol*spec*0.55*rShade;
 
   float rim = pow(1.0-max(dot(Nw,V),0.0), 3.2);
   col += vec3(0.34,0.54,0.95)*rim*lam*0.55;
@@ -1071,8 +1198,19 @@ void main(){
   /* skylight: scattered blue from the atmosphere itself, keyed to the
      geometric normal so relief never punches a hole to pure black */
   col += albedo*vec3(0.115,0.135,0.170)*smoothstep(-0.05,0.28,ndlS);
-  /* night side: starlight and a whisper of airglow */
-  col += albedo*vec3(0.028,0.040,0.072)*(1.0-lam);
+  /* Night side. Starlight and airglow alone leave it at ink, and the cloud
+     deck — which carries its own floor — ends up the brightest thing on the
+     dark half, so weather reads and the world underneath does not. Lift the
+     ground until it sits above the clouds again.
+     Ambient by itself would be legible but shapeless, so the lift carries a
+     directional term aimed along the view: slopes still shade and coastlines
+     still turn. The graze term drops it back to the geometric normal at the
+     limb —
+     edge-on, a tilted normal shows the grid rather than the ground, which is
+     the same reason the terminator ignores relief. */
+  float night = 1.0 - lam;
+  float head  = max(dot(normalize(mix(Nw, N, graze)), V), 0.0);
+  col += albedo*(vec3(0.082,0.096,0.130) + vec3(0.125,0.138,0.164)*head)*night;
 
   col = col/(1.0+col*0.32);
   o = vec4(col,1.0);
@@ -1088,6 +1226,7 @@ uniform mat3 uRot;
 uniform vec3 uSun, uCam;
 uniform float uT, uDrift, uFade;
 ${GLSL_NOISE}
+${GLSL_RING}
 const vec2 RES = vec2(${GW}.0,${GH}.0);
 float moistAt(vec3 d){
   vec2 uv = vec2(atan(d.z,d.x)*0.15915494+0.5, 0.5-asin(clamp(d.y,-1.0,1.0))*0.31830989);
@@ -1100,6 +1239,10 @@ float moistAt(vec3 d){
 }
 void main(){
   vec3 d = normalize(vObj);
+  /* Taken before the discard below: ringShade differentiates, and a derivative
+     is only defined while the whole quad is still alive. */
+  float rShade = ringShade(vWorld, uSun);
+
   float ca=cos(uDrift), sa=sin(uDrift);
   vec3 dq = vec3(d.x*ca+d.z*sa, d.y, -d.x*sa+d.z*ca);
   float moist = moistAt(dq);
@@ -1121,7 +1264,9 @@ void main(){
   float lam = smoothstep(-0.22, 0.22, ndl);
   vec3 warm = vec3(1.00,0.62,0.40);
   vec3 lit  = mix(warm, vec3(1.0,0.99,0.98), smoothstep(0.0,0.38,ndl));
-  vec3 col = lit*(0.05+1.10*lam) + vec3(0.020,0.028,0.050)*(1.0-lam);
+  /* the shadow has to cross the weather too, or the band stops dead at every
+     cloud edge and reads as a rendering fault */
+  vec3 col = lit*(0.05+1.10*lam*rShade) + vec3(0.020,0.028,0.050)*(1.0-lam);
 
   /* A wide, gentle limb fade so the cloud shell never shows an edge, and a
      single global fade so zooming right in dissolves the whole cloud deck
@@ -1129,6 +1274,97 @@ void main(){
   vec3 V = normalize(uCam-vWorld);
   float edge = smoothstep(-0.10, 0.42, dot(Nw,V));
   o = vec4(col, dens*0.86*edge*uFade);
+}`);
+
+/* ---------- ring ---------- */
+const VS_RING=`#version 300 es
+layout(location=0) in vec3 aPos;    /* position in the ring plane */
+layout(location=1) in float aSide;  /* which face of the slab, -1 or +1 */
+uniform mat4 uVP; uniform vec3 uCam, uRingN; uniform float uPixel;
+out vec3 vWorld;
+out float vOff;    /* how far this vertex was pushed, in pixels */
+void main(){
+  /* A ring is flat, so edge-on it has no thickness for the rasteriser to
+     cover and breaks into crawling dashes — exactly the view that is supposed
+     to tell you where you are. Give the slab its thickness in *pixels* rather
+     than in world units: invisible face-on, always a couple of pixels edge-on,
+     and unchanged by resolution or by the adaptive DPR. */
+  float px = uPixel*distance(uCam, aPos);
+  vOff   = aSide*1.7;
+  vWorld = aPos + uRingN*(vOff*px);
+  gl_Position = uVP*vec4(vWorld,1.0);
+}`;
+
+const ringProg = prog(VS_RING, `#version 300 es
+precision highp float;
+in vec3 vWorld;
+in float vOff;
+out vec4 o;
+uniform vec3 uSun, uCam;
+${GLSL_RING}
+void main(){
+  vec3 rd = normalize(vWorld - uCam);
+  float cN = dot(rd, uRingN);
+
+  /* Where does this sightline cross the ring, and at what radius? Nearly
+     edge-on the crossing runs off to infinity, so fall back to the ray's
+     closest approach to the axis — the radius it spends most of its path
+     beside. The two agree everywhere in between, so the blend is seamless. */
+  float sc = max(abs(cN), 1e-4)*(cN < 0.0 ? -1.0 : 1.0);
+  vec3  Pc = uCam + rd*max(-dot(uCam, uRingN)/sc, 0.0);
+  vec3  Pg = uCam + rd*max(-dot(uCam, rd), 0.0);
+  float rC = length(Pc - uRingN*dot(Pc, uRingN));
+  float rG = length(Pg - uRingN*dot(Pg, uRingN));
+  float w  = smoothstep(0.015, 0.10, abs(cN));
+  float r  = mix(rG, rC, w);
+  vec3  P  = mix(Pg, Pc, w);
+
+  float pw  = fwidth(r);
+  float tau = ringTau(r, pw);
+
+  /* A grazing sightline crosses far more material for the same patch of
+     screen. Extinction rather than a plain multiply, so it saturates into a
+     clean bright line instead of blowing out. */
+  /* Face-on the slab's cap covers the ring and its 1.7px push is along the
+     line of sight, so it costs nothing. Edge-on the cap is degenerate and the
+     rims do the covering, and there the push is across the screen — left
+     alone it would draw a hard-edged strip 3.4px wide. Taper across it, but
+     only once the ring is thin enough for the rims to matter, or the taper
+     would eat the cap at every ordinary angle. */
+  float sinv = sqrt(max(1.0 - cN*cN, 0.0));
+  float thin = 1.0 - smoothstep(0.05, 0.22, abs(cN));
+  float cov  = mix(1.0, 1.0 - smoothstep(0.25, 1.05, abs(vOff)*sinv), thin);
+
+  float a = (1.0 - exp(-tau*1.25/max(abs(cN), 0.045)))*uRingFade*cov;
+  if(a <= 0.003) discard;
+
+  /* The planet's shadow: one ray-sphere test, and the single thing that makes
+     a ring read as something in orbit rather than a decal on the sky. */
+  float sL   = dot(P, uSun);
+  float perp = sqrt(max(dot(P,P) - sL*sL, 0.0));
+  float lit  = sL < 0.0 ? smoothstep(0.990, 1.13, perp) : 1.0;
+
+  float obliq = abs(dot(uSun, uRingN));   /* how squarely the sun strikes it */
+  /* From the sun's side of the plane we see reflected light; from the other,
+     only what filters through */
+  float face  = smoothstep(-0.10, 0.10, -cN*dot(uSun, uRingN));
+
+  /* Rings brighten hard when backlit, which lands exactly as the star passes
+     behind the planet. Restrained, so it lifts that moment instead of
+     competing with the limb, which already owns it. */
+  float fwd = pow(max(dot(rd, uSun), 0.0), 9.0);
+
+  /* A ring is particles, not a surface: each one is lit the same however
+     obliquely the sheet is struck, so brightness leans only gently on the
+     sun's angle. Keyed hard to it, the ring would go murky whenever the
+     season brought the sun back toward the ring plane — which is most of the
+     time, since the sun never rises more than the axial tilt above it. */
+  vec3 col = mix(vec3(0.62,0.66,0.79), vec3(0.95,0.91,0.83), obliq)
+           * (0.46 + 0.38*obliq) * mix(0.32, 1.0, face);
+  col += vec3(1.00,0.94,0.84)*fwd*(0.20 + 0.42*obliq);
+  col *= mix(0.09, 1.0, lit);
+
+  o = vec4(col, a);
 }`);
 
 /* ---------- atmosphere shell ---------- */
@@ -1426,10 +1662,6 @@ const rot3=new Float32Array(9);
    and down across the equator through the year — which gives the same
    advancing and retreating snow line as an orbit, without swinging the
    surface around or putting the world into phases. */
-const AZ0 = 0.34;
-const POLE = (()=>{ const ct=Math.cos(TILT), st=Math.sin(TILT),
-                    ca=Math.cos(AZ0), sa=Math.sin(AZ0);
-  return [-st*ca, ct, st*sa]; })();
 const SUNU = (()=>{ const v=[0.80,0.0,0.60];
   const dp=v[0]*POLE[0]+v[1]*POLE[1]+v[2]*POLE[2];
   const u=[v[0]-POLE[0]*dp, v[1]-POLE[1]*dp, v[2]-POLE[2]*dp];
@@ -1528,6 +1760,13 @@ function frame(now){
   const AB=m3(A,B), R=m3(AB,C);
   rot3.set(R);
 
+  /* The ring is an orientation cue, so it is worth most where the whole
+     ellipse is in frame and worth nothing close in, where it is just an arc
+     sweeping past. Fade it out as you come down, hold it at full strength on
+     the way out — and take its shadow with it, or the band would go on
+     falling from a ring that is no longer there. */
+  const ringFade = smoothstep(1.95, 3.05, CAM.dist);
+
   gl.viewport(0,0,W,Hh);
   gl.clearColor(0,0,0,1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
@@ -1559,6 +1798,8 @@ function frame(now){
   gl.uniform1f(planetProg.u.uGT,S.globalTemp);
   gl.uniform1f(planetProg.u.uT, S.time);
   gl.uniform1i(planetProg.u.uDebug, DEBUG);
+  gl.uniform3fv(planetProg.u.uRingN, POLE);
+  gl.uniform1f(planetProg.u.uRingFade, ringFade);
   gl.bindVertexArray(sphVAO);
   gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
 
@@ -1575,7 +1816,24 @@ function frame(now){
   gl.uniform1f(cloudProg.u.uT,S.time);
   gl.uniform1f(cloudProg.u.uDrift,cloudDrift);
   gl.uniform1f(cloudProg.u.uFade, smoothstep(1.55,2.50,CAM.dist));
+  gl.uniform3fv(cloudProg.u.uRingN, POLE);
+  gl.uniform1f(cloudProg.u.uRingFade, ringFade);
   gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
+
+  /* Ring. Same blend and culling the clouds just left set, and the depth the
+     planet wrote already hides the far half. */
+  if(ringFade > 0.002){
+    gl.useProgram(ringProg);
+    gl.uniformMatrix4fv(ringProg.u.uVP,false,mVP);
+    gl.uniform3fv(ringProg.u.uSun,SUN);
+    gl.uniform3fv(ringProg.u.uCam,eye);
+    gl.uniform3fv(ringProg.u.uRingN,POLE);
+    gl.uniform1f(ringProg.u.uRingFade, ringFade);
+    gl.uniform1f(ringProg.u.uPixel, 2.0*Math.tan(FOVY*0.5)/Math.max(1,Hh));
+    gl.bindVertexArray(ringVAO);
+    gl.drawElements(gl.TRIANGLES,RING.idx.length,gl.UNSIGNED_INT,0);
+    gl.bindVertexArray(sphVAO);
+  }
 
   /* atmosphere */
   gl.blendFunc(gl.ONE,gl.ONE); gl.cullFace(gl.FRONT);

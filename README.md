@@ -19,7 +19,7 @@ If you want to see the change without waiting, the ×20 and ×100 controls compr
 | | |
 |---|---|
 | **drag** | orbit the camera |
-| **scroll** or **pinch** | zoom (close in and the clouds dissolve) |
+| **scroll** or **pinch** | zoom (close in and the clouds and ring dissolve) |
 | **click / tap** | show or hide the interface |
 | **play button** or **space** | pause |
 | **×1 / ×20 / ×100** or **1 / 2 / 3** | time-lapse |
@@ -55,6 +55,8 @@ Measured over a simulated hour, ocean coverage stays within about 62–64%, ice 
 **Climate.** A 320×160 latitude/longitude grid, stepped about 12 times a second. Temperature from latitude, solar declination, elevation and a drifting anomaly field. Moisture from ocean proximity (a blurred distance-to-water field) crossed with Hadley-cell latitude bands, so deserts form around 30° and rainforest at the equator. Vegetation grows where it is warm and wet enough, dies back where it is not, and **diffuses into its neighbours** — which is what produces visible colonisation fronts rather than blocks of biome switching state.
 
 **Ice.** Snow tracks temperature, but with an albedo feedback: white ground keeps itself cold. That positive feedback plus lateral diffusion is why ice sheets are sticky and ragged, growing peninsulas and stranding floes, instead of tracking a latitude circle.
+
+**The ring.** A thin equatorial ring, there mostly to say where you are looking from: it projects to an ellipse whose flatness is the viewing angle, edge-on from the equator and a full circle from the pole, needing no legend to be read. It earns its keep twice, because the axis is tilted 24° and the star's declination swings through the year, so the shadow the ring throws migrates north and south across the surface — an annual clock that falls out of the geometry rather than being drawn on. The planet shadows the ring in turn, and the ring brightens when backlit, which happens to peak as the star passes behind the planet. It fades out as you zoom in, where it would be an arc sweeping the frame and would tell you nothing.
 
 **Rendering.** WebGL2, hand-rolled, no libraries. The simulation grid uploads to a float texture; the fragment shader reads it through a Catmull-Rom filter with analytic derivatives for relief shading, and adds fractal detail so a coarse grid yields organic coastlines. Surface detail is band-limited against the pixel footprint to avoid aliasing. Atmospheric scattering is evaluated along the whole chord of air a sightline crosses, which is why the limb still glows when the star passes behind the planet.
 

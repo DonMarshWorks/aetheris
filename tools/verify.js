@@ -72,6 +72,16 @@ function staticScan() {
     bad.length ? `reversed smoothstep in GLSL (undefined behaviour): ${bad.join('; ')}`
                : 'no reversed smoothstep in shader code');
 
+  // A backtick anywhere inside shader source closes the template literal the
+  // shader lives in, and the rest of the file becomes JavaScript. It reads as
+  // an ordinary prose comment, so it is easy to write and impossible to spot.
+  // Every full shader declares a version, so a region that opens with one and
+  // never reaches its entry point was cut short by a stray backtick.
+  const truncated = shaders.filter(s => /#version 300 es/.test(s) && !/void\s+main\s*\(/.test(s));
+  check(truncated.length === 0,
+    truncated.length ? 'shader source truncated — stray backtick inside a shader comment'
+                     : 'no stray backticks inside shader source');
+
   check(!/REPLACE_USER/.test(src), 'no unsubstituted URL placeholders');
   check(!/window\.__(cam|ptrCount|tapDbg)\s*=/.test(src), 'no stray debug globals');
   check((src.match(/touch-action:\s*none/g) || []).length >= 2,
