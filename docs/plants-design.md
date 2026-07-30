@@ -163,6 +163,34 @@ the five affinities, child count — and two more that earn their place:
   which way conditions improve can evolve tropism, which is the difference between
   a blob and something that visibly reaches for a coastline.
 
+### One program with seven outputs, and a configurable length
+
+Seven quantities are wanted from the genome — five affinities, how badly a node
+wants to bud, and which way it turns. Do **not** give each its own instruction
+list. One program with seven designated output registers shares subexpressions,
+lets affinity and behaviour co-evolve coherently instead of drifting apart, and
+collapses "genome length" to a single meaningful number.
+
+Length is a tuning parameter and belongs in the parameter block. Start short and
+lengthen it when a lineage can be seen straining against the ceiling. Four
+things about it:
+
+- **No parsimony pressure when it lengthens.** In Cartesian GP the productive
+  regime is a long genome with a short *active* path: the inactive instructions
+  drift neutrally and are the reservoir that makes the genome evolvable. They
+  look like waste and are not. This is the same property that made a fixed-length
+  list the right choice in the first place.
+- **Fixed for a whole run, never within one.** Horizontal transfer copies
+  instruction blocks between genomes; mixed lengths turn that into an alignment
+  problem for no gain.
+- **Length is probably not where complex behaviour comes from.** Twenty
+  instructions with rich inputs — gradient sensing, similar-neighbour density,
+  depth, age — will out-behave two hundred with poor ones. Expect the leverage to
+  be in the input set, and reach for length last.
+- Evaluation cost multiplies against the death-scheduling pass, not the growth
+  pass: 8 candidates per plant per turn is nothing, but re-estimating affinity as
+  the climate drifts touches every node. See the implementation notes.
+
 ### Normalise the five affinities to a fixed total
 
 Lifespan is monotonic in affinity and nothing costs affinity, so selection has no
@@ -258,6 +286,37 @@ cycle told with one variable.
 
 Also cheap and worth having: a subtle dark rim where two lineages meet.
 
+## Parameters and experimentation
+
+This system has far more knobs than the climate does, and most of them can only
+be settled by running it. It needs to be cheap to try a variant.
+
+**Not a separate file.** A config file cannot ship: `verify.js` fails the build
+on any `<script src>` that is not a data URI, and a fetched config breaks
+`file://`, which the piece supports. The single-file rule is not negotiable for
+the sake of convenience during development.
+
+What is wanted is available three ways instead, and the combination is better
+than a file would have been:
+
+- **A `PARAMS` block** — one object literal near the top of `index.html` holding
+  every tunable, so nothing is scattered through the source. This is the
+  single-place benefit without the file.
+- **Hash overrides for everything in it.** The piece already parses `#seed=`;
+  extend the same parsing to any parameter, so `#seed=7&glen=64&step=0.014` is an
+  experiment with no edit and no risk of a debug value being committed. It also
+  makes any run reproducible from a link — seed plus parameters fully determine a
+  world, which is worth having for a piece people are meant to sit with.
+- **A `window.__world.params()` hook**, so a script can sweep dozens of variants
+  headlessly and report which survived. Editing and watching is far too slow to
+  search a space this size, and the acceptance test below is exactly the predicate
+  a sweep should score against.
+
+**Build it at stage 0, not before.** Retrofitting the existing simulation's
+constants is a refactor with regression risk on a piece that works and is
+deployed — and stage 0 is what determines which parameters matter and what their
+scale is. A parameter block written before that gets both wrong.
+
 ## Implementation notes
 
 **Store the heading as a 3D tangent vector, never as an angle from north.** To
@@ -323,7 +382,9 @@ Each stage should be watchable before moving on.
    Does the form read as vegetation or as a circuit board? This is the cheapest
    stage and the only one that can invalidate every stage after it, so it goes
    first. Vary node size, footprint shape and branching angle by hand until
-   something reads, and let *that* set the scale constants.
+   something reads, and let *that* set the scale constants. The `PARAMS` block
+   and its hash overrides land here, populated with what this stage proves
+   matters.
 1. Occupancy, affinities, lifespan, death. No evolution. Confirm the mosaic moves
    and borders do not freeze.
 2. Frontier maintenance and the size distribution that falls out of it.
