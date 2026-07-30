@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Aetheris — a world, slowly becoming</title>
+<meta name="description" content="A procedural planet that never stops changing. Coastlines drift, forests spread and give way to desert, ice advances and retreats — held in balance so no environment ever vanishes or takes over. Runs in the browser, no dependencies.">
+<meta name="author" content="Don Marsh">
+<meta name="theme-color" content="#000000">
+<link rel="canonical" href="https://DonMarshWorks.github.io/aetheris/">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Aetheris — a world, slowly becoming">
+<meta property="og:description" content="A procedural planet that never stops changing. Coastlines drift, forests give way to desert, ice advances and retreats — held in balance so no environment ever vanishes or takes over.">
+<meta property="og:url" content="https://DonMarshWorks.github.io/aetheris/">
+<meta property="og:image" content="https://DonMarshWorks.github.io/aetheris/preview.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Aetheris — a world, slowly becoming">
+<meta name="twitter:description" content="A procedural planet that never stops changing, held in climatic balance so no environment ever vanishes or takes over.">
+<meta name="twitter:image" content="https://DonMarshWorks.github.io/aetheris/preview.jpg">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cdefs%3E%3CradialGradient id=%27g%27 cx=%270.35%27 cy=%270.3%27%3E%3Cstop offset=%270%27 stop-color=%27%234da3d8%27/%3E%3Cstop offset=%270.55%27 stop-color=%27%231b4f7a%27/%3E%3Cstop offset=%271%27 stop-color=%27%2306121f%27/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2713%27 fill=%27url(%23g)%27/%3E%3Cpath d=%27M7 14c3-2 6 1 9-1s5 1 8-1%27 stroke=%27%235f9c4a%27 stroke-width=%272.4%27 fill=%27none%27 opacity=%27.85%27/%3E%3Cpath d=%27M9 21c3-1.5 7 .5 11-1.5%27 stroke=%27%23c2a870%27 stroke-width=%272%27 fill=%27none%27 opacity=%27.75%27/%3E%3C/svg%3E">
+<style>
+  :root{
+    --ink: rgba(236,242,255,.92);
+    --dim: rgba(233,240,255,.68);
+    --faint: rgba(233,240,255,.30);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}
+  body{
+    font-family: ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+    color:var(--ink); -webkit-font-smoothing:antialiased;
+  }
+  canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab}
+  canvas#gl.dragging{cursor:grabbing}
+
+  #hud{position:fixed;inset:0;pointer-events:none;transition:opacity 1.2s ease;opacity:1;
+    text-shadow:0 1px 4px rgba(0,0,8,.85), 0 0 14px rgba(0,0,8,.55)}
+  #hud.faded{opacity:0}
+  #hud.hidden{opacity:0 !important}
+
+  .corner{position:absolute;padding:22px 26px}
+  .bl{left:0;bottom:0}
+  .br{right:0;bottom:0;text-align:right}
+  .tl{left:0;top:0}
+
+  .title{
+    font-size:11px;letter-spacing:.42em;text-transform:uppercase;
+    color:var(--ink);font-weight:500;
+  }
+  .sub{
+    margin-top:6px;font-size:11px;letter-spacing:.16em;color:var(--dim);
+    text-transform:uppercase;font-weight:400;
+  }
+
+  .clock{font-size:26px;font-weight:200;letter-spacing:.06em;font-variant-numeric:tabular-nums;line-height:1}
+  .clocklabel{margin-top:8px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+
+  .bars{margin-top:16px;display:flex;gap:14px;align-items:flex-end}
+  .bar{width:34px}
+  .bar .track{height:2px;background:var(--faint);position:relative;overflow:hidden}
+  .bar .fill{position:absolute;left:0;top:0;bottom:0;transition:width .8s ease}
+  .bar .lab{margin-top:6px;font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+  .bar .val{font-size:11px;color:var(--ink);font-variant-numeric:tabular-nums;margin-bottom:5px}
+  .scales{margin-top:15px;font-size:10px;letter-spacing:.13em;text-transform:uppercase;
+    color:rgba(233,240,255,.56);font-variant-numeric:tabular-nums;max-width:74em;line-height:1.8}
+
+  .speeds{pointer-events:auto;display:flex;gap:2px;justify-content:flex-end}
+  .sp{
+    font:inherit;font-size:10.5px;letter-spacing:.1em;color:var(--dim);
+    background:transparent;border:1px solid var(--faint);border-left-width:0;
+    padding:6px 11px;cursor:pointer;transition:.25s;
+  }
+  .sp:first-child{border-left-width:1px}
+  .sp:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
+  .sp.on{color:#0a0d14;background:rgba(233,240,255,.86);border-color:rgba(233,240,255,.86)}
+  .hint{margin-top:12px;font-size:10px;letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
+
+  #splash{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;gap:14px;background:#000;z-index:10;transition:opacity 1.6s ease;
+  }
+  #splash.gone{opacity:0;pointer-events:none}
+  #splash .t{font-size:11px;letter-spacing:.45em;text-transform:uppercase;color:var(--dim)}
+  #splash .d{width:120px;height:1px;background:var(--faint);position:relative;overflow:hidden}
+  #splash .d::after{content:"";position:absolute;inset:0;background:var(--ink);
+    animation:sweep 1.4s ease-in-out infinite}
+  @keyframes sweep{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+
+  #fail{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    text-align:center;padding:40px;font-size:14px;line-height:1.7;color:var(--dim);z-index:20}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="hud">
+  <div class="corner tl">
+    <div class="title">Aetheris</div>
+    <div class="sub">world simulation</div>
+  </div>
+
+  <div class="corner bl">
+    <div class="clock" id="clock">0:00:00</div>
+    <div class="clocklabel" id="clocklabel">elapsed</div>
+    <div class="bars" id="bars"></div>
+    <div class="scales" id="scales"></div>
+  </div>
+
+  <div class="corner br">
+    <div class="speeds">
+      <button class="sp on" data-s="1">&times;1</button>
+      <button class="sp" data-s="20">&times;20</button>
+      <button class="sp" data-s="100">&times;100</button>
+    </div>
+    <div class="hint">drag &middot; scroll &middot; space &middot; h</div>
+  </div>
+</div>
+
+<div id="splash"><div class="t">forming world</div><div class="d"></div></div>
+<div id="fail">This world needs WebGL2, which this browser isn&rsquo;t providing.<br>Try a recent Chrome, Edge, Firefox or Safari with hardware acceleration enabled.</div>
+
+<script>
+"use strict";
+(function(){
+
+/* ══════════════════════════════════════════════════════════════════════
+   0.  small math library
+   ══════════════════════════════════════════════════════════════════════ */
+const M4 = () => new Float32Array(16);
+function perspective(o,fovy,asp,n,f){
+  const t=1/Math.tan(fovy/2), nf=1/(n-f);
+  o[0]=t/asp;o[1]=0;o[2]=0;o[3]=0;
+  o[4]=0;o[5]=t;o[6]=0;o[7]=0;
+  o[8]=0;o[9]=0;o[10]=(f+n)*nf;o[11]=-1;
+  o[12]=0;o[13]=0;o[14]=2*f*n*nf;o[15]=0;return o;
+}
+function lookAt(o,e,c,u){
+  let zx=e[0]-c[0],zy=e[1]-c[1],zz=e[2]-c[2];
+  let l=1/Math.hypot(zx,zy,zz); zx*=l;zy*=l;zz*=l;
+  let xx=u[1]*zz-u[2]*zy, xy=u[2]*zx-u[0]*zz, xz=u[0]*zy-u[1]*zx;
+  l=Math.hypot(xx,xy,xz); if(l===0){xx=1;xy=0;xz=0;} else {l=1/l;xx*=l;xy*=l;xz*=l;}
+  const yx=zy*xz-zz*xy, yy=zz*xx-zx*xz, yz=zx*xy-zy*xx;
+  o[0]=xx;o[1]=yx;o[2]=zx;o[3]=0;
+  o[4]=xy;o[5]=yy;o[6]=zy;o[7]=0;
+  o[8]=xz;o[9]=yz;o[10]=zz;o[11]=0;
+  o[12]=-(xx*e[0]+xy*e[1]+xz*e[2]);
+  o[13]=-(yx*e[0]+yy*e[1]+yz*e[2]);
+  o[14]=-(zx*e[0]+zy*e[1]+zz*e[2]);
+  o[15]=1;return o;
+}
+function mul(o,a,b){
+  for(let c=0;c<4;c++){
+    const b0=b[c*4],b1=b[c*4+1],b2=b[c*4+2],b3=b[c*4+3];
+    o[c*4  ]=a[0]*b0+a[4]*b1+a[8]*b2+a[12]*b3;
+    o[c*4+1]=a[1]*b0+a[5]*b1+a[9]*b2+a[13]*b3;
+    o[c*4+2]=a[2]*b0+a[6]*b1+a[10]*b2+a[14]*b3;
+    o[c*4+3]=a[3]*b0+a[7]*b1+a[11]*b2+a[15]*b3;
+  } return o;
+}
+function invert(o,m){
+  const a00=m[0],a01=m[1],a02=m[2],a03=m[3],a10=m[4],a11=m[5],a12=m[6],a13=m[7],
+        a20=m[8],a21=m[9],a22=m[10],a23=m[11],a30=m[12],a31=m[13],a32=m[14],a33=m[15];
+  const b00=a00*a11-a01*a10,b01=a00*a12-a02*a10,b02=a00*a13-a03*a10,
+        b03=a01*a12-a02*a11,b04=a01*a13-a03*a11,b05=a02*a13-a03*a12,
+        b06=a20*a31-a21*a30,b07=a20*a32-a22*a30,b08=a20*a33-a23*a30,
+        b09=a21*a32-a22*a31,b10=a21*a33-a23*a31,b11=a22*a33-a23*a32;
+  let d=b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06;
+  if(!d) return o; d=1/d;
+  o[0]=(a11*b11-a12*b10+a13*b09)*d; o[1]=(a02*b10-a01*b11-a03*b09)*d;
+  o[2]=(a31*b05-a32*b04+a33*b03)*d; o[3]=(a22*b04-a21*b05-a23*b03)*d;
+  o[4]=(a12*b08-a10*b11-a13*b07)*d; o[5]=(a00*b11-a02*b08+a03*b07)*d;
+  o[6]=(a32*b02-a30*b05-a33*b01)*d; o[7]=(a20*b05-a22*b02+a23*b01)*d;
+  o[8]=(a10*b10-a11*b08+a13*b06)*d; o[9]=(a01*b08-a00*b10-a03*b06)*d;
+  o[10]=(a30*b04-a31*b02+a33*b00)*d;o[11]=(a21*b02-a20*b04-a23*b00)*d;
+  o[12]=(a11*b07-a10*b09-a12*b06)*d;o[13]=(a00*b09-a01*b07+a02*b06)*d;
+  o[14]=(a31*b01-a30*b03-a32*b00)*d;o[15]=(a20*b03-a21*b01+a22*b00)*d;
+  return o;
+}
+/* rotation matrix (3x3, column-major in a 9-array) about unit axis */
+function axisRot(out,ax,ay,az,ang){
+  const c=Math.cos(ang), s=Math.sin(ang), t=1-c;
+  out[0]=t*ax*ax+c;    out[1]=t*ax*ay+s*az; out[2]=t*ax*az-s*ay;
+  out[3]=t*ax*ay-s*az; out[4]=t*ay*ay+c;    out[5]=t*ay*az+s*ax;
+  out[6]=t*ax*az+s*ay; out[7]=t*ay*az-s*ax; out[8]=t*az*az+c;
+  return out;
+}
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const smoothstep=(e0,e1,x)=>{const t=clamp((x-e0)/(e1-e0),0,1);return t*t*(3-2*t);};
+
+/* ══════════════════════════════════════════════════════════════════════
+   1.  CPU noise  (improved Perlin, 3D)
+   ══════════════════════════════════════════════════════════════════════ */
+/* every visit is a different world; append #seed=12345 to the url to
+   return to a particular one */
+const SEED = (()=>{
+  const m = /seed=(\d+)/.exec(location.hash||"");
+  return m ? ((+m[1])>>>0) : ((Math.random()*4294967296)>>>0);
+})();
+
+const PERM = new Uint16Array(512);
+(function(){
+  const p=new Uint16Array(256); for(let i=0;i<256;i++)p[i]=i;
+  let s=(SEED ^ 0x9e3779b9)>>>0 || 1;
+  const rnd=()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};
+  for(let i=255;i>0;i--){const j=(rnd()*(i+1))|0;const t=p[i];p[i]=p[j];p[j]=t;}
+  for(let i=0;i<512;i++)PERM[i]=p[i&255];
+})();
+const fade=t=>t*t*t*(t*(t*6-15)+10);
+function grad(h,x,y,z){
+  switch(h&15){
+    case 0:return x+y; case 1:return -x+y; case 2:return x-y; case 3:return -x-y;
+    case 4:return x+z; case 5:return -x+z; case 6:return x-z; case 7:return -x-z;
+    case 8:return y+z; case 9:return -y+z; case 10:return y-z; case 11:return -y-z;
+    case 12:return y+x; case 13:return -y+z; case 14:return y-x; default:return -y-z;
+  }
+}
+function noise3(x,y,z){
+  const fx=Math.floor(x),fy=Math.floor(y),fz=Math.floor(z);
+  const X=fx&255,Y=fy&255,Z=fz&255;
+  x-=fx;y-=fy;z-=fz;
+  const u=fade(x),v=fade(y),w=fade(z);
+  const A=PERM[X]+Y, AA=PERM[A]+Z, AB=PERM[A+1]+Z;
+  const B=PERM[X+1]+Y, BA=PERM[B]+Z, BB=PERM[B+1]+Z;
+  const l=(a,b,t)=>a+t*(b-a);
+  return l(l(l(grad(PERM[AA],x,y,z),      grad(PERM[BA],x-1,y,z),u),
+             l(grad(PERM[AB],x,y-1,z),    grad(PERM[BB],x-1,y-1,z),u),v),
+           l(l(grad(PERM[AA+1],x,y,z-1),  grad(PERM[BA+1],x-1,y,z-1),u),
+             l(grad(PERM[AB+1],x,y-1,z-1),grad(PERM[BB+1],x-1,y-1,z-1),u),v),w);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   2.  the world  — simulation on an equirectangular grid
+   ══════════════════════════════════════════════════════════════════════ */
+const GW=320, GH=160, GN=GW*GH;
+
+const F = {
+  h:    new Float32Array(GN),   // elevation, roughly -1 .. 1
+  veg:  new Float32Array(GN),   // 0..1
+  moist:new Float32Array(GN),   // 0..1
+  snow: new Float32Array(GN),   // 0..1
+  temp: new Float32Array(GN),   // celsius
+  tn:   new Float32Array(GN),   // drifting temperature anomaly
+  mn:   new Float32Array(GN),   // drifting moisture anomaly
+  prox: new Float32Array(GN),   // blurred "water nearby"
+  sold: new Float32Array(GN),   // previous snow, for the ice feedback
+  tmp:  new Float32Array(GN),
+  tmp2: new Float32Array(GN)
+};
+const DIR = new Float32Array(GN*3);
+const LAT = new Float32Array(GH);
+const COSLAT = new Float32Array(GH);
+let areaTotal = 0;
+for(let j=0;j<GH;j++){
+  const lat = Math.PI*0.5 - (j+0.5)/GH*Math.PI;
+  LAT[j]=lat; COSLAT[j]=Math.cos(lat);
+  for(let i=0;i<GW;i++){
+    const lon = (i+0.5)/GW*Math.PI*2 - Math.PI;
+    const k=(j*GW+i)*3;
+    DIR[k  ]=Math.cos(lat)*Math.cos(lon);
+    DIR[k+1]=Math.sin(lat);
+    DIR[k+2]=Math.cos(lat)*Math.sin(lon);
+  }
+  areaTotal += COSLAT[j]*GW;
+}
+
+/* --- terrain octaves: each one slowly rotates on its own axis, and slowly
+       breathes in amplitude.  that is what makes coastlines migrate. ----- */
+const OCT = 6;
+const oFreq = [1.25, 2.35, 4.4, 8.3, 15.5, 29.0];
+const oAmp  = [0.60, 0.30, 0.16, 0.085, 0.045, 0.024];
+const oAxis = [], oSpin = [], oBreathA = [], oBreathW = [], oBreathP = [];
+(function(){
+  let s=(SEED*2654435761)>>>0 || 7;
+  const rnd=()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};
+  for(let o=0;o<OCT;o++){
+    let x=rnd()*2-1,y=rnd()*2-1,z=rnd()*2-1;
+    const l=1/Math.hypot(x,y,z); oAxis.push([x*l,y*l,z*l]);
+    oSpin.push(4.6e-5 * (1 + o*0.62) * (rnd()<0.5?-1:1));
+    /* low octaves breathe gently (they set the land/sea balance);
+       high octaves breathe hard (they reshape coasts) */
+    oBreathA.push(0.15 + 0.12*o);
+    oBreathW.push(2*Math.PI/(3000 + rnd()*7000));
+    oBreathP.push(rnd()*Math.PI*2);
+  }
+})();
+const ridgeAxis=[0.31,0.82,-0.48], ridgeSpin=2.4e-5;
+const tnAxis=[0.77,-0.31,0.56], tnSpin=5.5e-5;
+const mnAxis=[-0.42,0.61,0.67], mnSpin=6.5e-5;
+
+const S = {
+  time: 0,            // simulated seconds
+  epoch0: 0,          // clock zero, set once the world has settled
+  seaLevel: 0.02,
+  globalTemp: 3.4,
+  globalHum: 0.27,
+  solarLat: 0.0,
+  stats: {ocean:0.6, ice:0.08, desert:0.2, forest:0.2, grass:0.1, temp:14}
+};
+const TARGET = {ocean:0.635, ice:0.090, desertOfLand:0.225};
+const YEAR = 900;           // simulated seconds per orbit
+const TILT = 24*Math.PI/180;
+
+const rotsPerOct = [];
+for(let o=0;o<OCT;o++) rotsPerOct.push(new Float32Array(9));
+const ridgeM = new Float32Array(9);
+const tnM = new Float32Array(9);
+const mnM = new Float32Array(9);
+
+/* rebuild a horizontal band of the terrain / anomaly fields */
+function rebuildBand(j0,j1,t){
+  for(let o=0;o<OCT;o++)
+    axisRot(rotsPerOct[o], oAxis[o][0],oAxis[o][1],oAxis[o][2], t*oSpin[o]);
+  axisRot(ridgeM, ridgeAxis[0],ridgeAxis[1],ridgeAxis[2], t*ridgeSpin);
+  axisRot(tnM, tnAxis[0],tnAxis[1],tnAxis[2], t*tnSpin);
+  axisRot(mnM, mnAxis[0],mnAxis[1],mnAxis[2], t*mnSpin);
+
+  const amp=[];
+  for(let o=0;o<OCT;o++)
+    amp.push(oAmp[o]*(1 + oBreathA[o]*Math.sin(t*oBreathW[o]+oBreathP[o])));
+
+  for(let j=j0;j<j1;j++){
+    for(let i=0;i<GW;i++){
+      const k=j*GW+i, k3=k*3;
+      const dx=DIR[k3], dy=DIR[k3+1], dz=DIR[k3+2];
+      let h=0;
+      for(let o=0;o<OCT;o++){
+        const R=rotsPerOct[o], f=oFreq[o];
+        const px=(R[0]*dx+R[3]*dy+R[6]*dz)*f;
+        const py=(R[1]*dx+R[4]*dy+R[7]*dz)*f;
+        const pz=(R[2]*dx+R[5]*dy+R[8]*dz)*f;
+        h += amp[o]*noise3(px+o*17.3, py-o*8.1, pz+o*31.7);
+      }
+      /* ridged mountain belts, only where there is already land */
+      const rx=(ridgeM[0]*dx+ridgeM[3]*dy+ridgeM[6]*dz)*3.3;
+      const ry=(ridgeM[1]*dx+ridgeM[4]*dy+ridgeM[7]*dz)*3.3;
+      const rz=(ridgeM[2]*dx+ridgeM[5]*dy+ridgeM[8]*dz)*3.3;
+      let r = 1 - Math.abs(noise3(rx+5.5, ry+2.2, rz-9.9))*1.9;
+      r = r>0 ? r*r : 0;
+      h += 0.30*r*smoothstep(-0.02, 0.30, h);
+
+      F.h[k]=h;
+      {
+        const ax=tnM[0]*dx+tnM[3]*dy+tnM[6]*dz;
+        const ay=tnM[1]*dx+tnM[4]*dy+tnM[7]*dz;
+        const az=tnM[2]*dx+tnM[5]*dy+tnM[8]*dz;
+        F.tn[k]= 0.62*noise3(ax*2.1+40.0, ay*2.1-13.0, az*2.1+7.0)
+               + 0.26*noise3(ax*5.9-11.0, ay*5.9+27.0, az*5.9-4.0)
+               + 0.12*noise3(ax*13.7+3.0, ay*13.7+9.0, az*13.7+51.0);
+      }
+      F.mn[k]=noise3((mnM[0]*dx+mnM[3]*dy+mnM[6]*dz)*2.6-22.0,
+                     (mnM[1]*dx+mnM[4]*dy+mnM[7]*dz)*2.6+61.0,
+                     (mnM[2]*dx+mnM[5]*dy+mnM[8]*dz)*2.6+3.0);
+    }
+  }
+}
+
+/* separable blur of the water mask -> "how oceanic is this neighbourhood" */
+function computeProx(){
+  const a=F.tmp, b=F.tmp2, sea=S.seaLevel;
+  for(let k=0;k<GN;k++) a[k] = F.h[k]<sea ? 1 : 0;
+  const R=3;
+  for(let pass=0;pass<3;pass++){
+    // horizontal (wrap)
+    for(let j=0;j<GH;j++){
+      const row=j*GW;
+      for(let i=0;i<GW;i++){
+        let s=0;
+        for(let d=-R;d<=R;d++) s+=a[row+((i+d+GW)%GW)];
+        b[row+i]=s/(2*R+1);
+      }
+    }
+    // vertical (clamp)
+    for(let j=0;j<GH;j++){
+      const row=j*GW;
+      for(let i=0;i<GW;i++){
+        let s=0;
+        for(let d=-R;d<=R;d++){
+          const jj=clamp(j+d,0,GH-1);
+          s+=b[jj*GW+i];
+        }
+        a[row+i]=s/(2*R+1);
+      }
+    }
+  }
+  F.prox.set(a);
+}
+
+let ctrlAccum = 0;
+function stepFields(dt){
+  const sea=S.seaLevel;
+  S.solarLat = TILT*Math.sin(S.time/YEAR*Math.PI*2);
+
+  const kMoist = Math.min(1, dt*0.030);
+  const kSnow  = Math.min(1, dt*0.022);
+  const GROW=0.0060, DECAY=0.0064, DIFF=0.0045, SDIFF=0.0075;
+
+  const veg=F.veg, moist=F.moist, snow=F.snow, temp=F.temp, h=F.h, prox=F.prox;
+  const vOld=F.tmp; vOld.set(veg);
+  const sold=F.sold; sold.set(snow);
+
+  for(let j=0;j<GH;j++){
+    const lat=LAT[j], row=j*GW;
+    const mLat = clamp(0.5+0.5*Math.cos(lat*6.0), 0, 1);
+    /* these depend only on latitude, so compute them once per row */
+    let cL=Math.cos(lat-S.solarLat);      if(cL<0) cL=0;
+    let cW=Math.cos(lat-S.solarLat*0.35); if(cW<0) cW=0;
+    const cpL=Math.pow(cL,0.85), cpW=Math.pow(cW,0.85);
+    const TbL=-30+62*cpL,        TbW=-30+62*cpW;
+    const ampL=0.45+1.25*(1-cpL),ampW=0.45+1.25*(1-cpW);
+    for(let i=0;i<GW;i++){
+      const k=row+i;
+      const hk=h[k], water = hk<sea;
+      const land = hk-sea;
+      const im=(i-1+GW)%GW, ip=(i+1)%GW;
+      const jm=j>0?j-1:j, jp=j<GH-1?j+1:j;
+      const n0=row+im, n1=row+ip, n2=jm*GW+i, n3=jp*GW+i;
+
+      /* ---- temperature (global warming/cooling is polar-amplified,
+             so the controller can move the ice line without frying
+             the tropics) ---- */
+      let T = water ? TbW : TbL - land*52;
+      T += F.tn[k]*7.0 + S.globalTemp*(water ? ampW : ampL);
+      /* ice-albedo feedback: white ground keeps itself cold. this is what
+         makes ice sheets ragged and sticky instead of a latitude circle */
+      const sPrev = sold[k];
+      T -= sPrev*4.2;
+      temp[k]=T;
+
+      /* ---- moisture ---- */
+      let mt = mLat*(0.30+0.78*prox[k]) + 0.20*F.mn[k] + S.globalHum;
+      mt *= 0.32 + 0.68*smoothstep(-30,-2,T);
+      if(water) mt = Math.max(mt, 0.82);
+      mt = clamp(mt,0,1);
+      moist[k] += (mt-moist[k])*kMoist;
+
+      /* ---- snow & ice ---- */
+      let st = water ? smoothstep(-1.0,-8.0,T) : smoothstep(3.0,-6.0,T);
+      /* snow has to fall before it can lie: cold *dry* ground stays bare */
+      if(!water) st *= 0.40 + 0.60*smoothstep(0.14,0.50,moist[k]);
+      let sv = sPrev + (st-sPrev)*kSnow;
+      /* ice creeps into its neighbours, so sheets grow tongues and outliers */
+      sv += SDIFF*dt*((sold[n0]+sold[n1]+sold[n2]+sold[n3])*0.25 - sPrev);
+      snow[k] = sv<0 ? 0 : (sv>1 ? 1 : sv);
+
+      /* ---- vegetation ---- */
+      if(water){ veg[k] += (0-veg[k])*Math.min(1,dt*0.05); continue; }
+      const wf = smoothstep(0.24,0.56,moist[k]);
+      const tf = smoothstep(-9,3,T)*(1-smoothstep(33,45,T));
+      const s = wf*tf*(1-snow[k]*0.55);
+      let v = vOld[k];
+      v += dt*(GROW*s*(1-v) - DECAY*(1-s)*v - 0.0004*v);
+
+      /* diffusion from land neighbours -> colonisation fronts */
+      let sum=0,n=0;
+      if(h[n0]>=sea){sum+=vOld[n0];n++;}
+      if(h[n1]>=sea){sum+=vOld[n1];n++;}
+      if(h[n2]>=sea){sum+=vOld[n2];n++;}
+      if(h[n3]>=sea){sum+=vOld[n3];n++;}
+      if(n) v += DIFF*dt*(sum/n - v);
+      veg[k]=clamp(v,0,1);
+    }
+  }
+
+  /* ---------- homeostasis: keep every environment in the picture -------- */
+  ctrlAccum += dt;
+  if(ctrlAccum >= 2.5){
+    const d=ctrlAccum; ctrlAccum=0;
+    let aOcean=0,aIce=0,aDesert=0,aForest=0,aGrass=0,aTundra=0,tSum=0,aLand=0;
+    for(let j=0;j<GH;j++){
+      const w=COSLAT[j], row=j*GW;
+      for(let i=0;i<GW;i++){
+        const k=row+i;
+        tSum += temp[k]*w;
+        if(h[k]<S.seaLevel){ aOcean+=w; if(snow[k]>0.45) aIce+=w; }
+        else{
+          aLand+=w;
+          if(snow[k]>0.45) aIce+=w;
+          else if(veg[k]<0.18) { if(temp[k]>2) aDesert+=w; else aTundra+=w; }
+          else if(veg[k]<0.55) aGrass+=w;
+          else aForest+=w;
+        }
+      }
+    }
+    const ocean=aOcean/areaTotal, ice=aIce/areaTotal, land=Math.max(1e-6,aLand/areaTotal);
+    const desert=aDesert/areaTotal;
+    S.stats={ocean, ice, desert, tundra:aTundra/areaTotal,
+             forest:aForest/areaTotal, grass:aGrass/areaTotal,
+             land, temp:tSum/areaTotal};
+
+    /* deserts are steered as a share of *land*, so the target does not
+       drift when sea level moves the coastline */
+    const desertOfLand = desert/land;
+
+    /* corrections are rate-limited so the loop stays stable no matter how
+       large a time step the time-lapse hands it */
+    const dSea = clamp((TARGET.ocean - ocean)*0.055*d, -0.020, 0.020);
+    const dT   = clamp((ice - TARGET.ice)*0.55*d,      -0.30,  0.30);
+    const dH   = clamp((desertOfLand - TARGET.desertOfLand)*0.040*d, -0.012, 0.012);
+    S.seaLevel   = clamp(S.seaLevel   + dSea, -0.50, 0.50);
+    S.globalTemp = clamp(S.globalTemp + dT,   -14, 14);
+    S.globalHum  = clamp(S.globalHum  + dH,   -0.56, 0.52);
+  }
+}
+
+/* pack the fields into the float texture the GPU reads */
+const TEXDATA = new Float32Array(GN*4);
+function packTexture(){
+  for(let k=0,p=0;k<GN;k++,p+=4){
+    TEXDATA[p  ]=F.h[k];
+    TEXDATA[p+1]=F.veg[k];
+    TEXDATA[p+2]=F.snow[k];
+    TEXDATA[p+3]=F.moist[k];
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   3.  WebGL
+   ══════════════════════════════════════════════════════════════════════ */
+const canvas=document.getElementById("gl");
+const gl = canvas.getContext("webgl2",{antialias:true,alpha:false,powerPreference:"high-performance"});
+if(!gl){ document.getElementById("fail").style.display="flex";
+         document.getElementById("splash").style.display="none"; return; }
+
+function sh(type,src){
+  const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))
+    throw new Error(gl.getShaderInfoLog(s)+"\n"+src.split("\n").map((l,i)=>(i+1)+": "+l).join("\n"));
+  return s;
+}
+function prog(vs,fs){
+  const p=gl.createProgram();
+  gl.attachShader(p,sh(gl.VERTEX_SHADER,vs));
+  gl.attachShader(p,sh(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u={}; const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
+  for(let i=0;i<n;i++){ const nm=gl.getActiveUniform(p,i).name.replace("[0]","");
+    u[nm]=gl.getUniformLocation(p,nm); }
+  p.u=u; return p;
+}
+
+const GLSL_NOISE = `
+vec3 hash33(vec3 p){
+  p = fract(p*vec3(0.1031,0.1030,0.0973));
+  p += dot(p, p.yxz+33.33);
+  vec3 g = fract((p.xxy+p.yxx)*p.zyx)*2.0-1.0;
+  /* unit-length gradients: without this the cube diagonals dominate and
+     the noise shows a herringbone lattice */
+  return g*inversesqrt(dot(g,g)+1e-5);
+}
+vec3 hash33r(vec3 p){
+  p = fract(p*vec3(0.1031,0.1030,0.0973));
+  p += dot(p, p.yxz+33.33);
+  return fract((p.xxy+p.yxx)*p.zyx);
+}
+float gnoise(vec3 p){
+  vec3 i=floor(p), f=fract(p);
+  vec3 u=f*f*(3.0-2.0*f);
+  return mix(mix(mix(dot(hash33(i+vec3(0,0,0)),f-vec3(0,0,0)),
+                     dot(hash33(i+vec3(1,0,0)),f-vec3(1,0,0)),u.x),
+                 mix(dot(hash33(i+vec3(0,1,0)),f-vec3(0,1,0)),
+                     dot(hash33(i+vec3(1,1,0)),f-vec3(1,1,0)),u.x),u.y),
+             mix(mix(dot(hash33(i+vec3(0,0,1)),f-vec3(0,0,1)),
+                     dot(hash33(i+vec3(1,0,1)),f-vec3(1,0,1)),u.x),
+                 mix(dot(hash33(i+vec3(0,1,1)),f-vec3(0,1,1)),
+                     dot(hash33(i+vec3(1,1,1)),f-vec3(1,1,1)),u.x),u.y),u.z)*1.32;
+}
+/* rotate between octaves so the lattices never line up */
+const mat3 NR = mat3( 0.00, 0.80, 0.60, -0.80, 0.36,-0.48, -0.60,-0.48, 0.64);
+float fbm2(vec3 p){
+  float s=0.6667*gnoise(p); p=NR*p*2.07+11.1;
+  return s+0.3333*gnoise(p);
+}
+float fbm3(vec3 p){
+  float s=0.5333*gnoise(p); p=NR*p*2.03+11.1;
+  s+=0.2667*gnoise(p);      p=NR*p*2.11-7.3;
+  return s+0.1333*gnoise(p);
+}
+float fbm5(vec3 p){
+  float a=0.5,s=0.0;
+  for(int i=0;i<5;i++){ s+=a*gnoise(p); p=NR*p*2.04+vec3(5.2,1.3,9.7); a*=0.5; }
+  return s;
+}`;
+
+/* ---------- sphere geometry ---------- */
+function makeSphere(seg,rings){
+  const pos=[],idx=[];
+  for(let j=0;j<=rings;j++){
+    const v=j/rings, th=v*Math.PI, st=Math.sin(th), ct=Math.cos(th);
+    for(let i=0;i<=seg;i++){
+      const u=i/seg, ph=u*Math.PI*2;
+      pos.push(st*Math.cos(ph), ct, st*Math.sin(ph));
+    }
+  }
+  /* counter-clockwise when seen from outside the sphere */
+  for(let j=0;j<rings;j++)for(let i=0;i<seg;i++){
+    const a=j*(seg+1)+i, b=a+seg+1;
+    idx.push(a,a+1,b, b,a+1,b+1);
+  }
+  return {pos:new Float32Array(pos), idx:new Uint32Array(idx)};
+}
+const SPH = makeSphere(320,160);
+const sphVAO = gl.createVertexArray();
+gl.bindVertexArray(sphVAO);
+const sphVBO=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,sphVBO); gl.bufferData(gl.ARRAY_BUFFER,SPH.pos,gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
+const sphIBO=gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,sphIBO);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,SPH.idx,gl.STATIC_DRAW);
+gl.bindVertexArray(null);
+
+const quadVAO=gl.createVertexArray();   /* fullscreen triangle, no attribs */
+
+/* ---------- data texture ---------- */
+const dataTex=gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D,dataTex);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,GW,GH,0,gl.RGBA,gl.FLOAT,null);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+function uploadData(){
+  gl.bindTexture(gl.TEXTURE_2D,dataTex);
+  gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,GW,GH,gl.RGBA,gl.FLOAT,TEXDATA);
+}
+
+/* ---------- baked deep-sky (nebula / milky way) ---------- */
+const SKY_W=1024, SKY_H=512;
+const skyTex=gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D,skyTex);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,SKY_W,SKY_H,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+
+const VS_QUAD=`#version 300 es
+void main(){
+  vec2 p = vec2((gl_VertexID<<1)&2, gl_VertexID&2);
+  gl_Position = vec4(p*2.0-1.0, 0.0, 1.0);
+}`;
+
+const bakeProg = prog(VS_QUAD, `#version 300 es
+precision highp float;
+out vec4 o;
+uniform vec2 uRes;
+${GLSL_NOISE}
+void main(){
+  vec2 uv = gl_FragCoord.xy/uRes;
+  float lon = (uv.x-0.5)*6.28318530718;
+  float lat = (0.5-uv.y)*3.14159265359;
+  vec3 d = vec3(cos(lat)*cos(lon), sin(lat), cos(lat)*sin(lon));
+
+  vec3 gn = normalize(vec3(0.36,0.84,-0.40));
+  float b = dot(d,gn);
+  float band  = exp(-b*b*20.0);
+  float band2 = exp(-b*b*6.0);
+
+  float n  = fbm5(d*2.6)*0.5+0.5;
+  float n2 = fbm3(d*6.5+31.0)*0.5+0.5;
+  float dust = smoothstep(0.30,0.78, fbm3(d*4.2-17.0)*0.5+0.5);
+
+  vec3 warm = vec3(0.62,0.55,0.47);
+  vec3 cool = vec3(0.26,0.33,0.55);
+  vec3 mw = mix(cool,warm,n2);
+  float bright = band*(0.42+1.55*n*n) * mix(0.22,1.0,dust);
+  bright += band2*0.075*n;
+
+  // a couple of far, faint nebulae away from the plane
+  float neb = smoothstep(0.55,0.95, fbm3(d*1.7+61.0)*0.5+0.5);
+  vec3 nc = mix(vec3(0.18,0.10,0.30), vec3(0.10,0.22,0.30), n2);
+
+  vec3 col = mw*bright*1.85 + nc*neb*0.26;
+  col += vec3(0.008,0.010,0.018);           // faint airless background
+  o = vec4(col,1.0);
+}`);
+
+(function bakeSky(){
+  const fbo=gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,skyTex,0);
+  gl.viewport(0,0,SKY_W,SKY_H);
+  gl.disable(gl.DEPTH_TEST); gl.disable(gl.BLEND);
+  gl.useProgram(bakeProg); gl.uniform2f(bakeProg.u.uRes,SKY_W,SKY_H);
+  gl.bindVertexArray(quadVAO); gl.drawArrays(gl.TRIANGLES,0,3);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.deleteFramebuffer(fbo);
+})();
+
+/* ---------- background (stars over the baked sky) ---------- */
+const bgProg = prog(VS_QUAD, `#version 300 es
+precision highp float;
+out vec4 o;
+uniform vec2 uRes; uniform mat4 uInvVP; uniform vec3 uCam; uniform float uT;
+uniform sampler2D uSky; uniform vec3 uSun;
+${GLSL_NOISE}
+
+float starLayer(vec3 rd, float scale, float thresh, float rad, out vec3 tint){
+  vec3 p = rd*scale;
+  vec3 i = floor(p), f = fract(p);
+  vec3 h = hash33r(i);
+  tint = vec3(1.0);
+  if(h.x < thresh) return 0.0;
+  vec3 c = 0.22+0.56*fract(h*7.31+h.zxy*3.77);
+  float d = length(f-c);
+  float core = 1.0 - smoothstep(rad*0.10, rad, d);          // the star
+  float halo = (1.0 - smoothstep(rad*0.6, rad*2.6, d))*0.16; // its bloom
+  float br = pow((h.x-thresh)/max(1e-4,1.0-thresh), 1.55);
+  float tw = 0.82 + 0.18*sin(uT*0.8 + h.y*61.0);
+  tint = mix(vec3(1.0,0.76,0.58), vec3(0.70,0.83,1.0), fract(h.z*3.1));
+  tint = mix(vec3(1.0), tint, 0.6);
+  return (core+halo)*br*tw;
+}
+
+void main(){
+  vec2 ndc = (gl_FragCoord.xy/uRes)*2.0-1.0;
+  vec4 w = uInvVP*vec4(ndc,1.0,1.0);
+  vec3 rd = normalize(w.xyz/w.w - uCam);
+
+  float lon = atan(rd.z,rd.x), lat = asin(clamp(rd.y,-1.0,1.0));
+  vec2 uv = vec2(lon*0.15915494+0.5, 0.5-lat*0.31830989);
+  vec3 col = texture(uSky, uv).rgb;
+
+  vec3 gn = normalize(vec3(0.36,0.84,-0.40));
+  float band = exp(-pow(dot(rd,gn),2.0)*12.0);
+
+  vec3 t; float s;
+  s = starLayer(rd, 46.0, 0.930, 0.17, t);  col += t*s*1.70;
+  s = starLayer(rd,105.0, 0.888, 0.21, t);  col += t*s*1.00;
+  s = starLayer(rd,230.0, 0.878-0.11*band, 0.26, t); col += t*s*0.58;
+  s = starLayer(rd,480.0, 0.892-0.13*band, 0.34, t); col += t*s*0.34;
+  s = starLayer(rd,980.0, 0.940-0.10*band, 0.46, t); col += t*s*0.17;
+
+  /* ---- the world's own star ---- */
+  float cs  = clamp(dot(rd, uSun), -1.0, 1.0);
+  float ang = acos(cs);
+  vec3  perp = normalize(rd - uSun*cs + vec3(1e-6));
+  vec3  sx = normalize(cross(uSun, vec3(0.0,1.0,0.0)));
+  vec3  sy = cross(sx, uSun);
+  float spoke = pow(abs(sin(atan(dot(perp,sy), dot(perp,sx))*3.0)), 8.0);
+
+  const float SR = 0.0072;                       // angular radius
+  float disk  = 1.0 - smoothstep(SR*0.80, SR*1.12, ang);
+  float inner = pow(max(0.0, 1.0 - ang/0.045), 2.0);
+  float mid   = pow(max(0.0, 1.0 - ang/0.16),  2.6);
+  float outer = pow(max(0.0, 1.0 - ang/0.46),  3.4);
+  vec3 sunTint = vec3(1.0, 0.965, 0.905);
+  col += sunTint*(disk*4.0 + inner*0.75 + mid*0.20 + outer*0.085*(0.72+0.55*spoke));
+
+  col = col/(1.0+col*0.22);                      // soft shoulder, no hard clip
+  o = vec4(col,1.0);
+}`);
+
+/* ---------- planet ---------- */
+const VS_SPH=`#version 300 es
+layout(location=0) in vec3 aPos;
+uniform mat4 uVP; uniform mat3 uRot; uniform float uScale;
+out vec3 vObj; out vec3 vWorld;
+void main(){
+  vObj = aPos;
+  vWorld = uRot*(aPos*uScale);
+  gl_Position = uVP*vec4(vWorld,1.0);
+}`;
+
+const planetProg = prog(VS_SPH, `#version 300 es
+precision highp float;
+in vec3 vObj; in vec3 vWorld;
+out vec4 o;
+uniform sampler2D uData;
+uniform mat3 uRot;
+uniform vec3 uSun, uCam;
+uniform float uSea, uSolarLat, uGT, uT;
+uniform int uDebug;
+${GLSL_NOISE}
+
+const vec2 RES = vec2(${GW}.0,${GH}.0);
+
+/* smooth (C1) lookup done by hand: never depends on the driver's
+   filtering support for float textures, and softens the 256x128 grid
+   into something continuous */
+vec4 fetchSmooth(vec3 d){
+  vec2 uv = vec2(atan(d.z,d.x)*0.15915494+0.5, 0.5-asin(clamp(d.y,-1.0,1.0))*0.31830989);
+  vec2 st = uv*RES-0.5;
+  vec2 i = floor(st), f = fract(st);
+  f = f*f*(3.0-2.0*f);
+  int x0 = int(mod(i.x, RES.x)), x1 = int(mod(i.x+1.0, RES.x));
+  int y0 = int(clamp(i.y,0.0,RES.y-1.0)), y1 = int(clamp(i.y+1.0,0.0,RES.y-1.0));
+  vec4 a = texelFetch(uData, ivec2(x0,y0), 0);
+  vec4 b = texelFetch(uData, ivec2(x1,y0), 0);
+  vec4 c = texelFetch(uData, ivec2(x0,y1), 0);
+  vec4 e = texelFetch(uData, ivec2(x1,y1), 0);
+  return mix(mix(a,b,f.x), mix(c,e,f.x), f.y);
+}
+vec4 dataAt(vec3 d){ return fetchSmooth(d); }
+
+/* Catmull-Rom sample of the elevation channel returning value *and* both
+   derivatives from a single 4x4 neighbourhood. Smooth-bilinear was cheaper
+   but its gradient falls to zero on every cell boundary, so relief shading
+   beat against the grid and drew stripes across mountain belts. Samples are
+   clamped at sea level first, so the continental shelf drop cannot pose as
+   a coastal cliff. */
+vec3 heightCR(vec3 dir, float sea){
+  vec2 uv = vec2(atan(dir.z,dir.x)*0.15915494+0.5,
+                 0.5-asin(clamp(dir.y,-1.0,1.0))*0.31830989);
+  vec2 st = uv*RES-0.5;
+  vec2 i = floor(st), f = st-i;
+
+  float x2=f.x*f.x, x3=x2*f.x, y2=f.y*f.y, y3=y2*f.y;
+  float wx[4], wy[4], dx[4], dy[4];
+  wx[0]=-0.5*x3+x2-0.5*f.x;  wx[1]= 1.5*x3-2.5*x2+1.0;
+  wx[2]=-1.5*x3+2.0*x2+0.5*f.x; wx[3]= 0.5*x3-0.5*x2;
+  dx[0]=-1.5*x2+2.0*f.x-0.5; dx[1]= 4.5*x2-5.0*f.x;
+  dx[2]=-4.5*x2+4.0*f.x+0.5; dx[3]= 1.5*x2-f.x;
+  wy[0]=-0.5*y3+y2-0.5*f.y;  wy[1]= 1.5*y3-2.5*y2+1.0;
+  wy[2]=-1.5*y3+2.0*y2+0.5*f.y; wy[3]= 0.5*y3-0.5*y2;
+  dy[0]=-1.5*y2+2.0*f.y-0.5; dy[1]= 4.5*y2-5.0*f.y;
+  dy[2]=-4.5*y2+4.0*f.y+0.5; dy[3]= 1.5*y2-f.y;
+
+  float v=0.0, gx=0.0, gy=0.0;
+  for(int b=0;b<4;b++){
+    int yy = int(clamp(i.y-1.0+float(b), 0.0, RES.y-1.0));
+    float rv=0.0, rg=0.0;
+    for(int a=0;a<4;a++){
+      int xx = int(mod(i.x-1.0+float(a), RES.x));
+      float h = max(texelFetch(uData, ivec2(xx,yy), 0).r, sea);
+      rv += wx[a]*h;  rg += dx[a]*h;
+    }
+    v += wy[b]*rv;  gx += wy[b]*rg;  gy += dy[b]*rv;
+  }
+  return vec3(v, gx, gy);
+}
+
+/* the grid supplies the shape of the land; the shader only adds a
+   small fractal crinkle, so coastlines stay organic instead of being
+   overwhelmed by the noise lattice */
+float crinkle(vec3 d){ return 0.021*fbm3(d*11.0) + 0.0115*fbm2(d*31.0); }
+float heightOf(vec3 d){ return fetchSmooth(d).r + crinkle(d); }
+
+void main(){
+  vec3 d = normalize(vObj);
+  vec4 dat = dataAt(d);
+  float moist = dat.a;
+  float h0 = dat.r + crinkle(d);
+
+  if(uDebug==1){ o=vec4(vec3(step(uSea,h0)),1.0); return; }
+  if(uDebug==2){ o=vec4(vec3(step(uSea,dat.r)),1.0); return; }
+  if(uDebug==3){ o=vec4(vec3(fract(dat.r*14.0)),1.0); return; }
+
+  /* How much of the sphere one pixel covers. Detail finer than this cannot
+     be resolved and aliases into moire instead — which is what produced
+     the hatching across mountain belts in the twilight band. The fine
+     octaves below fade out using these. */
+  float pw = max(length(dFdx(d)), length(dFdy(d))) + 1e-7;
+  float fadeA = 1.0 - smoothstep(0.006, 0.048, pw);
+  float fadeB = 1.0 - smoothstep(0.003, 0.030, pw);
+
+  /* Local tangent frame, always the lat/lon one so it agrees with the
+     analytic derivatives below. It must not switch basis at high latitude:
+     doing so rotated the relief direction discontinuously and drew a hard
+     circle around each pole. */
+  vec3 t1 = cross(vec3(0.0,1.0,0.0), d);
+  float t1l = length(t1);
+  t1 = t1l > 1e-4 ? t1/t1l : vec3(1.0,0.0,0.0);
+  vec3 t2 = cross(d,t1);
+
+  /* macro relief: differentiate the smooth grid over roughly one cell,
+     which keeps the finite difference free of aliasing */
+  /* true surface gradient, in units of elevation per radian of arc.
+     t1 points west and t2 points south, hence the signs. */
+  vec3 hcr = heightCR(d, uSea);
+  float cosLat = sqrt(max(1.0-d.y*d.y, 0.0));
+  /* smooth floor, so the longitude scale has no kink near the poles */
+  float sLon = (6.28318530718/RES.x)*sqrt(cosLat*cosLat + 0.020);
+  float sLat = 3.14159265359/RES.y;
+  vec2 gRaw = vec2(-hcr.y/sLon, hcr.z/sLat);
+  float gm = length(gRaw);
+  /* Saturating slope, and capped low. Seen from orbit even a great range
+     is a faint shading gradient — a real planet has nothing that reads as
+     a black gash. This tops out near 13 degrees of tilt however steep the
+     ground actually gets. */
+  vec2 g = gm>1e-5 ? (gRaw/gm)*(gm*0.30/(1.0+gm*0.30))*0.245 : vec2(0.0);
+
+  float land = h0-uSea;
+  float isLand = step(0.0, land);
+  float steep = smoothstep(2.6, 11.5, gm);
+
+  /* Read vegetation and ice through a warped lens. Displacing *where* we
+     sample, rather than nudging the value, is what turns a smooth ice
+     margin into a ragged one with peninsulas and stranded floes. */
+  /* relief fades out as the land meets the sea, so beaches stay flat */
+  float shoreFade = smoothstep(0.0, 0.085, land);
+
+  float wa = fbm2(d*7.0), wb = fbm2(d*7.0+vec3(19.3,4.1,-7.7));
+  vec4 datW = fetchSmooth(normalize(d + (t1*wa + t2*wb)*0.075));
+  float veg  = datW.g;
+  float snow = datW.b;
+
+  /* approximate temperature, matching the simulation, for tinting */
+  float lat = asin(clamp(d.y,-1.0,1.0));
+  float c = max(0.0, cos(lat - uSolarLat*mix(0.35,1.0,isLand)));
+  float cp = pow(c,0.85);
+  float T = -30.0 + 62.0*cp - max(0.0,land)*52.0 + uGT*(0.45+1.25*(1.0-cp)) - snow*4.2;
+
+  /* ---------------- albedo ---------------- */
+  vec3 albedo; float gloss;
+  float micro  = fbm3(d*30.0)*0.5+0.5;
+  /* fractal wobble on the snow line, so no ice edge is ever a clean arc */
+  float snowEdge = snow + 0.105*fbm2(d*14.0) + 0.070*fbm2(d*30.0) + 0.030*fadeA*fbm2(d*66.0);
+  float micro2 = (0.70*gnoise(d*40.0) + 0.30*fadeA*gnoise(d*84.0+3.9))*0.5+0.5;
+
+  if(land < 0.0){
+    float depth = clamp(-land*2.4, 0.0, 1.0);
+    vec3 shallow = vec3(0.115,0.400,0.435);
+    vec3 midw    = vec3(0.040,0.155,0.310);
+    vec3 deep    = vec3(0.009,0.045,0.130);
+    vec3 col = mix(shallow, midw, smoothstep(0.0,0.30,depth));
+    col = mix(col, deep, smoothstep(0.26,0.85,depth));
+    col *= 0.93+0.14*micro;
+    float ice = smoothstep(0.34,0.72,snowEdge);
+    vec3 iceCol = mix(vec3(0.70,0.79,0.86), vec3(0.94,0.97,1.0), micro);
+    col = mix(col, iceCol, ice);
+    albedo = col;
+    gloss = 1.0-ice*0.95;
+  } else {
+    /* Barren ground is not one colour. A cold desert is grey-brown rock,
+       frozen soil and gravel; a hot desert is sand. Keying both to the same
+       sand meant melting snow uncovered the Sahara — so seasonal snow looked
+       like it had been lying on nothing at all. */
+    vec3 barrenCold = mix(vec3(0.430,0.408,0.356), vec3(0.338,0.318,0.274), micro);
+    vec3 barrenCool = mix(vec3(0.548,0.496,0.376), vec3(0.444,0.400,0.302), micro);
+    vec3 barrenWarm = mix(vec3(0.800,0.690,0.470), vec3(0.650,0.500,0.320), micro);
+    vec3 sand = mix(barrenCold, barrenCool, smoothstep(-9.0, 3.0, T));
+    sand      = mix(sand,       barrenWarm, smoothstep(5.0, 19.0, T));
+
+    vec3 steppeCold = mix(vec3(0.436,0.428,0.336), vec3(0.352,0.344,0.272), micro);
+    vec3 steppeWarm = mix(vec3(0.600,0.560,0.340), vec3(0.500,0.490,0.290), micro);
+    vec3 steppe = mix(steppeCold, steppeWarm, smoothstep(-2.0, 14.0, T));
+    vec3 grass  = mix(vec3(0.36,0.49,0.21), vec3(0.29,0.42,0.17), micro);
+    vec3 forest = mix(vec3(0.155,0.325,0.145), vec3(0.110,0.250,0.118), micro);
+    vec3 jungle = mix(vec3(0.095,0.280,0.110), vec3(0.070,0.210,0.092), micro);
+    vec3 taiga  = mix(vec3(0.130,0.245,0.180), vec3(0.098,0.188,0.148), micro);
+    vec3 tundra = mix(vec3(0.445,0.400,0.310), vec3(0.352,0.315,0.246), micro);
+    vec3 rock   = mix(vec3(0.470,0.428,0.372), vec3(0.392,0.352,0.303), micro2);
+
+    vec3 col = mix(sand, steppe, smoothstep(0.02,0.24,veg));
+    col = mix(col, grass,  smoothstep(0.20,0.48,veg));
+    col = mix(col, forest, smoothstep(0.44,0.74,veg));
+    col = mix(col, jungle, smoothstep(0.74,0.96,veg)*smoothstep(16.0,24.0,T));
+    col = mix(col, taiga,  (1.0-smoothstep(-3.0,8.0,T))*smoothstep(0.25,0.6,veg));
+    col = mix(col, tundra, (1.0-smoothstep(-13.0,-1.0,T))*(1.0-veg*0.55)*0.60);
+
+    /* beaches: narrow, and broken up so coasts are not outlined */
+    float beach = (1.0-smoothstep(0.0,0.013,land))*(0.35+0.80*micro);
+    col = mix(col, vec3(0.74,0.68,0.53), clamp(beach,0.0,1.0));
+
+    /* exposed rock, but only where ground is truly steep or truly high;
+       dramatic cliffs exist on real worlds and they are rare */
+    col = mix(col, rock, clamp(steep*0.42 + smoothstep(0.44,0.82,land)*0.50, 0.0, 0.72));
+
+    /* snow, favouring flat ground */
+    float sn = smoothstep(0.30,0.52,snowEdge)*(1.0-steep*0.30);
+    col = mix(col, mix(vec3(0.86,0.90,0.95), vec3(0.97,0.99,1.0), micro), sn);
+
+    albedo = col;
+    gloss = 0.06;
+  }
+
+  /* ---------------- normal ----------------
+     micro relief comes from a noise *vector*, not a finite difference,
+     so there is no sampling lattice to alias against               */
+  vec3 Nw = normalize(uRot*d);
+  vec3 V  = normalize(uCam - vWorld);
+  float graze = smoothstep(0.03, 0.42, dot(Nw,V));
+
+  vec3 nObj;
+  if(land < 0.0){
+    vec3 wv = vec3(gnoise(d*66.0+vec3(uT*0.010,0.0,4.0)),
+                   gnoise(d*66.0+vec3(0.0,uT*0.010,19.0)),
+                   gnoise(d*66.0+vec3(7.0,3.0,uT*0.010)));
+    nObj = normalize(d + wv*(0.013*fadeB));
+  } else {
+    vec3 m1 = vec3(gnoise(d*22.0+vec3(3.1,0.0,0.0)),
+                   gnoise(d*22.0+vec3(0.0,17.7,0.0)),
+                   gnoise(d*22.0+vec3(0.0,0.0,-9.4)));
+    vec3 m2 = fadeA*vec3(gnoise(d*46.0+vec3(41.0,0.0,0.0)),
+                         gnoise(d*46.0+vec3(0.0,-5.0,0.0)),
+                         gnoise(d*46.0+vec3(0.0,0.0,23.0)));
+    float amt = (0.30 + 0.55*steep)*graze;
+    nObj = normalize(d - (t1*g.x + t2*g.y)*shoreFade
+                       + (m1*0.038 + m2*0.016)*amt);
+  }
+
+  vec3 N = normalize(uRot*nObj);
+  vec3 L = uSun;
+
+  float ndlG = dot(Nw,L);          // true surface, no relief
+  float ndlB = dot(N,L);           // with relief
+
+  /* Relief works by tilting the normal, which is honest in open daylight
+     but wrong at the terminator: with the sun almost tangent, a few
+     degrees of tilt throws a whole region into shadow, and the coarse
+     grid beneath the relief shows through as blotches. So the terminator
+     is decided by geometry alone, and relief fades in as the sun climbs. */
+  float reliefMix = smoothstep(0.02, 0.34, ndlG);
+  float ndl  = mix(ndlG, ndlB, reliefMix);
+  float ndlS = ndlG;
+  float lam  = smoothstep(-0.14, 0.26, ndl);
+
+  vec3 sunHigh = vec3(1.00,0.975,0.940);
+  vec3 sunLow  = vec3(1.00,0.560,0.300);
+  vec3 sunCol  = mix(sunLow, sunHigh, smoothstep(0.0,0.40,ndlS));
+
+  vec3 col = albedo*sunCol*lam*1.14;
+
+  vec3 Hv = normalize(L+V);
+  vec3  Ns   = normalize(mix(Nw, N, reliefMix));
+  float spec = pow(max(dot(Ns,Hv),0.0), mix(24.0,120.0,gloss))*gloss*lam;
+  col += sunCol*spec*0.55;
+
+  float rim = pow(1.0-max(dot(Nw,V),0.0), 3.2);
+  col += vec3(0.34,0.54,0.95)*rim*lam*0.55;
+  col += vec3(1.00,0.45,0.20)*rim*(1.0-smoothstep(-0.10,0.30,ndlS))*smoothstep(-0.35,0.05,ndlS)*0.75;
+
+  /* skylight: scattered blue from the atmosphere itself, keyed to the
+     geometric normal so relief never punches a hole to pure black */
+  col += albedo*vec3(0.115,0.135,0.170)*smoothstep(-0.05,0.28,ndlS);
+  /* night side: starlight and a whisper of airglow */
+  col += albedo*vec3(0.028,0.040,0.072)*(1.0-lam);
+
+  col = col/(1.0+col*0.32);
+  o = vec4(col,1.0);
+}`);
+
+/* ---------- clouds ---------- */
+const cloudProg = prog(VS_SPH, `#version 300 es
+precision highp float;
+in vec3 vObj; in vec3 vWorld;
+out vec4 o;
+uniform sampler2D uData;
+uniform mat3 uRot;
+uniform vec3 uSun, uCam;
+uniform float uT, uDrift, uFade;
+${GLSL_NOISE}
+const vec2 RES = vec2(${GW}.0,${GH}.0);
+float moistAt(vec3 d){
+  vec2 uv = vec2(atan(d.z,d.x)*0.15915494+0.5, 0.5-asin(clamp(d.y,-1.0,1.0))*0.31830989);
+  vec2 st = uv*RES-0.5; vec2 i=floor(st), f=fract(st); f=f*f*(3.0-2.0*f);
+  int x0=int(mod(i.x,RES.x)), x1=int(mod(i.x+1.0,RES.x));
+  int y0=int(clamp(i.y,0.0,RES.y-1.0)), y1=int(clamp(i.y+1.0,0.0,RES.y-1.0));
+  float a=texelFetch(uData,ivec2(x0,y0),0).a, b=texelFetch(uData,ivec2(x1,y0),0).a;
+  float c=texelFetch(uData,ivec2(x0,y1),0).a, e=texelFetch(uData,ivec2(x1,y1),0).a;
+  return mix(mix(a,b,f.x), mix(c,e,f.x), f.y);
+}
+void main(){
+  vec3 d = normalize(vObj);
+  float ca=cos(uDrift), sa=sin(uDrift);
+  vec3 dq = vec3(d.x*ca+d.z*sa, d.y, -d.x*sa+d.z*ca);
+  float moist = moistAt(dq);
+
+  /* stretch the noise along latitude a little so weather forms bands */
+  vec3 q = vec3(dq.x, dq.y*1.9, dq.z)*4.0 + vec3(0.0, uT*0.0035, 0.0);
+  float n = fbm5(q)*0.5+0.5;
+  n = mix(n, fbm3(dq*11.0+uT*0.009)*0.5+0.5, 0.38);
+
+  float lat = asin(clamp(d.y,-1.0,1.0));
+  float bands = 0.55 + 0.45*cos(lat*6.0);
+  float cover = clamp((moist-0.22)*1.25*bands, 0.0, 1.0);
+  float thr = 0.635 - 0.235*cover;
+  float dens = smoothstep(thr, thr+0.115, n);
+  if(dens <= 0.004) discard;
+
+  vec3 Nw = normalize(uRot*d);
+  float ndl = dot(Nw, uSun);
+  float lam = smoothstep(-0.22, 0.22, ndl);
+  vec3 warm = vec3(1.00,0.62,0.40);
+  vec3 lit  = mix(warm, vec3(1.0,0.99,0.98), smoothstep(0.0,0.38,ndl));
+  vec3 col = lit*(0.05+1.10*lam) + vec3(0.020,0.028,0.050)*(1.0-lam);
+
+  /* A wide, gentle limb fade so the cloud shell never shows an edge, and a
+     single global fade so zooming right in dissolves the whole cloud deck
+     instead of cutting a circle through it. */
+  vec3 V = normalize(uCam-vWorld);
+  float edge = smoothstep(-0.10, 0.42, dot(Nw,V));
+  o = vec4(col, dens*0.86*edge*uFade);
+}`);
+
+/* ---------- atmosphere shell ---------- */
+const atmoProg = prog(VS_SPH, `#version 300 es
+precision highp float;
+in vec3 vObj; in vec3 vWorld;
+out vec4 o;
+uniform vec3 uSun, uCam; uniform mat3 uRot; uniform float uAtmR;
+void main(){
+  vec3 rd = normalize(vWorld-uCam);
+  /* shade the point where this ray grazes closest to the planet, not the
+     far wall of the shell: that is the air the light is actually passing
+     through, and it makes the terminator glow sit where it belongs */
+  vec3 Pc = uCam + rd*max(0.0, -dot(uCam, rd));
+  float b = length(Pc);
+  vec3 P = Pc/max(b,1e-4);
+
+  /* bright close to the surface, with a long soft halo beyond it */
+  float t = clamp((b-0.995)/(uAtmR-0.995), 0.0, 1.0);
+  float g = exp(-t*5.0)*(1.0-t);
+
+  /* A line of sight skimming the limb passes through a whole chord of air,
+     not one point. Find the sunniest air anywhere along that chord — that
+     is what decides how brightly this piece of limb glows. Without it the
+     ring vanishes exactly when the star is behind the planet, which is the
+     one time you most want to see it. */
+  float L    = sqrt(max(0.0, uAtmR*uAtmR - b*b));
+  float span = atan(L/max(b,1e-4));
+  vec2  su   = vec2(dot(uSun,P), dot(uSun,rd));
+  float m    = length(su);
+  float pOpt = atan(su.y, su.x);
+  float sunMax = m*cos(clamp(pOpt,-span,span) - pOpt);
+
+  float sunT = dot(P, uSun);            // the air right at the horizon
+  float lit  = smoothstep(-0.32, 0.02, sunMax);
+  vec3 day   = vec3(0.40,0.64,0.98);
+  vec3 dusk  = vec3(1.00,0.52,0.26);
+  vec3 col   = mix(dusk, day, smoothstep(-0.04, 0.20, sunT));
+  float i = g*lit*0.92;
+  o = vec4(col*i, 1.0);
+}`);
+
+/* ══════════════════════════════════════════════════════════════════════
+   4.  camera + interaction
+   ══════════════════════════════════════════════════════════════════════ */
+const FOVY = 42*Math.PI/180;
+/* frame the planet so it never touches the edge of the window, whatever
+   shape that window is */
+function fitDist(){
+  const asp = Math.max(0.2, canvas.width/Math.max(1,canvas.height));
+  const vHalf = FOVY*0.5;
+  const hHalf = Math.atan(Math.tan(vHalf)*asp);
+  return 1.0/Math.sin(Math.min(vHalf,hHalf)*0.82);
+}
+const CAM = {yaw:1.42, pitch:0.26, dist:3.4, tDist:3.4, zoom:1.0};
+let dragging=false, lastX=0, lastY=0, lastInteract=performance.now();
+let paused=false, speed=1, hudHidden=false;
+
+function touch(){ lastInteract=performance.now(); hud.classList.remove("faded"); }
+const hud=document.getElementById("hud");
+
+canvas.addEventListener("pointerdown",e=>{
+  dragging=true; lastX=e.clientX; lastY=e.clientY; canvas.classList.add("dragging");
+  canvas.setPointerCapture(e.pointerId); touch();
+});
+canvas.addEventListener("pointermove",e=>{
+  if(!dragging) return;
+  CAM.yaw   -= (e.clientX-lastX)*0.0055;
+  CAM.pitch += (e.clientY-lastY)*0.0055;
+  CAM.pitch = clamp(CAM.pitch,-1.35,1.35);
+  lastX=e.clientX; lastY=e.clientY; touch();
+});
+const endDrag=()=>{dragging=false;canvas.classList.remove("dragging");};
+canvas.addEventListener("pointerup",endDrag);
+canvas.addEventListener("pointercancel",endDrag);
+canvas.addEventListener("wheel",e=>{
+  e.preventDefault();
+  CAM.zoom = clamp(CAM.zoom*Math.exp(e.deltaY*0.0011), 0.44, 2.6);
+  CAM.tDist = fitDist()*CAM.zoom;
+  touch();
+},{passive:false});
+
+document.querySelectorAll(".sp").forEach(b=>{
+  b.addEventListener("click",()=>{
+    speed=parseFloat(b.dataset.s);
+    document.querySelectorAll(".sp").forEach(x=>x.classList.toggle("on",x===b));
+    touch();
+  });
+});
+addEventListener("keydown",e=>{
+  if(e.code==="Space"){ e.preventDefault(); paused=!paused; touch(); }
+  else if(e.key==="h"||e.key==="H"){ hudHidden=!hudHidden; hud.classList.toggle("hidden",hudHidden); }
+  else if(e.key==="1"||e.key==="2"||e.key==="3"){
+    const b=document.querySelectorAll(".sp")[+e.key-1]; if(b) b.click();
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+   5.  HUD
+   ══════════════════════════════════════════════════════════════════════ */
+const BARDEF=[
+  {k:"ocean", lab:"sea",    col:"#3b7fa8"},
+  {k:"forest",lab:"forest", col:"#3f7a3a"},
+  {k:"grass", lab:"grass",  col:"#8a9245"},
+  {k:"desert",lab:"desert", col:"#c1a06a"},
+  {k:"ice",   lab:"ice",    col:"#cfe0ea"}
+];
+const barsEl=document.getElementById("bars");
+BARDEF.forEach(b=>{
+  const d=document.createElement("div"); d.className="bar";
+  d.innerHTML='<div class="val">--</div><div class="track"><div class="fill" style="background:'+b.col+'"></div></div><div class="lab">'+b.lab+'</div>';
+  barsEl.appendChild(d); b.el=d;
+});
+/* Explicit units. "0:40" left it ambiguous whether that was 40 seconds or
+   40 minutes, which is exactly the confusion the line was meant to remove. */
+const dur = sec => {
+  if(sec < 90) return Math.round(sec)+" sec";
+  if(sec < 600) return (sec/60).toFixed(1).replace(/\.0$/,"")+" min";
+  return Math.round(sec/60)+" min";
+};
+function updateHUD(){
+  const t=Math.max(0, S.time-S.epoch0);
+  const hh=Math.floor(t/3600), mm=Math.floor(t/60)%60, ss=Math.floor(t)%60;
+  document.getElementById("clock").textContent =
+    hh+":"+String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
+
+  const yr=Math.floor(t/YEAR)+1;
+  const sl=S.solarLat;
+  const season = sl >  TILT*0.35 ? "northern summer"
+              : (sl < -TILT*0.35 ? "southern summer" : "equinox");
+  document.getElementById("clocklabel").textContent =
+    "watching · year "+yr+" · "+season+" · mean "+S.stats.temp.toFixed(1)+"°";
+
+  /* The three processes are compressed by deliberately different factors,
+     so there is no single geological clock to show. State the rates instead. */
+  document.getElementById("scales").textContent =
+    "a day is "+dur(DAY)
+    +"  ·  a year is "+dur(YEAR/speed)
+    +"  ·  continents look different after ~"+dur(2400/speed)
+    +(speed>1 ? "  (×"+speed+"; rotation not sped up)" : "");
+  BARDEF.forEach(b=>{
+    const v=(S.stats[b.k]||0);
+    b.el.querySelector(".fill").style.width=Math.min(100,v*100/0.7)+"%";
+    b.el.querySelector(".val").textContent=Math.round(v*100)+"%";
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   6.  boot: build a world that already has a history
+   ══════════════════════════════════════════════════════════════════════ */
+function seedWorld(){
+  const __t0=performance.now();
+  rebuildBand(0,GH,0);
+  computeProx();
+  for(let k=0;k<GN;k++){ F.moist[k]=0.5; F.veg[k]=0.25; F.snow[k]=0.0; }
+  let settled=0;
+  for(let n=0;n<440;n++){
+    S.time += 8;
+    if(n%14===0) rebuildBand(0,GH,S.time);
+    if(n%4===0)  computeProx();
+    stepFields(8);
+    if(n>110){
+      const st=S.stats;
+      const dOfL = st.desert/Math.max(1e-6, st.land);
+      const ok = Math.abs(st.ocean-TARGET.ocean) < 0.020 &&
+                 Math.abs(st.ice  -TARGET.ice)   < 0.030 &&
+                 Math.abs(dOfL-TARGET.desertOfLand) < 0.105;
+      if(ok){ if(++settled > 18) break; } else settled = 0;
+    }
+  }
+  S.epoch0 = S.time;
+  window.__bootMs = Math.round(performance.now()-__t0);
+  packTexture(); uploadData();
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   7.  frame loop
+   ══════════════════════════════════════════════════════════════════════ */
+const mVP=M4(), mProj=M4(), mView=M4(), mInvVP=M4();
+const rot3=new Float32Array(9);
+/* The planet's axis is fixed in space. Seasons come from the sun riding up
+   and down across the equator through the year — which gives the same
+   advancing and retreating snow line as an orbit, without swinging the
+   surface around or putting the world into phases. */
+const AZ0 = 0.34;
+const POLE = (()=>{ const ct=Math.cos(TILT), st=Math.sin(TILT),
+                    ca=Math.cos(AZ0), sa=Math.sin(AZ0);
+  return [-st*ca, ct, st*sa]; })();
+const SUNU = (()=>{ const v=[0.80,0.0,0.60];
+  const dp=v[0]*POLE[0]+v[1]*POLE[1]+v[2]*POLE[2];
+  const u=[v[0]-POLE[0]*dp, v[1]-POLE[1]*dp, v[2]-POLE[2]*dp];
+  const l=1/Math.hypot(u[0],u[1],u[2]); return [u[0]*l,u[1]*l,u[2]*l]; })();
+const SUN=[SUNU[0],SUNU[1],SUNU[2]];
+function updateSun(){
+  const c=Math.cos(S.solarLat), s=Math.sin(S.solarLat);
+  SUN[0]=SUNU[0]*c+POLE[0]*s;
+  SUN[1]=SUNU[1]*c+POLE[1]*s;
+  SUN[2]=SUNU[2]*c+POLE[2]*s;
+}
+
+const DAY = 150;                 // real seconds per rotation
+let spin=0, cloudDrift=0, frozen=false;
+let dpr = Math.min(devicePixelRatio||1, 2);
+let frameAcc=0, frameN=0;
+let simAccum=0, bandCursor=0, hudAcc=0, DEBUG=0;
+let last=performance.now();
+let started=false;
+
+function resize(){
+  const w=Math.max(1,Math.round(innerWidth*dpr)), h=Math.max(1,Math.round(innerHeight*dpr));
+  if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; }
+}
+addEventListener("resize",()=>{
+  dpr=Math.min(devicePixelRatio||1,2); resize();
+  CAM.tDist = fitDist()*CAM.zoom;
+});
+
+function frame(now){
+  requestAnimationFrame(frame);
+  let dt=(now-last)/1000; last=now;
+  if(dt>0.25) dt=0.25;
+
+  /* adaptive resolution */
+  frameAcc+=dt; frameN++;
+  if(frameN>=45){
+    const fps=frameN/frameAcc;
+    if(fps<38 && dpr>0.75){ dpr=Math.max(0.75,dpr*0.82); resize(); }
+    else if(fps>57 && dpr < Math.min(devicePixelRatio||1,2)-0.02){
+      dpr=Math.min(Math.min(devicePixelRatio||1,2), dpr*1.08); resize(); }
+    frameAcc=0; frameN=0;
+  }
+
+  if(!paused && !frozen){
+    spin += dt*(Math.PI*2/DAY);
+    cloudDrift += dt*(Math.PI*2/DAY)*0.06;
+  }
+  if(!paused) simAccum += dt;
+
+  /* ---- world update at ~12 Hz, terrain rebuilt one band at a time ---- */
+  if(simAccum >= 0.084 && !paused){
+    const step = Math.min(simAccum*speed, 45);
+    simAccum = 0;
+    S.time += step;
+    const rows = Math.ceil(GH/10);
+    rebuildBand(bandCursor, Math.min(GH,bandCursor+rows), S.time);
+    bandCursor = (bandCursor+rows) % GH;
+    if(bandCursor===0) computeProx();
+    stepFields(step);
+    packTexture(); uploadData();
+    hudAcc++; if(hudAcc>=4){ hudAcc=0; updateHUD(); }
+  }
+
+  if(!hudHidden && now-lastInteract>5000) hud.classList.add("faded");
+
+  updateSun();
+
+  /* ---- camera ---- */
+  CAM.dist += (CAM.tDist-CAM.dist)*Math.min(1,dt*3.0);
+  /* a very slow breath, so the framing never feels locked off */
+  const bob = 0.028*Math.sin(now*0.000012);
+  const py=CAM.pitch+bob;
+  const eye=[Math.cos(py)*Math.sin(CAM.yaw)*CAM.dist,
+             Math.sin(py)*CAM.dist,
+             Math.cos(py)*Math.cos(CAM.yaw)*CAM.dist];
+  const W=canvas.width, Hh=canvas.height;
+  perspective(mProj, FOVY, W/Hh, 0.35, 30);
+  lookAt(mView, eye,[0,0,0],[0,1,0]);
+  mul(mVP,mProj,mView); invert(mInvVP,mVP);
+
+  /* planet orientation: a fixed tilted axis, spinning */
+  const ca=Math.cos(AZ0), sa=Math.sin(AZ0), ct=Math.cos(TILT), st=Math.sin(TILT);
+  const cs=Math.cos(spin), ss=Math.sin(spin);
+  /* R = Ry(az) * Rz(tilt) * Ry(spin), column-major mat3 */
+  const A=[ca,0,-sa, 0,1,0, sa,0,ca];
+  const B=[ct,st,0, -st,ct,0, 0,0,1];
+  const C=[cs,0,-ss, 0,1,0, ss,0,cs];
+  const AB=m3(A,B), R=m3(AB,C);
+  rot3.set(R);
+
+  gl.viewport(0,0,W,Hh);
+  gl.clearColor(0,0,0,1);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+
+  /* background */
+  gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
+  gl.useProgram(bgProg);
+  gl.uniform2f(bgProg.u.uRes,W,Hh);
+  gl.uniformMatrix4fv(bgProg.u.uInvVP,false,mInvVP);
+  gl.uniform3fv(bgProg.u.uCam,eye);
+  gl.uniform1f(bgProg.u.uT, now*0.001);
+  gl.uniform3fv(bgProg.u.uSun, SUN);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,skyTex);
+  gl.uniform1i(bgProg.u.uSky,1);
+  gl.bindVertexArray(quadVAO); gl.drawArrays(gl.TRIANGLES,0,3);
+
+  /* planet */
+  gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+  gl.useProgram(planetProg);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,dataTex);
+  gl.uniform1i(planetProg.u.uData,0);
+  gl.uniformMatrix4fv(planetProg.u.uVP,false,mVP);
+  gl.uniformMatrix3fv(planetProg.u.uRot,false,rot3);
+  gl.uniform1f(planetProg.u.uScale,1.0);
+  gl.uniform3fv(planetProg.u.uSun,SUN);
+  gl.uniform3fv(planetProg.u.uCam,eye);
+  gl.uniform1f(planetProg.u.uSea,S.seaLevel);
+  gl.uniform1f(planetProg.u.uSolarLat,S.solarLat);
+  gl.uniform1f(planetProg.u.uGT,S.globalTemp);
+  gl.uniform1f(planetProg.u.uT, S.time);
+  gl.uniform1i(planetProg.u.uDebug, DEBUG);
+  gl.bindVertexArray(sphVAO);
+  gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
+
+  /* clouds */
+  gl.depthMask(false); gl.enable(gl.BLEND);
+  gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(cloudProg);
+  gl.uniform1i(cloudProg.u.uData,0);
+  gl.uniformMatrix4fv(cloudProg.u.uVP,false,mVP);
+  gl.uniformMatrix3fv(cloudProg.u.uRot,false,rot3);
+  gl.uniform1f(cloudProg.u.uScale,1.016);
+  gl.uniform3fv(cloudProg.u.uSun,SUN);
+  gl.uniform3fv(cloudProg.u.uCam,eye);
+  gl.uniform1f(cloudProg.u.uT,S.time);
+  gl.uniform1f(cloudProg.u.uDrift,cloudDrift);
+  gl.uniform1f(cloudProg.u.uFade, smoothstep(1.55,2.50,CAM.dist));
+  gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
+
+  /* atmosphere */
+  gl.blendFunc(gl.ONE,gl.ONE); gl.cullFace(gl.FRONT);
+  gl.useProgram(atmoProg);
+  gl.uniformMatrix4fv(atmoProg.u.uVP,false,mVP);
+  gl.uniformMatrix3fv(atmoProg.u.uRot,false,rot3);
+  gl.uniform1f(atmoProg.u.uScale,1.34);
+  gl.uniform3fv(atmoProg.u.uSun,SUN);
+  gl.uniform3fv(atmoProg.u.uCam,eye);
+  gl.uniform1f(atmoProg.u.uAtmR,1.34);
+  gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
+  gl.cullFace(gl.BACK);
+  gl.bindVertexArray(null);
+}
+
+function m3(a,b){
+  const o=new Float32Array(9);
+  for(let c=0;c<3;c++)for(let r=0;r<3;r++){
+    o[c*3+r]=a[0*3+r]*b[c*3+0]+a[1*3+r]*b[c*3+1]+a[2*3+r]*b[c*3+2];
+  }
+  return o;
+}
+
+/* ---- go ---- */
+resize();
+CAM.dist = CAM.tDist = fitDist();
+requestAnimationFrame(()=>{
+  seedWorld();
+  updateHUD();
+  started=true;
+  requestAnimationFrame(frame);
+  setTimeout(()=>document.getElementById("splash").classList.add("gone"),120);
+  setTimeout(()=>{ const s=document.getElementById("splash"); if(s) s.remove(); },2200);
+});
+
+/* small hook used for testing / scripted fast-forward */
+window.__world = {
+  S, F,
+  setSpeed(v){ speed=v; },
+  debug(v){ DEBUG=v|0; },
+  freeze(v){ spin=v; frozen=true; },
+  setView(y,pi,z){ CAM.yaw=y; CAM.pitch=pi; if(z){CAM.zoom=z;} CAM.tDist=fitDist()*CAM.zoom; },
+  sunDir(){ return [SUN[0],SUN[1],SUN[2]]; },
+  advance(seconds, chunks){
+    chunks = chunks || Math.max(1, Math.round(seconds/8));
+    const step = seconds/chunks;
+    for(let i=0;i<chunks;i++){
+      S.time += step;
+      rebuildBand(0,GH,S.time);
+      if(i%3===0) computeProx();
+      stepFields(step);
+    }
+    packTexture(); uploadData(); updateHUD();
+  }
+};
+
+})();
+</script>
+</body>
+</html>
