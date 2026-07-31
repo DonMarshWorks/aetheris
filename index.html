@@ -2710,10 +2710,21 @@ function plantStats(reset){
             matureShare:+((frontDraw-frontYoung)/Math.max(1,frontDraw)).toFixed(3),
             budShare:+(budOk/Math.max(1,budOk+budNo)).toFixed(3) },
     meanFit:+(dbgFit/Math.max(1,dbgFitOk)).toFixed(3),
+    /* meanFit above is a lifetime average — nothing resets these counters — so
+       a reading taken at the end of a long run is diluted by the whole run and
+       a late collapse barely moves it. The raw pair is exposed so two readings
+       can be differenced into the mean over the interval between them, which
+       is what a sweep comparing end-state against mid-state actually needs. */
+    fitSum:+dbgFit.toFixed(2), fitN:dbgFitOk,
     meanLifeSet:+(dbgLife/Math.max(1,dbgHits)).toFixed(0),
     hitFloor:dbgFloor, ageDeaths:dbgAgeDeaths,
     strategies:Array.from(CENSUS).filter(v=>v>0).length,
     topStrategy:+(Math.max(...CENSUS)/Math.max(1,censusN)).toFixed(3),
+    /* the census in full, not just its width and its peak. Two readings of it
+       difference into how much of the population changed strategy between
+       them, which is the only way to tell a world that is holding its
+       diversity from one that has simply stopped moving. */
+    census:Array.from(CENSUS),
     specialisation:+(spec/Math.max(1,liveN)).toFixed(3),
     niche:{sea:per[0], ice:per[1], desert:per[2], grass:per[3], forest:per[4]}
   };

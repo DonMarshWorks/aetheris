@@ -1,0 +1,12 @@
+{
+  "ticks": 12000,
+  "checkpoints": [6000, 12000],
+  "defaultEcorate": 16,
+  "seeds": [7, 31337],
+  "configs": [
+    { "tag": "default",   "params": {} },
+    { "tag": "default2",  "params": {} },
+    { "tag": "eco8",      "params": { "ecorate": 8 } },
+    { "tag": "eco32",     "params": { "ecorate": 32 } }
+  ]
+}

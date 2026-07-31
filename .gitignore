@@ -1,3 +1,5 @@
 node_modules/
 CLAUDE.local.md
 *.bak
+sweeps/*.jsonl
+sweeps/*.log
