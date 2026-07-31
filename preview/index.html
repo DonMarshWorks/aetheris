@@ -1,0 +1,3421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Aetheris — a world, slowly becoming</title>
+<meta name="description" content="A procedural planet that never stops changing. Coastlines drift, forests spread and give way to desert, ice advances and retreats — held in balance so no environment ever vanishes or takes over. Runs in the browser, no dependencies.">
+<meta name="author" content="Don Marsh">
+<meta name="theme-color" content="#000000">
+<link rel="canonical" href="https://donmarshworks.github.io/aetheris/">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Aetheris — a world, slowly becoming">
+<meta property="og:description" content="A procedural planet that never stops changing. Coastlines drift, forests give way to desert, ice advances and retreats — held in balance so no environment ever vanishes or takes over.">
+<meta property="og:url" content="https://donmarshworks.github.io/aetheris/">
+<meta property="og:image" content="https://donmarshworks.github.io/aetheris/preview.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Aetheris — a world, slowly becoming">
+<meta name="twitter:description" content="A procedural planet that never stops changing, held in climatic balance so no environment ever vanishes or takes over.">
+<meta name="twitter:image" content="https://donmarshworks.github.io/aetheris/preview.jpg">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cdefs%3E%3CradialGradient id=%27g%27 cx=%270.35%27 cy=%270.3%27%3E%3Cstop offset=%270%27 stop-color=%27%234da3d8%27/%3E%3Cstop offset=%270.55%27 stop-color=%27%231b4f7a%27/%3E%3Cstop offset=%271%27 stop-color=%27%2306121f%27/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2713%27 fill=%27url(%23g)%27/%3E%3Cpath d=%27M7 14c3-2 6 1 9-1s5 1 8-1%27 stroke=%27%235f9c4a%27 stroke-width=%272.4%27 fill=%27none%27 opacity=%27.85%27/%3E%3Cpath d=%27M9 21c3-1.5 7 .5 11-1.5%27 stroke=%27%23c2a870%27 stroke-width=%272%27 fill=%27none%27 opacity=%27.75%27/%3E%3C/svg%3E">
+<style>
+  :root{
+    --ink: rgba(236,242,255,.92);
+    --dim: rgba(233,240,255,.68);
+    --faint: rgba(233,240,255,.30);
+  }
+  *{box-sizing:border-box}
+  html,body{
+    margin:0;padding:0;height:100%;background:#000;
+    overflow:hidden;overscroll-behavior:none;
+    /* the browser must not claim pan, pinch or double-tap: the canvas
+       handles all of them, and letting the page zoom scaled the interface
+       along with the planet */
+    touch-action:none;-ms-touch-action:none;
+    -webkit-text-size-adjust:100%;text-size-adjust:100%;
+  }
+  body{
+    font-family: ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+    color:var(--ink); -webkit-font-smoothing:antialiased;
+    position:fixed;inset:0;width:100%;
+    -webkit-tap-highlight-color:transparent;
+  }
+  canvas#gl{
+    position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab;
+    touch-action:none;-webkit-user-select:none;user-select:none;
+  }
+  canvas#gl.dragging{cursor:grabbing}
+
+  #hud{position:fixed;inset:0;pointer-events:none;transition:opacity 1.2s ease;opacity:1;
+    text-shadow:0 1px 4px rgba(0,0,8,.85), 0 0 14px rgba(0,0,8,.55)}
+  #hud.hidden{opacity:0 !important}
+  /* a hidden interface must not keep swallowing clicks */
+  #hud.hidden, #hud.hidden *{pointer-events:none !important}
+
+  .corner{position:absolute;padding:22px 26px}
+  .bl{left:0;bottom:0}
+  .tl{left:0;top:0}
+  .tr{right:0;top:0;text-align:right}
+
+  .title{
+    font-size:11px;letter-spacing:.42em;text-transform:uppercase;
+    color:var(--ink);font-weight:500;
+  }
+  .sub{
+    margin-top:6px;font-size:11px;letter-spacing:.16em;color:var(--dim);
+    text-transform:uppercase;font-weight:400;
+  }
+
+  .clockrow{display:flex;align-items:center;gap:14px}
+  .clock{font-size:26px;font-weight:200;letter-spacing:.06em;font-variant-numeric:tabular-nums;line-height:1}
+  #playpause{
+    pointer-events:auto;flex:0 0 34px;width:34px;height:34px;padding:0;
+    display:flex;align-items:center;justify-content:center;
+    background:transparent;border:1px solid var(--faint);border-radius:50%;
+    color:var(--ink);cursor:pointer;transition:.25s;
+  }
+  #playpause:hover{border-color:rgba(233,240,255,.60);background:rgba(233,240,255,.10)}
+  #playpause svg{width:12px;height:12px;display:block}
+  .clocklabel{margin-top:8px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+
+  .bars{margin-top:16px;display:flex;gap:9px;align-items:flex-end}
+  .bar{width:46px}
+  .bar .track{height:2px;background:var(--faint);position:relative;overflow:hidden}
+  .bar .fill{position:absolute;left:0;top:0;bottom:0;transition:width .8s ease}
+  .bar .lab{margin-top:6px;font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);white-space:nowrap}
+  .bar .val{font-size:11px;color:var(--ink);font-variant-numeric:tabular-nums;margin-bottom:5px}
+  .scales{margin-top:15px;font-size:10px;letter-spacing:.13em;text-transform:uppercase;
+    color:rgba(233,240,255,.56);font-variant-numeric:tabular-nums;line-height:1.85}
+
+  .speeds{pointer-events:auto;display:flex;gap:2px;justify-content:flex-end}
+  .sp{
+    font:inherit;font-size:10.5px;letter-spacing:.1em;color:var(--dim);
+    background:transparent;border:1px solid var(--faint);border-left-width:0;
+    padding:6px 11px;cursor:pointer;transition:.25s;
+  }
+  .sp:first-child{border-left-width:1px}
+  .sp:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
+  .sp.on{color:#0a0d14;background:rgba(233,240,255,.86);border-color:rgba(233,240,255,.86)}
+
+  #splash{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;gap:14px;background:#000;z-index:10;transition:opacity 1.6s ease;
+  }
+  #splash.gone{opacity:0;pointer-events:none}
+  #splash .t{font-size:11px;letter-spacing:.45em;text-transform:uppercase;color:var(--dim)}
+  #splash .d{width:120px;height:1px;background:var(--faint);position:relative;overflow:hidden}
+  #splash .d::after{content:"";position:absolute;inset:0;background:var(--ink);
+    animation:sweep 1.4s ease-in-out infinite}
+  @keyframes sweep{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+
+  @media (max-width: 620px), (max-height: 520px){
+    .corner{padding:15px 17px}
+    .title{font-size:10px;letter-spacing:.32em}
+    .sub{font-size:9.5px;margin-top:5px}
+    .clock{font-size:21px}
+    .clockrow{gap:11px}
+    #playpause{flex:0 0 30px;width:30px;height:30px}
+    .clocklabel{font-size:9.5px;letter-spacing:.13em;margin-top:6px}
+    .bars{gap:6px;margin-top:12px}
+    .bar{width:44px}
+    .bar .lab{font-size:8.5px;letter-spacing:.05em}
+    .bar .val{font-size:10px}
+    .scales{font-size:9.5px;letter-spacing:.09em;margin-top:12px;line-height:1.75}
+    .sp{padding:7px 12px;font-size:11px}
+  }
+
+  #fail{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    text-align:center;padding:40px;font-size:14px;line-height:1.7;color:var(--dim);z-index:20}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="hud">
+  <div class="corner tl">
+    <div class="title">Aetheris</div>
+    <div class="sub">world simulation</div>
+  </div>
+
+  <div class="corner tr">
+    <div class="speeds">
+      <button class="sp on" data-s="1">&times;1</button>
+      <button class="sp" data-s="20">&times;20</button>
+      <button class="sp" data-s="100">&times;100</button>
+    </div>
+  </div>
+
+  <div class="corner bl">
+    <div class="clockrow">
+      <button id="playpause" type="button" aria-label="pause" title="pause"></button>
+      <div class="clock" id="clock">0:00:00</div>
+    </div>
+    <div class="clocklabel" id="clocklabel">elapsed</div>
+    <div class="bars" id="bars"></div>
+    <div class="scales" id="scales">
+      <div id="sc1"></div><div id="sc2"></div><div id="sc3"></div>
+    </div>
+  </div>
+</div>
+
+<div id="splash"><div class="t">forming world</div><div class="d"></div></div>
+<div id="fail">This world needs WebGL2, which this browser isn&rsquo;t providing.<br>Try a recent Chrome, Edge, Firefox or Safari with hardware acceleration enabled.</div>
+
+<script>
+"use strict";
+(function(){
+
+/* ══════════════════════════════════════════════════════════════════════
+   0.  small math library
+   ══════════════════════════════════════════════════════════════════════ */
+const M4 = () => new Float32Array(16);
+function perspective(o,fovy,asp,n,f){
+  const t=1/Math.tan(fovy/2), nf=1/(n-f);
+  o[0]=t/asp;o[1]=0;o[2]=0;o[3]=0;
+  o[4]=0;o[5]=t;o[6]=0;o[7]=0;
+  o[8]=0;o[9]=0;o[10]=(f+n)*nf;o[11]=-1;
+  o[12]=0;o[13]=0;o[14]=2*f*n*nf;o[15]=0;return o;
+}
+function lookAt(o,e,c,u){
+  let zx=e[0]-c[0],zy=e[1]-c[1],zz=e[2]-c[2];
+  let l=1/Math.hypot(zx,zy,zz); zx*=l;zy*=l;zz*=l;
+  let xx=u[1]*zz-u[2]*zy, xy=u[2]*zx-u[0]*zz, xz=u[0]*zy-u[1]*zx;
+  l=Math.hypot(xx,xy,xz); if(l===0){xx=1;xy=0;xz=0;} else {l=1/l;xx*=l;xy*=l;xz*=l;}
+  const yx=zy*xz-zz*xy, yy=zz*xx-zx*xz, yz=zx*xy-zy*xx;
+  o[0]=xx;o[1]=yx;o[2]=zx;o[3]=0;
+  o[4]=xy;o[5]=yy;o[6]=zy;o[7]=0;
+  o[8]=xz;o[9]=yz;o[10]=zz;o[11]=0;
+  o[12]=-(xx*e[0]+xy*e[1]+xz*e[2]);
+  o[13]=-(yx*e[0]+yy*e[1]+yz*e[2]);
+  o[14]=-(zx*e[0]+zy*e[1]+zz*e[2]);
+  o[15]=1;return o;
+}
+function mul(o,a,b){
+  for(let c=0;c<4;c++){
+    const b0=b[c*4],b1=b[c*4+1],b2=b[c*4+2],b3=b[c*4+3];
+    o[c*4  ]=a[0]*b0+a[4]*b1+a[8]*b2+a[12]*b3;
+    o[c*4+1]=a[1]*b0+a[5]*b1+a[9]*b2+a[13]*b3;
+    o[c*4+2]=a[2]*b0+a[6]*b1+a[10]*b2+a[14]*b3;
+    o[c*4+3]=a[3]*b0+a[7]*b1+a[11]*b2+a[15]*b3;
+  } return o;
+}
+function invert(o,m){
+  const a00=m[0],a01=m[1],a02=m[2],a03=m[3],a10=m[4],a11=m[5],a12=m[6],a13=m[7],
+        a20=m[8],a21=m[9],a22=m[10],a23=m[11],a30=m[12],a31=m[13],a32=m[14],a33=m[15];
+  const b00=a00*a11-a01*a10,b01=a00*a12-a02*a10,b02=a00*a13-a03*a10,
+        b03=a01*a12-a02*a11,b04=a01*a13-a03*a11,b05=a02*a13-a03*a12,
+        b06=a20*a31-a21*a30,b07=a20*a32-a22*a30,b08=a20*a33-a23*a30,
+        b09=a21*a32-a22*a31,b10=a21*a33-a23*a31,b11=a22*a33-a23*a32;
+  let d=b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06;
+  if(!d) return o; d=1/d;
+  o[0]=(a11*b11-a12*b10+a13*b09)*d; o[1]=(a02*b10-a01*b11-a03*b09)*d;
+  o[2]=(a31*b05-a32*b04+a33*b03)*d; o[3]=(a22*b04-a21*b05-a23*b03)*d;
+  o[4]=(a12*b08-a10*b11-a13*b07)*d; o[5]=(a00*b11-a02*b08+a03*b07)*d;
+  o[6]=(a32*b02-a30*b05-a33*b01)*d; o[7]=(a20*b05-a22*b02+a23*b01)*d;
+  o[8]=(a10*b10-a11*b08+a13*b06)*d; o[9]=(a01*b08-a00*b10-a03*b06)*d;
+  o[10]=(a30*b04-a31*b02+a33*b00)*d;o[11]=(a21*b02-a20*b04-a23*b00)*d;
+  o[12]=(a11*b07-a10*b09-a12*b06)*d;o[13]=(a00*b09-a01*b07+a02*b06)*d;
+  o[14]=(a31*b01-a30*b03-a32*b00)*d;o[15]=(a20*b03-a21*b01+a22*b00)*d;
+  return o;
+}
+/* rotation matrix (3x3, column-major in a 9-array) about unit axis */
+function axisRot(out,ax,ay,az,ang){
+  const c=Math.cos(ang), s=Math.sin(ang), t=1-c;
+  out[0]=t*ax*ax+c;    out[1]=t*ax*ay+s*az; out[2]=t*ax*az-s*ay;
+  out[3]=t*ax*ay-s*az; out[4]=t*ay*ay+c;    out[5]=t*ay*az+s*ax;
+  out[6]=t*ax*az+s*ay; out[7]=t*ay*az-s*ax; out[8]=t*az*az+c;
+  return out;
+}
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const smoothstep=(e0,e1,x)=>{const t=clamp((x-e0)/(e1-e0),0,1);return t*t*(3-2*t);};
+
+/* ══════════════════════════════════════════════════════════════════════
+   1.  CPU noise  (improved Perlin, 3D)
+   ══════════════════════════════════════════════════════════════════════ */
+/* every visit is a different world; append #seed=12345 to the url to
+   return to a particular one */
+const SEED = (()=>{
+  const m = /seed=(\d+)/.exec(location.hash||"");
+  return m ? ((+m[1])>>>0) : ((Math.random()*4294967296)>>>0);
+})();
+
+/* Every tunable in one place, and every one of them overridable from the URL:
+   #seed=7&step=0.009&spread=1.4 is an experiment with no edit, and any world
+   worth keeping is a link. A separate config file cannot ship — verify.js
+   fails the build on a fetched script and it would break file:// — so this
+   block is the single place instead. See docs/plants-design.md. */
+const PARAMS = {
+  plants:  1,       // 0 turns the whole thing off
+  seeds:   40,      // starting nodes
+  budget:  130000,  // hard cap on live nodes
+  grow:    900,     // bud attempts per simulation tick
+  step:    0.0055,  // base angular distance from a node to its child (radians),
+                    // scaled per node by the spread its formula returns
+  collide: 0.72,    // refusal radius, as a fraction of a *base* step. Geometry,
+                    // not taste: it decides how many children fit around a node
+                    // and how short a step may get before its own siblings
+                    // start colliding. See SLOTS.
+  splo:    0.75,    // the range the spread output is squashed into. The floor
+  sphi:    1.75,    // must stay above `collide` or a child lands on its parent;
+                    // just above it is where dense lineages start losing their
+                    // outer slots, which is the self-regulation we want visible.
+  glen:    24,      // instructions per genome. Fixed for a whole run
+  konst:   4,       // evolved constants per genome
+  clamp:   8,       // the magnitude an instruction result is held to. This is
+                    // not a safety rail, it is the most important dial in the
+                    // genome: the outputs are read through tanh(x/4), so if a
+                    // program can reach a thousand every output is a step
+                    // function of one sign bit and the formula is a constant
+                    // wearing a program's clothes. Measured: at 1e6 three seeds
+                    // in four collapsed to a single niche.
+  pmut:    2.00,    // expected point mutations on the program at a bifurcation
+  tries:   1,       // refusals before a node is judged boxed in and leaves the
+                    // frontier. 0 keeps every unfilled node on it for ever,
+                    // which is what the formula design called for and what
+                    // measurement overturned: see the comment on `admit`.
+                    // One is not a token value, it is the measured optimum —
+                    // niche evenness falls monotonically as it rises.
+  readmit: 1,       // 1 = a death offers its neighbours their place back. Worth
+                    // it: evenness 0.82 against 0.72, for a fifth more wasted
+                    // draws. Gap dynamics, and the best diversity measured.
+  jitter:  0.17,    // radians of slop on a slot angle — about ten degrees.
+                    // Lattices are not the problem and are not a bug: exact
+                    // slot angles inherited through an exact heading close into
+                    // one, a three-child plant *should* make a square lattice
+                    // and a five-child one a hexagonal, and those are efficient
+                    // packings. What is wrong is a *perfectly* closed lattice,
+                    // because then every lineage packs identically and there is
+                    // nothing to choose between them. Ten degrees breaks the
+                    // degeneracy and keeps the packing: measured, niche
+                    // evenness 0.83 against 0.71 at zero — and it falls away
+                    // again by twenty degrees, where the packing is being lost.
+  vote:    3,       // frontier draws per bud; the highest vigour takes it
+  vmem:    0.05,    // how fast a body's vigour level is tracked, so that vigour
+                    // ranks nodes inside a body and not bodies against each other
+  fat:     0.80,    // painted footprint radius, per step actually taken
+  soft:    0.50,    // how soft the footprint edge is, 0..1
+  alpha:   0.80,    // how much of the ground a mature node hides
+  mature:  90,      // reference ticks from bud to maturity, scaled by pace
+  life:    1500,    // ticks per unit of fit; a pure specialist at home gets 5x
+  viable:  0.40,    // fit below which a node will not even be attempted
+  kin:     0.00,    // how much a crowd of near-relatives shortens a life.
+                    // Off by default: measured to do nothing for specialisation
+                    // (it acts on which strategy is common, not how committed
+                    // anyone is) and each evaluation scans 343 spatial bins.
+  kinr:    3.0,     // how far that crowd is counted, in steps
+  kind:    1.30,    // affinity distance within which a neighbour counts as kin
+  rare:    0.00,    // how much being a COMMON strategy globally shortens a life
+  mut:     1.00,    // strength of the affinity mutation minted at a bifurcation
+  minfrag: 5,       // a severed piece smaller than this is not viable
+  hostile: 150,     // ticks a node lasts on ground that does not suit it at all
+  sweep:   40,      // ticks between one pass of connected-component labelling
+  perbody: 0,       // 1 = at most one bud per body per turn, 0 = by frontier
+  spore:   0.030,   // chance a bud is thrown clear instead, founding a body.
+                    // Measured: the only thing that slows specialisation eroding
+                    // under a moving climate, because a specialist cannot walk
+                    // to ground that relocated but can be thrown to it. Higher
+                    // is worse -- at 0.12 spores land faster than they settle.
+  settle:  400,     // ticks a young body is spared the fragment cull
+  rot:     900,     // ticks dead wood holds before the connection rots through
+};
+(function(){
+  const h = location.hash || "";
+  for(const k in PARAMS){
+    const m = new RegExp("[#&]"+k+"=(-?[0-9.]+)").exec(h);
+    if(m) PARAMS[k] = parseFloat(m[1]);
+  }
+})();
+
+const PERM = new Uint16Array(512);
+(function(){
+  const p=new Uint16Array(256); for(let i=0;i<256;i++)p[i]=i;
+  let s=(SEED ^ 0x9e3779b9)>>>0 || 1;
+  const rnd=()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};
+  for(let i=255;i>0;i--){const j=(rnd()*(i+1))|0;const t=p[i];p[i]=p[j];p[j]=t;}
+  for(let i=0;i<512;i++)PERM[i]=p[i&255];
+})();
+const fade=t=>t*t*t*(t*(t*6-15)+10);
+function grad(h,x,y,z){
+  switch(h&15){
+    case 0:return x+y; case 1:return -x+y; case 2:return x-y; case 3:return -x-y;
+    case 4:return x+z; case 5:return -x+z; case 6:return x-z; case 7:return -x-z;
+    case 8:return y+z; case 9:return -y+z; case 10:return y-z; case 11:return -y-z;
+    case 12:return y+x; case 13:return -y+z; case 14:return y-x; default:return -y-z;
+  }
+}
+function noise3(x,y,z){
+  const fx=Math.floor(x),fy=Math.floor(y),fz=Math.floor(z);
+  const X=fx&255,Y=fy&255,Z=fz&255;
+  x-=fx;y-=fy;z-=fz;
+  const u=fade(x),v=fade(y),w=fade(z);
+  const A=PERM[X]+Y, AA=PERM[A]+Z, AB=PERM[A+1]+Z;
+  const B=PERM[X+1]+Y, BA=PERM[B]+Z, BB=PERM[B+1]+Z;
+  const l=(a,b,t)=>a+t*(b-a);
+  return l(l(l(grad(PERM[AA],x,y,z),      grad(PERM[BA],x-1,y,z),u),
+             l(grad(PERM[AB],x,y-1,z),    grad(PERM[BB],x-1,y-1,z),u),v),
+           l(l(grad(PERM[AA+1],x,y,z-1),  grad(PERM[BA+1],x-1,y,z-1),u),
+             l(grad(PERM[AB+1],x,y-1,z-1),grad(PERM[BB+1],x-1,y-1,z-1),u),v),w);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   2.  the world  — simulation on an equirectangular grid
+   ══════════════════════════════════════════════════════════════════════ */
+const GW=320, GH=160, GN=GW*GH;
+
+const F = {
+  h:    new Float32Array(GN),   // elevation, roughly -1 .. 1
+  veg:  new Float32Array(GN),   // 0..1
+  moist:new Float32Array(GN),   // 0..1
+  snow: new Float32Array(GN),   // 0..1
+  temp: new Float32Array(GN),   // celsius
+  tn:   new Float32Array(GN),   // drifting temperature anomaly
+  mn:   new Float32Array(GN),   // drifting moisture anomaly
+  prox: new Float32Array(GN),   // blurred "water nearby"
+  sold: new Float32Array(GN),   // previous snow, for the ice feedback
+  tmp:  new Float32Array(GN),
+  tmp2: new Float32Array(GN)
+};
+const DIR = new Float32Array(GN*3);
+const LAT = new Float32Array(GH);
+const COSLAT = new Float32Array(GH);
+let areaTotal = 0;
+for(let j=0;j<GH;j++){
+  const lat = Math.PI*0.5 - (j+0.5)/GH*Math.PI;
+  LAT[j]=lat; COSLAT[j]=Math.cos(lat);
+  for(let i=0;i<GW;i++){
+    const lon = (i+0.5)/GW*Math.PI*2 - Math.PI;
+    const k=(j*GW+i)*3;
+    DIR[k  ]=Math.cos(lat)*Math.cos(lon);
+    DIR[k+1]=Math.sin(lat);
+    DIR[k+2]=Math.cos(lat)*Math.sin(lon);
+  }
+  areaTotal += COSLAT[j]*GW;
+}
+
+/* --- terrain octaves: each one slowly rotates on its own axis, and slowly
+       breathes in amplitude.  that is what makes coastlines migrate. ----- */
+const OCT = 6;
+const oFreq = [1.25, 2.35, 4.4, 8.3, 15.5, 29.0];
+const oAmp  = [0.60, 0.30, 0.16, 0.085, 0.045, 0.024];
+const oAxis = [], oSpin = [], oBreathA = [], oBreathW = [], oBreathP = [];
+(function(){
+  let s=(SEED*2654435761)>>>0 || 7;
+  const rnd=()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};
+  for(let o=0;o<OCT;o++){
+    let x=rnd()*2-1,y=rnd()*2-1,z=rnd()*2-1;
+    const l=1/Math.hypot(x,y,z); oAxis.push([x*l,y*l,z*l]);
+    oSpin.push(4.6e-5 * (1 + o*0.62) * (rnd()<0.5?-1:1));
+    /* low octaves breathe gently (they set the land/sea balance);
+       high octaves breathe hard (they reshape coasts) */
+    oBreathA.push(0.15 + 0.12*o);
+    oBreathW.push(2*Math.PI/(3000 + rnd()*7000));
+    oBreathP.push(rnd()*Math.PI*2);
+  }
+})();
+const ridgeAxis=[0.31,0.82,-0.48], ridgeSpin=2.4e-5;
+const tnAxis=[0.77,-0.31,0.56], tnSpin=5.5e-5;
+const mnAxis=[-0.42,0.61,0.67], mnSpin=6.5e-5;
+
+const S = {
+  time: 0,            // simulated seconds
+  epoch0: 0,          // clock zero, set once the world has settled
+  seaLevel: 0.02,
+  globalTemp: 3.4,
+  globalHum: 0.27,
+  solarLat: 0.0,
+  stats: {ocean:0.6, ice:0.08, desert:0.2, forest:0.2, grass:0.1, temp:14}
+};
+const TARGET = {ocean:0.635, ice:0.090, desertOfLand:0.225};
+const YEAR = 900;           // simulated seconds per orbit
+const TILT = 24*Math.PI/180;
+
+/* Which way the axis leans. The daily spin turns about this, so the axis
+   itself is fixed in space — which is why the ring, which shares the plane,
+   can be built once and never touched again. */
+const AZ0 = 0.34;
+const POLE = (()=>{ const ct=Math.cos(TILT), st=Math.sin(TILT),
+                    ca=Math.cos(AZ0), sa=Math.sin(AZ0);
+  return [-st*ca, ct, st*sa]; })();
+
+const rotsPerOct = [];
+for(let o=0;o<OCT;o++) rotsPerOct.push(new Float32Array(9));
+const ridgeM = new Float32Array(9);
+const tnM = new Float32Array(9);
+const mnM = new Float32Array(9);
+
+/* rebuild a horizontal band of the terrain / anomaly fields */
+function rebuildBand(j0,j1,t){
+  for(let o=0;o<OCT;o++)
+    axisRot(rotsPerOct[o], oAxis[o][0],oAxis[o][1],oAxis[o][2], t*oSpin[o]);
+  axisRot(ridgeM, ridgeAxis[0],ridgeAxis[1],ridgeAxis[2], t*ridgeSpin);
+  axisRot(tnM, tnAxis[0],tnAxis[1],tnAxis[2], t*tnSpin);
+  axisRot(mnM, mnAxis[0],mnAxis[1],mnAxis[2], t*mnSpin);
+
+  const amp=[];
+  for(let o=0;o<OCT;o++)
+    amp.push(oAmp[o]*(1 + oBreathA[o]*Math.sin(t*oBreathW[o]+oBreathP[o])));
+
+  for(let j=j0;j<j1;j++){
+    for(let i=0;i<GW;i++){
+      const k=j*GW+i, k3=k*3;
+      const dx=DIR[k3], dy=DIR[k3+1], dz=DIR[k3+2];
+      let h=0;
+      for(let o=0;o<OCT;o++){
+        const R=rotsPerOct[o], f=oFreq[o];
+        const px=(R[0]*dx+R[3]*dy+R[6]*dz)*f;
+        const py=(R[1]*dx+R[4]*dy+R[7]*dz)*f;
+        const pz=(R[2]*dx+R[5]*dy+R[8]*dz)*f;
+        h += amp[o]*noise3(px+o*17.3, py-o*8.1, pz+o*31.7);
+      }
+      /* ridged mountain belts, only where there is already land */
+      const rx=(ridgeM[0]*dx+ridgeM[3]*dy+ridgeM[6]*dz)*3.3;
+      const ry=(ridgeM[1]*dx+ridgeM[4]*dy+ridgeM[7]*dz)*3.3;
+      const rz=(ridgeM[2]*dx+ridgeM[5]*dy+ridgeM[8]*dz)*3.3;
+      let r = 1 - Math.abs(noise3(rx+5.5, ry+2.2, rz-9.9))*1.9;
+      r = r>0 ? r*r : 0;
+      h += 0.30*r*smoothstep(-0.02, 0.30, h);
+
+      F.h[k]=h;
+      {
+        const ax=tnM[0]*dx+tnM[3]*dy+tnM[6]*dz;
+        const ay=tnM[1]*dx+tnM[4]*dy+tnM[7]*dz;
+        const az=tnM[2]*dx+tnM[5]*dy+tnM[8]*dz;
+        F.tn[k]= 0.62*noise3(ax*2.1+40.0, ay*2.1-13.0, az*2.1+7.0)
+               + 0.26*noise3(ax*5.9-11.0, ay*5.9+27.0, az*5.9-4.0)
+               + 0.12*noise3(ax*13.7+3.0, ay*13.7+9.0, az*13.7+51.0);
+      }
+      F.mn[k]=noise3((mnM[0]*dx+mnM[3]*dy+mnM[6]*dz)*2.6-22.0,
+                     (mnM[1]*dx+mnM[4]*dy+mnM[7]*dz)*2.6+61.0,
+                     (mnM[2]*dx+mnM[5]*dy+mnM[8]*dz)*2.6+3.0);
+    }
+  }
+}
+
+/* separable blur of the water mask -> "how oceanic is this neighbourhood" */
+function computeProx(){
+  const a=F.tmp, b=F.tmp2, sea=S.seaLevel;
+  for(let k=0;k<GN;k++) a[k] = F.h[k]<sea ? 1 : 0;
+  const R=3;
+  for(let pass=0;pass<3;pass++){
+    // horizontal (wrap)
+    for(let j=0;j<GH;j++){
+      const row=j*GW;
+      for(let i=0;i<GW;i++){
+        let s=0;
+        for(let d=-R;d<=R;d++) s+=a[row+((i+d+GW)%GW)];
+        b[row+i]=s/(2*R+1);
+      }
+    }
+    // vertical (clamp)
+    for(let j=0;j<GH;j++){
+      const row=j*GW;
+      for(let i=0;i<GW;i++){
+        let s=0;
+        for(let d=-R;d<=R;d++){
+          const jj=clamp(j+d,0,GH-1);
+          s+=b[jj*GW+i];
+        }
+        a[row+i]=s/(2*R+1);
+      }
+    }
+  }
+  F.prox.set(a);
+}
+
+let ctrlAccum = 0;
+function stepFields(dt){
+  const sea=S.seaLevel;
+  S.solarLat = TILT*Math.sin(S.time/YEAR*Math.PI*2);
+
+  const kMoist = Math.min(1, dt*0.030);
+  const kSnow  = Math.min(1, dt*0.022);
+  const GROW=0.0060, DECAY=0.0064, DIFF=0.0045, SDIFF=0.0075;
+
+  const veg=F.veg, moist=F.moist, snow=F.snow, temp=F.temp, h=F.h, prox=F.prox;
+  const vOld=F.tmp; vOld.set(veg);
+  const sold=F.sold; sold.set(snow);
+
+  for(let j=0;j<GH;j++){
+    const lat=LAT[j], row=j*GW;
+    const mLat = clamp(0.5+0.5*Math.cos(lat*6.0), 0, 1);
+    /* these depend only on latitude, so compute them once per row */
+    let cL=Math.cos(lat-S.solarLat);      if(cL<0) cL=0;
+    let cW=Math.cos(lat-S.solarLat*0.35); if(cW<0) cW=0;
+    const cpL=Math.pow(cL,0.85), cpW=Math.pow(cW,0.85);
+    const TbL=-30+62*cpL,        TbW=-30+62*cpW;
+    const ampL=0.45+1.25*(1-cpL),ampW=0.45+1.25*(1-cpW);
+    for(let i=0;i<GW;i++){
+      const k=row+i;
+      const hk=h[k], water = hk<sea;
+      const land = hk-sea;
+      const im=(i-1+GW)%GW, ip=(i+1)%GW;
+      const jm=j>0?j-1:j, jp=j<GH-1?j+1:j;
+      const n0=row+im, n1=row+ip, n2=jm*GW+i, n3=jp*GW+i;
+
+      /* ---- temperature (global warming/cooling is polar-amplified,
+             so the controller can move the ice line without frying
+             the tropics) ---- */
+      let T = water ? TbW : TbL - land*52;
+      T += F.tn[k]*7.0 + S.globalTemp*(water ? ampW : ampL);
+      /* ice-albedo feedback: white ground keeps itself cold. this is what
+         makes ice sheets ragged and sticky instead of a latitude circle */
+      const sPrev = sold[k];
+      T -= sPrev*4.2;
+      temp[k]=T;
+
+      /* ---- moisture ---- */
+      let mt = mLat*(0.30+0.78*prox[k]) + 0.20*F.mn[k] + S.globalHum;
+      mt *= 0.32 + 0.68*smoothstep(-30,-2,T);
+      if(water) mt = Math.max(mt, 0.82);
+      mt = clamp(mt,0,1);
+      moist[k] += (mt-moist[k])*kMoist;
+
+      /* ---- snow & ice ---- */
+      let st = water ? smoothstep(-1.0,-8.0,T) : smoothstep(3.0,-6.0,T);
+      /* snow has to fall before it can lie: cold *dry* ground stays bare */
+      if(!water) st *= 0.40 + 0.60*smoothstep(0.14,0.50,moist[k]);
+      let sv = sPrev + (st-sPrev)*kSnow;
+      /* ice creeps into its neighbours, so sheets grow tongues and outliers */
+      sv += SDIFF*dt*((sold[n0]+sold[n1]+sold[n2]+sold[n3])*0.25 - sPrev);
+      snow[k] = sv<0 ? 0 : (sv>1 ? 1 : sv);
+
+      /* ---- vegetation ---- */
+      if(water){ veg[k] += (0-veg[k])*Math.min(1,dt*0.05); continue; }
+      const wf = smoothstep(0.24,0.56,moist[k]);
+      const tf = smoothstep(-9,3,T)*(1-smoothstep(33,45,T));
+      const s = wf*tf*(1-snow[k]*0.55);
+      let v = vOld[k];
+      v += dt*(GROW*s*(1-v) - DECAY*(1-s)*v - 0.0004*v);
+
+      /* diffusion from land neighbours -> colonisation fronts */
+      let sum=0,n=0;
+      if(h[n0]>=sea){sum+=vOld[n0];n++;}
+      if(h[n1]>=sea){sum+=vOld[n1];n++;}
+      if(h[n2]>=sea){sum+=vOld[n2];n++;}
+      if(h[n3]>=sea){sum+=vOld[n3];n++;}
+      if(n) v += DIFF*dt*(sum/n - v);
+      veg[k]=clamp(v,0,1);
+    }
+  }
+
+  /* ---------- homeostasis: keep every environment in the picture -------- */
+  ctrlAccum += dt;
+  if(ctrlAccum >= 2.5){
+    const d=ctrlAccum; ctrlAccum=0;
+    let aOcean=0,aIce=0,aDesert=0,aForest=0,aGrass=0,aTundra=0,tSum=0,aLand=0;
+    for(let j=0;j<GH;j++){
+      const w=COSLAT[j], row=j*GW;
+      for(let i=0;i<GW;i++){
+        const k=row+i;
+        tSum += temp[k]*w;
+        if(h[k]<S.seaLevel){ aOcean+=w; if(snow[k]>0.45) aIce+=w; }
+        else{
+          aLand+=w;
+          if(snow[k]>0.45) aIce+=w;
+          else if(veg[k]<0.18) { if(temp[k]>2) aDesert+=w; else aTundra+=w; }
+          else if(veg[k]<0.55) aGrass+=w;
+          else aForest+=w;
+        }
+      }
+    }
+    const ocean=aOcean/areaTotal, ice=aIce/areaTotal, land=Math.max(1e-6,aLand/areaTotal);
+    const desert=aDesert/areaTotal;
+    S.stats={ocean, ice, desert, tundra:aTundra/areaTotal,
+             forest:aForest/areaTotal, grass:aGrass/areaTotal,
+             land, temp:tSum/areaTotal};
+
+    /* deserts are steered as a share of *land*, so the target does not
+       drift when sea level moves the coastline */
+    const desertOfLand = desert/land;
+
+    /* corrections are rate-limited so the loop stays stable no matter how
+       large a time step the time-lapse hands it */
+    const dSea = clamp((TARGET.ocean - ocean)*0.055*d, -0.020, 0.020);
+    const dT   = clamp((ice - TARGET.ice)*0.55*d,      -0.30,  0.30);
+    const dH   = clamp((desertOfLand - TARGET.desertOfLand)*0.040*d, -0.012, 0.012);
+    S.seaLevel   = clamp(S.seaLevel   + dSea, -0.50, 0.50);
+    S.globalTemp = clamp(S.globalTemp + dT,   -14, 14);
+    S.globalHum  = clamp(S.globalHum  + dH,   -0.56, 0.52);
+  }
+}
+
+/* pack the fields into the float texture the GPU reads */
+const TEXDATA = new Float32Array(GN*4);
+function packTexture(){
+  for(let k=0,p=0;k<GN;k++,p+=4){
+    TEXDATA[p  ]=F.h[k];
+    TEXDATA[p+1]=F.veg[k];
+    TEXDATA[p+2]=F.snow[k];
+    TEXDATA[p+3]=F.moist[k];
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   2b. plants — stage 0
+   ══════════════════════════════════════════════════════════════════════
+   Legibility only. Hand-written growth, no genome, no death, no evolution:
+   the single question this stage exists to answer is whether a branching
+   structure at planetary scale reads as vegetation or as circuitry. Every
+   later stage is built on that answer, so it is worth having before any of
+   them. See docs/plants-design.md.
+
+   Nodes carry a position and a heading, both as 3D unit vectors. Storing a
+   heading as an angle from north would break at the poles and at the seam —
+   this repo has that scar already. Growth turns the heading about the surface
+   normal, steps along the geodesic, and parallel-transports the heading to
+   where it lands, which is pole-free by construction. */
+
+let plantsOn = PARAMS.plants > 0;
+
+const PW = 2048, PH = 1024;                 // the sheet plants are drawn into
+
+const PMAX  = PARAMS.budget|0;
+const NPX=new Float32Array(PMAX), NPY=new Float32Array(PMAX), NPZ=new Float32Array(PMAX);
+const NHX=new Float32Array(PMAX), NHY=new Float32Array(PMAX), NHZ=new Float32Array(PMAX);
+const NKID=new Uint8Array(PMAX), NSLOT=new Uint8Array(PMAX);
+const NLIVE=new Uint8Array(PMAX), NBIN=new Int32Array(PMAX);
+const NBORN=new Int32Array(PMAX), NLIFE=new Int32Array(PMAX);
+const NPAR=new Int32Array(PMAX), NPGEN=new Int32Array(PMAX), NGEN=new Int32Array(PMAX);
+const PFRONT = new Int32Array(PMAX), PFREE = new Int32Array(PMAX);
+let nodeHigh = 0, liveN = 0, frontN = 0, freeN = 0;
+let plantDebt = 0;
+let ptick = 0, reapCursor = 0, plantsDirty = true, deaths = 0, woodN = 0, comps = 0, meanComp = 0, bigFrag = 0;
+const NLK=new Int32Array(PMAX);      // children still standing, alive or wood
+const CSTAMP=new Int32Array(PMAX);   // last turn a body was allowed to bud
+
+/* What the formulas decided for this node, read once at birth and then fixed:
+   a body permanently records the conditions each of its nodes grew through. */
+const NCAP=new Uint8Array(PMAX);     // children this node may ever have, 1..5
+const NPCAP=new Uint8Array(PMAX);    // its parent's, so an architecture can
+                                     // inherit a rule rather than a value
+const NDEP=new Uint16Array(PMAX);    // depth below the body's own root
+const NPACE=new Float32Array(PMAX);  // maturation rate, paid for in lifespan
+const NSPRD=new Float32Array(PMAX);  // step distance to its children, per step
+const NSTEP=new Float32Array(PMAX);  // the step that actually placed it
+const NMAT=new Int32Array(PMAX);     // ticks from bud to first possible child
+const NFIT=new Float32Array(PMAX);   // fit where it stands, kept fresh by reap
+const NENV=new Float32Array(PMAX*5); // and the five memberships behind it
+const BVIG=new Float32Array(PMAX);   // per body, the vigour level to rank against
+
+/* its own stream, so changing plant parameters cannot shift the terrain */
+let pseed = (SEED ^ 0x85ebca6b)>>>0 || 1;
+function prnd(){ pseed=(pseed*1664525+1013904223)>>>0; return pseed/4294967296; }
+
+/* ---- the affinities ----
+   Five numbers, a normalised vector, inherited whole and mutated where a branch
+   forks. These stay numbers while everything else becomes a program, and the
+   fixed budget is why: it is what stops the drift to a bland immortal
+   generalist, a formula output cannot easily be budget-constrained across five
+   values, and this is what colour is projected from, which is what makes
+   convergent evolution visible.
+
+   They are affinities for the five environments the climate controller already
+   holds in balance. That is the whole argument for this planet as an arena: the
+   controller guarantees each of the five continues to exist and merely moves
+   it, so a specialist for any one of them always has somewhere to live, and
+   never has it for long. */
+const G = 5;
+const GENE = new Float32Array(PMAX*G);
+/* Nothing costs affinity and lifespan rises with it, so unconstrained they all
+   drift upward until every node likes everything and lives for ever — not
+   hyperspecialisation but affinity inflation, ending in a bland immortal
+   generalist. A fixed budget makes specialising zero-sum, so "generalists
+   short-lived, specialists long-lived at home" follows from the structure
+   rather than from tuning. */
+function normalise(o){
+  let sum=0;
+  for(let i=0;i<5;i++){ if(GENE[o+i]<0.02) GENE[o+i]=0.02; sum+=GENE[o+i]; }
+  const f=5/sum;
+  for(let i=0;i<5;i++) GENE[o+i]*=f;
+}
+function mutateAff(o,amt){
+  for(let i=0;i<5;i++)
+    GENE[o+i] = Math.max(0.02, Math.min(5, GENE[o+i]+(prnd()*2-1)*0.30*amt));
+  normalise(o);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   the formula genome
+   ══════════════════════════════════════════════════════════════════════
+   A number cannot say *when*. Eleven scalars bought real selection, but every
+   lineage ended up much the same shape, because nothing in the genome could
+   condition on where a node found itself. A formula can, and the behaviour
+   this exists to produce is one plant carrying **nursery** nodes that sit and
+   reproduce and **scout** nodes that run a vine out as fast as they can, the
+   difference decided by the conditions each was born into. If both kinds
+   cannot be seen inside a single body the system is not working, whatever the
+   diversity numbers say — which is why the within-body spread of pace and
+   capacity is measured below and not merely the population's.
+
+   Linear/Cartesian GP, not expression trees: a fixed-length list over a fixed
+   read space. No bloat by construction, point mutations stay small, and the
+   instructions that reach no output drift neutrally and become the raw material
+   that makes a genome evolvable rather than brittle.
+
+   Four outputs on two clocks, and the split is the whole point:
+
+     capacity  once, at birth   how many children this node may ever have, 1-5
+     spread    once, at birth   how far its children are placed from it
+     pace      once, at birth   how fast it matures, paid for in lifespan
+     vigour    every look       how badly it wants a child *now*
+
+   The first three are fixed at birth, so a body is a permanent record of the
+   conditions it grew through. Vigour is re-read, so it can depend on age —
+   rising as a node matures, or oscillating if age goes through a sine, which
+   is where whorls and rhythmic branching come from. */
+const OP_ADD=0, OP_SUB=1, OP_MUL=2, OP_DIV=3, OP_MIN=4, OP_MAX=5,
+      OP_ABS=6, OP_NEG=7, OP_SIN=8, OP_TANH=9, OP_CMP=10, OP_SEL=11;
+const NOP = 12;
+const OPNAME = ["ADD","SUB","MUL","DIV","MIN","MAX","ABS","NEG","SIN","TANH","CMP","SEL"];
+const ARITY  = [2,2,2,2,2,2,1,1,1,1,2,3];
+/* EXP and POW explode, LOG has a domain problem, MOD is chaotic for the same
+   reason it is the wrong way to map capacity — and there is deliberately no
+   random operator, because seed plus parameters must go on determining a world
+   completely. A link to a particular planet is a feature of the piece. */
+
+/* Inputs, all scaled so that the interesting region sits around zero and the
+   genome need not discover units. `one` is the constant every linear-GP needs
+   to build an offset from. */
+const IN_ONE=0, IN_AGE=1, IN_DEPTH=2, IN_FIT=3, IN_ENV=4, IN_LAT=9,
+      IN_USED=10, IN_PCAP=11, IN_CROWD=12;
+const NIN = 13;
+const INNAME = ["one","age","depth","fit","sea","ice","desert","grass","forest",
+                "lat","used","pcap","crowd"];
+
+const matBase = Math.max(1, PARAMS.mature);                // reference maturity
+const PLEN  = Math.max(4, Math.min(80, PARAMS.glen|0));    // instructions
+const NK    = Math.max(1, Math.min(16, PARAMS.konst|0));   // evolved constants
+const NADDR = NIN + NK + PLEN;                             // the read space
+const NOUT  = 4;
+const O_CAP=0, O_SPREAD=1, O_PACE=2, O_VIG=3;
+const OUTNAME = ["capacity","spread","pace","vigour"];
+
+/* One instruction is (op, a, b, c). Writing to slot *i* rather than to a named
+   register is what makes the active path walkable backwards from the outputs,
+   and that walk is one of the things measured — a program whose active count is
+   one is a constant wearing a program's clothes, however long it is. */
+const PROG  = new Uint8Array(PMAX*PLEN*4);
+const KONST = new Float32Array(PMAX*NK);
+const POUT  = new Uint8Array(PMAX*NOUT);
+
+/* Results are clamped rather than allowed to run away, and anything that comes
+   back non-finite is counted and zeroed. The counter is expected to stay at
+   zero and is *checked* rather than assumed: this project has already lost four
+   commits to a silent NaN that a downstream Math.max turned into a plausible
+   constant. */
+const PCLAMP = Math.max(1, PARAMS.clamp);
+const V = new Float32Array(NADDR);
+const OUTV = new Float32Array(NOUT);
+let progNonFinite = 0, progRuns = 0;
+
+function fillInputs(i){
+  V[IN_ONE  ] = 1;
+  V[IN_AGE  ] = (ptick-NBORN[i])/matBase - 1;   // -1 at birth, 0 at maturity,
+                                                // and linear after, so a SIN
+                                                // over it can actually oscillate
+  V[IN_DEPTH] = NDEP[i]*0.125 - 1;
+  V[IN_FIT  ] = NFIT[i] - 1;                    // 0 is a generalist anywhere
+  const e=i*5;
+  V[IN_ENV  ]=NENV[e  ]; V[IN_ENV+1]=NENV[e+1]; V[IN_ENV+2]=NENV[e+2];
+  V[IN_ENV+3]=NENV[e+3]; V[IN_ENV+4]=NENV[e+4];
+  V[IN_LAT  ] = NPY[i];                         // sin(latitude), pole to pole
+  V[IN_USED ] = NKID[i]*0.5 - 1;
+  V[IN_PCAP ] = (NPCAP[i]-3)*0.5;               // -1.5 marks a founder
+  V[IN_CROWD] = CCOUNT[NCC[i]]*(1/CROWD_REF) - 1;
+}
+
+function runProgram(i){
+  fillInputs(i);
+  const k=i*NK;
+  for(let j=0;j<NK;j++) V[NIN+j]=KONST[k+j];
+  /* cleared every run, so a reference forward to a slot not yet computed reads
+     zero — well defined, harmless, and simply inactive */
+  for(let j=0;j<PLEN;j++) V[NIN+NK+j]=0;
+  const p=i*PLEN*4;
+  for(let j=0;j<PLEN;j++){
+    const q=p+j*4;
+    const a=V[PROG[q+1]], b=V[PROG[q+2]], c=V[PROG[q+3]];
+    let r;
+    switch(PROG[q]){
+      case OP_ADD: r=a+b; break;
+      case OP_SUB: r=a-b; break;
+      case OP_MUL: r=a*b; break;
+      /* protected: a divisor is never allowed near zero, so no ratio can
+         produce an infinity for the clamp below to have to catch */
+      case OP_DIV: r=a/(Math.abs(b)<1e-3 ? (b<0?-1e-3:1e-3) : b); break;
+      case OP_MIN: r=a<b?a:b; break;
+      case OP_MAX: r=a>b?a:b; break;
+      case OP_ABS: r=a<0?-a:a; break;
+      case OP_NEG: r=-a; break;
+      case OP_SIN: r=Math.sin(a); break;
+      case OP_TANH:r=Math.tanh(a); break;
+      case OP_CMP: r=a<b?1:0; break;
+      default:     r=c>0?a:b; break;              // SEL
+    }
+    /* one test that catches NaN, both infinities and any runaway magnitude */
+    if(!(r>=-PCLAMP && r<=PCLAMP)){
+      if(r>PCLAMP) r=PCLAMP;
+      else if(r<-PCLAMP) r=-PCLAMP;
+      else { progNonFinite++; r=0; }
+    }
+    V[NIN+NK+j]=r;
+  }
+  for(let j=0;j<NOUT;j++) OUTV[j]=V[POUT[i*NOUT+j]];
+  progRuns++;
+  if((progRuns&15)===0) sampleInputs();
+}
+
+/* How many instructions actually reach an output, walked backwards from the
+   four output addresses. Forward references contribute nothing, so they are not
+   followed. */
+const AMARK = new Uint8Array(PLEN), ASTK = new Int32Array(PLEN+4);
+function activeCount(i){
+  AMARK.fill(0);
+  let sn=0, n=0;
+  const base=NIN+NK;
+  for(let j=0;j<NOUT;j++){
+    const a=POUT[i*NOUT+j];
+    if(a>=base && a<NADDR) ASTK[sn++]=a-base;
+  }
+  while(sn>0){
+    const j=ASTK[--sn];
+    if(AMARK[j]) continue;
+    AMARK[j]=1; n++;
+    const q=(i*PLEN+j)*4, ar=ARITY[PROG[q]];
+    for(let t=1;t<=ar;t++){
+      const a=PROG[q+t];
+      if(a>=base && a<NADDR){ const s=a-base; if(s<j && !AMARK[s]) ASTK[sn++]=s; }
+    }
+  }
+  return n;
+}
+
+/* Mapped by squashing, never by modulo. `round(x) mod 5` is chaotic at the
+   boundary — 4.9 gives five slots and 5.1 gives one — so the smallest mutation
+   would turn a branch hub into a vine segment, which is precisely the
+   destructive-mutation failure a fixed-length genome exists to prevent. */
+const squash = x => Math.tanh(x*0.25)*0.5+0.5;
+
+/* A slot is an angular position, not a counter, measured from the heading the
+   node inherited. Odd capacities keep the main axis and even ones split it,
+   which is deliberate: committing the whole system to one habit — monopodial
+   like a tree, or dichotomous like many algae — would throw away a dimension,
+   so capacity itself carries the distinction and a lineage wanting a trunk
+   evolves odd capacities down it.
+
+   Five is a choice, not a limit. At collide = 0.72 two children need only 42
+   degrees between them and turns are legal out to 138, which is room for
+   seven — so these angles are chosen for how they look. What the geometry does
+   still decide, on its own and with nobody writing the rule, is that a
+   short-stepping lineage loses its outer slots: siblings 60 degrees apart on a
+   step of s sit 2s·sin(30) = s apart, so below s ≈ 0.72 a rosette cannot hold
+   together and dense lineages stop being able to branch widely. */
+const R = Math.PI/180;
+const SLOTS = [ null,
+  [0],
+  [-45*R, 45*R],
+  [0, -90*R, 90*R],
+  [-36*R, 36*R, -108*R, 108*R],
+  [0, -60*R, 60*R, -120*R, 120*R] ];
+const FREESLOT = new Int32Array(8);
+
+/* ---- mutation ----
+   A point mutation on one instruction — its operator or one of its sources — or
+   a nudge to an evolved constant, or a rerouting of where an output is read
+   from. Fixed length, so no bloat and no parsimony pressure to tune. Minted
+   where a branch forks and never per node, so a sector stays a coherent unit
+   for selection to act on. */
+function randomGenome(i){
+  const p=i*PLEN*4;
+  for(let j=0;j<PLEN;j++){
+    const q=p+j*4, lim=NIN+NK+j;   // only what this instruction can already see
+    PROG[q  ]=(prnd()*NOP)|0;
+    PROG[q+1]=(prnd()*lim)|0; PROG[q+2]=(prnd()*lim)|0; PROG[q+3]=(prnd()*lim)|0;
+  }
+  const k=i*NK;
+  for(let j=0;j<NK;j++) KONST[k+j]=(prnd()*4-2);
+  const o=i*G;
+  for(let j=0;j<5;j++) GENE[o+j]=0.25+prnd()*2.5;
+  normalise(o);
+  /* read the outputs from near the end, so a fresh genome computes something
+     rather than echoing an input */
+  const back=Math.min(PLEN,8), po=i*NOUT;
+  for(let j=0;j<NOUT;j++) POUT[po+j]=NIN+NK+PLEN-1-((prnd()*back)|0);
+}
+function inherit(src,dst){
+  PROG.copyWithin(dst*PLEN*4, src*PLEN*4, (src+1)*PLEN*4);
+  KONST.copyWithin(dst*NK, src*NK, (src+1)*NK);
+  POUT.copyWithin(dst*NOUT, src*NOUT, (src+1)*NOUT);
+  GENE.copyWithin(dst*G, src*G, (src+1)*G);
+}
+function pointMutate(i){
+  const r=prnd();
+  if(r < 0.72){
+    const j=(prnd()*PLEN)|0, q=(i*PLEN+j)*4, f=(prnd()*4)|0;
+    if(f===0) PROG[q]=(prnd()*NOP)|0;
+    else PROG[q+f]=(prnd()*(NIN+NK+j))|0;
+  } else if(r < 0.90){
+    const k=i*NK+((prnd()*NK)|0);
+    KONST[k]=Math.max(-8,Math.min(8, KONST[k]+(prnd()*2-1)*0.4));
+  } else {
+    POUT[i*NOUT+((prnd()*NOUT)|0)]=(prnd()*NADDR)|0;
+  }
+}
+/* ---- the frontier, and when a node joins it ----
+   Measured: with the maturity gate but no queue, four draws in five landed on a
+   node too young to bud, and during the colonising phase it was closer to nine
+   in ten. Since a node's maturity date is known the moment it is born, bucket
+   it by that date and splice it in when it is due — the same trick the death
+   scheduler uses. The frontier then means "could grow right now", the open
+   question about whether it is worth drawing from uniformly answers itself, and
+   nothing is scanned. */
+/* A freed slot is handed straight to the next birth, so a bare index is not an
+   identity: both the queue and the frontier itself carry the generation with
+   it, or a stale entry silently becomes a claim on whichever stranger moved in.
+   Measured: without this, six draws in a hundred landed on a node that had not
+   matured — a node inheriting a dead one's place in the queue, budding early
+   and drawing twice as often as it should. */
+const tag  = i => i + (NGEN[i]&1023)*PMAX;
+const same = (v,i) => (NGEN[i]&1023)===((v/PMAX)|0);
+const MATB = Math.max(8, Math.ceil(matBase*1.6)+2);
+const PENDQ = []; for(let n=0;n<MATB;n++) PENDQ.push([]);
+function joinWhenMature(i){ PENDQ[(ptick+NMAT[i])%MATB].push(tag(i)); }
+
+/* ---- what the frontier is, and the thing measurement overturned ----
+   The formula design deleted the retry counter, on the argument that a slot
+   blocked by a neighbour is simply not taken this time, the node stays eligible
+   and may be picked again later, by which time the obstruction may be gone —
+   so eligibility alone should replace failure counters and no arbitrary retry
+   constant is needed.
+
+   Measured: it does not. On a full planet an interior node is boxed in by its
+   own children and *stays* boxed in, so it never fills, never leaves, and the
+   frontier grows into the entire population — 92 to 100 per cent of all living
+   nodes. That is not a frontier, it is area, and sampling from area is the
+   exact failure this project had already diagnosed once: a body's draws land on
+   interior nodes that cannot grow, so its growth decays as 1/r while its area
+   grows as r², and it stalls at a size the sampling rule picked rather than one
+   anybody chose. The largest body on the planet fell from about 1,900 nodes to
+   42.
+
+   So a node does leave after a few refusals — but the design's instinct was
+   right about *why* it should be able to come back, and that is made real
+   rather than hoped for: when a node dies, everything pressed against it is
+   offered its place again. The obstruction really is gone, and it is an event
+   we already know about, so nothing has to scan for it. */
+const NONF = new Uint8Array(PMAX);   // already on the frontier
+const NTRY = new Uint8Array(PMAX);   // refusals since it last placed a child
+function admit(i){
+  if(NONF[i] || NLIVE[i]!==1 || NKID[i]>=NCAP[i] || frontN>=PMAX) return;
+  if(ptick-NBORN[i] < NMAT[i]) return;
+  NONF[i]=1; NTRY[i]=0; PFRONT[frontN++]=tag(i);
+}
+function admitMature(){
+  const q = PENDQ[ptick%MATB];
+  for(let n=0;n<q.length;n++){ const v=q[n], i=v%PMAX; if(same(v,i)) admit(i); }
+  q.length=0;
+}
+function retire(fi){
+  const v=PFRONT[fi], i=v%PMAX;
+  if(same(v,i)) NONF[i]=0;
+  PFRONT[fi]=PFRONT[--frontN];
+}
+/* the 27 bins a query touches are the same ones a bud tests, so this is one
+   collision query's worth of work on each death */
+function freeGround(x,y,z){
+  if(PARAMS.readmit<=0) return;
+  const gi=Math.min(PGRID-1,Math.max(0,((x+1)*0.5*PGRID)|0));
+  const gj=Math.min(PGRID-1,Math.max(0,((y+1)*0.5*PGRID)|0));
+  const gk=Math.min(PGRID-1,Math.max(0,((z+1)*0.5*PGRID)|0));
+  for(let a=-1;a<=1;a++){
+    const ia=gi+a; if(ia<0||ia>=PGRID) continue;
+    for(let b=-1;b<=1;b++){
+      const jb=gj+b; if(jb<0||jb>=PGRID) continue;
+      for(let c=-1;c<=1;c++){
+        const kc=gk+c; if(kc<0||kc>=PGRID) continue;
+        const list=pbins.get((ia*PGRID+jb)*PGRID+kc);
+        if(!list) continue;
+        for(let n=0;n<list.length;n++) admit(list[n]);
+      }
+    }
+  }
+}
+
+function inheritMutated(src,dst,amt){
+  inherit(src,dst);
+  mutateAff(dst*G, amt);
+  const n=PARAMS.pmut*amt;
+  let k=n|0; if(prnd() < n-k) k++;
+  for(let t=0;t<k;t++) pointMutate(dst);
+}
+
+/* ---- what a place is ----
+   Soft membership of the five, summing to one, so there are no hard biome
+   edges for a genome to snap against. */
+const ENV = new Float32Array(5);
+function sstep(x,a,b){ const t=Math.max(0,Math.min(1,(x-a)/(b-a))); return t*t*(3-2*t); }
+function envAt(k){
+  const land=F.h[k]-S.seaLevel;
+  const water = 1 - sstep(land, 0.0, 0.014);
+  const ice   = sstep(F.snow[k], 0.30, 0.58);
+  const rest  = 1 - ice;
+  const veg   = F.veg[k];
+  const forest = sstep(veg, 0.42, 0.74);
+  const grass  = sstep(veg, 0.13, 0.38)*(1-forest);
+  const desert = Math.max(0, 1 - forest - grass);
+  const dry    = (1-water)*rest;
+  ENV[0]=water*rest; ENV[1]=ice;
+  ENV[2]=dry*desert; ENV[3]=dry*grass; ENV[4]=dry*forest;
+  return ENV;
+}
+
+/* How well a genome suits a place. A generalist scores about 1 everywhere; a
+   specialist scores up to 5 at home and almost nothing away from it. Lifespan
+   reads straight off this and is never itself a gene: a lifespan gene under
+   selection only ratchets toward immortality, whereas fit means the ground
+   sculpts how long a body persists, and a niche that walks away kills what it
+   left behind. */
+function fitOf(o,k){
+  const m=envAt(k);
+  return GENE[o]*m[0]+GENE[o+1]*m[1]+GENE[o+2]*m[2]+GENE[o+3]*m[3]+GENE[o+4]*m[4];
+}
+function fitAt(x,y,z,o){ return fitOf(o, cellAt(x,y,z)); }
+
+/* The program reads fit and the five memberships every time it runs, and
+   recomputing them would mean an asin, an atan2 and five smoothsteps per look.
+   Cache them on the node instead and let `reap` refresh them on the same
+   rolling cursor that revises lifespan — the staleness is the one the ground
+   already has. */
+function refreshEnv(i){
+  const m=envAt(cellAt(NPX[i],NPY[i],NPZ[i])), e=i*5, o=i*G;
+  let f=0;
+  for(let g=0;g<5;g++){ NENV[e+g]=m[g]; f+=GENE[o+g]*m[g]; }
+  NFIT[i]=f;
+  return f;
+}
+
+/* ---- local crowding ----
+   "Living neighbours nearby", as an input the genome can condition on, has to
+   be O(1) or it cannot be read on every look. A coarse count grid maintained by
+   the births and deaths themselves gives it for two array operations, where
+   scanning the collision bins would cost a hundred and twenty-five of them. */
+const CG = 72;
+const CCOUNT = new Int32Array(CG*CG*CG);
+const NCC = new Int32Array(PMAX);
+/* Measured, not guessed: a full planet puts about ten living nodes in a cell
+   this size, so this is where the input has to sit to have any variance at all
+   around zero. */
+const CROWD_REF = 12;                 // count at which the input reads zero
+function coarseOf(x,y,z){
+  const i=Math.min(CG-1,Math.max(0,((x+1)*0.5*CG)|0));
+  const j=Math.min(CG-1,Math.max(0,((y+1)*0.5*CG)|0));
+  const k=Math.min(CG-1,Math.max(0,((z+1)*0.5*CG)|0));
+  return (i*CG+j)*CG+k;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   observability — built with the mechanism, never after it
+   ══════════════════════════════════════════════════════════════════════
+   A stale function declaration once shadowed its replacement here for four
+   commits. It returned NaN, `NaN|0` is 0, and a `Math.max` downstream turned
+   total failure into a plausible constant. Fit-based selection was off the
+   entire time, two mechanisms and three written-up conclusions were built on
+   the bug, and nothing threw and nothing logged. Small steps would not have
+   caught it. A counter on the line would have caught it in minutes.
+
+   So: the distribution of every output, the number of instructions that reach
+   one, a non-finite counter that is checked rather than assumed, the variance
+   of every input — an input that never varies is not an input — and the spread
+   of pace and capacity *within single bodies*. That last one is the only test
+   that can tell one plant carrying two kinds of node from two plants each
+   internally uniform; every population statistic reads them as identical, and
+   the first is the entire thing this design exists to produce. */
+const NBIN_H = 32;                                  // buckets per distribution
+const CAPHIST = new Int32Array(6);
+const OUTHIST = new Int32Array(NOUT*NBIN_H);
+const OUTMIN = new Float32Array(NOUT), OUTMAX = new Float32Array(NOUT);
+const OUTRAW = new Float64Array(NOUT);              // mean |raw|, before squashing
+let outN = 0;
+const OUTLO = new Float32Array([1, PARAMS.splo, 0, -1]);
+const OUTHI = new Float32Array([6, PARAMS.sphi, 1,  1]);
+const INSUM = new Float64Array(NIN), INSUM2 = new Float64Array(NIN);
+const INMIN = new Float32Array(NIN), INMAX = new Float32Array(NIN);
+let inN = 0;
+function resetStats(){
+  CAPHIST.fill(0); OUTHIST.fill(0); OUTRAW.fill(0); outN=0;
+  OUTMIN.fill(Infinity); OUTMAX.fill(-Infinity);
+  INSUM.fill(0); INSUM2.fill(0); inN=0;
+  INMIN.fill(Infinity); INMAX.fill(-Infinity);
+  progNonFinite=0; progRuns=0;
+}
+function sampleInputs(){
+  inN++;
+  for(let j=0;j<NIN;j++){
+    const v=V[j];
+    INSUM[j]+=v; INSUM2[j]+=v*v;
+    if(v<INMIN[j]) INMIN[j]=v;
+    if(v>INMAX[j]) INMAX[j]=v;
+  }
+}
+/* recorded where the outputs are actually used, so the histogram cannot drift
+   away from what the simulation read */
+const RECV = new Float32Array(NOUT);
+function recordOutputs(cap,spr,pace,vig){
+  outN++;
+  CAPHIST[cap]++;
+  RECV[0]=cap; RECV[1]=spr; RECV[2]=pace; RECV[3]=vig;
+  for(let j=0;j<NOUT;j++){
+    const v=RECV[j];
+    OUTRAW[j]+=Math.abs(OUTV[j]);
+    if(v<OUTMIN[j]) OUTMIN[j]=v;
+    if(v>OUTMAX[j]) OUTMAX[j]=v;
+    let t=(v-OUTLO[j])/(OUTHI[j]-OUTLO[j]);
+    t = t<0?0:(t>0.99999?0.99999:t);
+    OUTHIST[j*NBIN_H+((t*NBIN_H)|0)]++;
+  }
+}
+/* median and quartiles straight off the histogram, which is all that is wanted:
+   a flat spread means the formula is ignoring its inputs, and a single spike
+   means it is a constant wearing a program's clothes */
+function quantiles(j){
+  const b=j*NBIN_H;
+  let tot=0; for(let n=0;n<NBIN_H;n++) tot+=OUTHIST[b+n];
+  if(!tot) return {q1:0,med:0,q3:0,peak:0};
+  const at=f=>{
+    let want=tot*f, c=0;
+    for(let n=0;n<NBIN_H;n++){ c+=OUTHIST[b+n]; if(c>=want)
+      return +(OUTLO[j]+(n+0.5)/NBIN_H*(OUTHI[j]-OUTLO[j])).toFixed(3); }
+    return OUTHI[j];
+  };
+  let mx=0; for(let n=0;n<NBIN_H;n++) if(OUTHIST[b+n]>mx) mx=OUTHIST[b+n];
+  return {q1:at(0.25), med:at(0.5), q3:at(0.75), peak:+(mx/tot).toFixed(3)};
+}
+
+/* ---- colour is a fixed projection of the genome, never a lineage palette ----
+   Hue says which of the five a lineage is for, so related plants look related
+   and convergent evolution shows up as the same colour appearing twice in
+   similar places. Saturation says how committed it is, so generalists wash out
+   toward grey. Lightness carries the life-history axis. */
+const ENVCOL = [
+  [ 96,132, 74],   // sea
+  [206,206,224],   // ice
+  [176, 98, 42],   // desert
+  [162,158, 60],   // grass
+  [ 34, 88, 66],   // forest
+];
+function geneColour(o,pace,out){
+  let r=0,g=0,b=0,mx=0;
+  for(let i=0;i<5;i++){
+    const w=GENE[o+i]*0.2;
+    r+=ENVCOL[i][0]*w; g+=ENVCOL[i][1]*w; b+=ENVCOL[i][2]*w;
+    if(GENE[o+i]>mx) mx=GENE[o+i];
+  }
+  const spec = Math.max(0, Math.min(1, (mx-1)/3));       // 0 generalist, 1 pure
+  const lum = 0.30*r+0.59*g+0.11*b;
+  const sat = 0.30+0.70*spec;
+  /* Lightness carries the life-history axis, and pace is now per node rather
+     than per genome — so a scout and the nursery that made it read differently
+     inside one body, which is the difference this design exists to produce. */
+  const lift = 0.82+0.36*pace;
+  out[0]=(lum+(r-lum)*sat)*lift;
+  out[1]=(lum+(g-lum)*sat)*lift;
+  out[2]=(lum+(b-lum)*sat)*lift;
+}
+
+/* ---- collision: a uniform bin over the cube the sphere sits in. No poles,
+   no seam, and a query touches 27 bins whatever the latitude. ---- */
+const PCELL = PARAMS.step*PARAMS.collide;
+const PGRID = Math.max(8, Math.min(250, Math.floor(2/PCELL)));
+const pbins = new Map();
+function binOf(x,y,z){
+  const i=Math.min(PGRID-1,Math.max(0,((x+1)*0.5*PGRID)|0));
+  const j=Math.min(PGRID-1,Math.max(0,((y+1)*0.5*PGRID)|0));
+  const k=Math.min(PGRID-1,Math.max(0,((z+1)*0.5*PGRID)|0));
+  return (i*PGRID+j)*PGRID+k;
+}
+function occupied(x,y,z){
+  const i=Math.min(PGRID-1,Math.max(0,((x+1)*0.5*PGRID)|0));
+  const j=Math.min(PGRID-1,Math.max(0,((y+1)*0.5*PGRID)|0));
+  const k=Math.min(PGRID-1,Math.max(0,((z+1)*0.5*PGRID)|0));
+  const r2 = PCELL*PCELL;
+  for(let a=-1;a<=1;a++){
+    const ia=i+a; if(ia<0||ia>=PGRID) continue;
+    for(let b=-1;b<=1;b++){
+      const jb=j+b; if(jb<0||jb>=PGRID) continue;
+      for(let c=-1;c<=1;c++){
+        const kc=k+c; if(kc<0||kc>=PGRID) continue;
+        const list = pbins.get((ia*PGRID+jb)*PGRID+kc);
+        if(!list) continue;
+        for(let n=0;n<list.length;n++){
+          const t=list[n];
+          const dx=NPX[t]-x, dy=NPY[t]-y, dz=NPZ[t]-z;
+          if(dx*dx+dy*dy+dz*dz < r2) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function unbin(i){
+  const list = pbins.get(NBIN[i]);
+  if(!list) return;
+  const at = list.indexOf(i);
+  if(at >= 0){ list[at] = list[list.length-1]; list.pop(); }
+}
+
+/* Risk rising with the density of genetically similar neighbours -- Janzen and
+   Connell's rule, and the reason a tropical forest is not one species. It is the
+   only pressure here that punishes whatever is *common* rather than punishing
+   breadth as such, so it acts against a generalist sweep without penalising
+   generalism itself. Measured necessary, not optional: at x1 and at x100 the
+   climate maintained no more specialisation than a frozen planet did, so the
+   claim that a wandering niche keeps adaptation from completing does not hold
+   on its own. It cannot -- the controller relocates environments but keeps each
+   of them present, so a specialist's ground moves without shrinking, while
+   following it means growing through country only a generalist can cross. */
+function kinPressure(i){
+  const x=NPX[i], y=NPY[i], z=NPZ[i], o=i*G;
+  const R=PARAMS.kinr*PARAMS.step, r2=R*R, d2max=PARAMS.kind*PARAMS.kind;
+  const gi=Math.min(PGRID-1,Math.max(0,((x+1)*0.5*PGRID)|0));
+  const gj=Math.min(PGRID-1,Math.max(0,((y+1)*0.5*PGRID)|0));
+  const gk=Math.min(PGRID-1,Math.max(0,((z+1)*0.5*PGRID)|0));
+  const span=Math.max(1,Math.ceil(R/(2/PGRID)));
+  let kin=0, all=0;
+  for(let a=-span;a<=span;a++){
+    const ia=gi+a; if(ia<0||ia>=PGRID) continue;
+    for(let b=-span;b<=span;b++){
+      const jb=gj+b; if(jb<0||jb>=PGRID) continue;
+      for(let c=-span;c<=span;c++){
+        const kc=gk+c; if(kc<0||kc>=PGRID) continue;
+        const list=pbins.get((ia*PGRID+jb)*PGRID+kc);
+        if(!list) continue;
+        for(let n=0;n<list.length;n++){
+          const t=list[n]; if(t===i) continue;
+          const dx=NPX[t]-x, dy=NPY[t]-y, dz=NPZ[t]-z;
+          if(dx*dx+dy*dy+dz*dz > r2) continue;
+          all++;
+          const to=t*G; let d=0;
+          for(let g=0;g<5;g++){ const e=GENE[o+g]-GENE[to+g]; d+=e*e; }
+          if(d < d2max) kin++;
+        }
+      }
+    }
+  }
+  return all>0 ? kin/all : 0;
+}
+
+/* The strategy a genome is pursuing, coarsely: which of the five it leans on,
+   and how hard. Coarse on purpose — scored finely enough, every lineage is
+   unique, everyone is rare, and frequency dependence has nothing to bite on. */
+const CENSUS = new Int32Array(32);
+let censusN = 0;
+let dbgHits=0, dbgLife=0, dbgAgeDeaths=0, dbgFit=0, dbgRaw=0, dbgNaN=0, dbgFloor=0, dbgFitOk=0;
+/* Where the growth loop's draws actually go. The open question is whether slot
+   eligibility and the maturity gate shrink the candidate set enough to be worth
+   drawing from uniformly, and that wants measuring rather than assuming. */
+let frontDraw=0, frontDrop=0, frontYoung=0, budOk=0, budNo=0;
+function strategyOf(o){
+  let mx=0, at=0;
+  for(let g=0;g<5;g++) if(GENE[o+g]>mx){ mx=GENE[o+g]; at=g; }
+  const spec = Math.max(0, Math.min(0.999, (mx-1)/4));
+  return at*4 + ((spec*4)|0);
+}
+/* Rarity has to be measured where rarity exists. A neighbourhood cannot see it:
+   growth here is clonal and local, so a node sits among its own siblings whether
+   its strategy is unique in the world or universal. Count the whole living
+   population instead, and let being common be what costs. */
+function census(){
+  CENSUS.fill(0); censusN = 0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]!==1) continue;
+    CENSUS[strategyOf(i*G)]++; censusN++;
+  }
+}
+function commonness(o){ return censusN>0 ? CENSUS[strategyOf(o)]/censusN : 0; }
+
+function cellAt(x,y,z){
+  const lat=Math.asin(Math.max(-1,Math.min(1,y)));
+  const lon=Math.atan2(z,x);
+  let i=Math.floor((lon+Math.PI)/(Math.PI*2)*GW); i=((i%GW)+GW)%GW;
+  let j=Math.floor((Math.PI*0.5-lat)/Math.PI*GH);
+  j=Math.max(0,Math.min(GH-1,j));
+  return j*GW+i;
+}
+/* Stage 0 stands in for the affinity formulas: a flat yes/no on where a node
+   may sit. Crude, but it is what makes the form read as vegetation rather
+   than as a pattern laid over a planet. */
+/* ---- what the renderer is handed ----
+   Nodes are not painted into a buffer any more. A node that dies has to stop
+   being drawn, and there is no way to un-paint a footprint that has already
+   been blended with its neighbours — so the sheet is rebuilt from the live set
+   each tick instead, on the GPU, where fifty thousand quads cost nothing.
+   Everything the look depends on becomes a per-node attribute for free. */
+const GC = new Float32Array(3);
+const INST = 9;                                  // floats per node
+const IBUF = new Float32Array(PMAX*INST);
+let instN = 0;
+
+function buildInstances(){
+  let w=0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]===0) continue;
+    const wood = NLIVE[i]===2;
+    const x=NPX[i], y=NPY[i], z=NPZ[i];
+    const lat=Math.asin(Math.max(-1,Math.min(1,y))), lon=Math.atan2(z,x);
+    const cl=Math.max(Math.cos(lat),1e-3);
+    const sl=Math.sin(lat), sn=Math.sin(lon), cs=Math.cos(lon);
+    const hx=NHX[i], hy=NHY[i], hz=NHZ[i];
+    const he=-hx*sn + hz*cs;
+    const hn=-hx*sl*cs + hy*cl - hz*sl*sn;
+
+    /* A branch reads as a branch because it tapers. Width comes from age, so
+       the old wood near the root is broad and the growing tips are fine —
+       which is also the frontier, and also what is about to die. One variable
+       tells all three. */
+    const age=ptick-NBORN[i];
+    const grow=wood ? 1 : Math.min(1, age/Math.max(1,NMAT[i]));
+    const go=i*G;
+    /* The footprint scales with the step that actually placed this node, so
+       the picture stops lying about what is claimed: a long-stepping lineage
+       draws further apart because it *is* further apart, and the loose body it
+       leaves is ground somebody else can still grow into. */
+    const wid=PARAMS.fat*NSTEP[i]*(0.30+0.70*grow);
+
+    /* colour: the form's own, drifted by the sector's inherited tint and
+       lifted at the young tips, so expansion reads as motion */
+    geneColour(go, NPACE[i], GC);
+    const young=1-grow;
+    let r=GC[0]+young*44, g=GC[1]+young*40, b=GC[2]+young*34;
+    /* Dead wood is not black. Black would swamp hue, which is the channel
+       carrying niche, and half the standing structure would go to it — the
+       planet would read as scorched. Keep the lineage's hue, take the colour
+       and the value out of it, and let more ground show through: one value
+       ramp from bright new tip to grey wood, so growth and die-back both read
+       as movement. */
+    if(wood){
+      const lum=0.30*r+0.59*g+0.11*b;
+      r=(r*0.24+lum*0.76)*0.52; g=(g*0.24+lum*0.76)*0.52; b=(b*0.24+lum*0.76)*0.52;
+    }
+
+    IBUF[w  ]=(lon+Math.PI)/(Math.PI*2);
+    IBUF[w+1]=(Math.PI*0.5-lat)/Math.PI;
+    IBUF[w+2]=wid;
+    IBUF[w+3]=wid;
+    IBUF[w+4]=Math.atan2(hn,he);
+    IBUF[w+5]=Math.min(255,r)/255;
+    IBUF[w+6]=Math.min(255,g)/255;
+    IBUF[w+7]=Math.min(255,b)/255;
+    IBUF[w+8]=PARAMS.alpha*(0.45+0.55*grow)*(wood?0.62:1.0);
+    w+=INST;
+  }
+  instN=w/INST;
+}
+
+/* The three outputs read once at birth and kept for life, so that a body is a
+   permanent record of the conditions each of its nodes grew through. */
+function readBirthOutputs(i){
+  runProgram(i);
+  const cap = 1 + ((4.999*squash(OUTV[O_CAP]))|0);
+  const spr = PARAMS.splo + (PARAMS.sphi-PARAMS.splo)*squash(OUTV[O_SPREAD]);
+  const pace = squash(OUTV[O_PACE]);
+  NCAP[i]=cap; NSPRD[i]=spr; NPACE[i]=pace;
+  /* Pace buys growth with life, and this time it buys something: a node cannot
+     bud at all until it has matured, so a high-pace node is productive almost
+     at once and short-lived, and a low-pace node spends a long time as
+     structure before it contributes anything, and persists. That is the scout
+     and the nursery, and it is the only thing that gives a plant any notion of
+     investment. The old scalar pace had the cost and never the benefit, which
+     is why selection could only ever delete it. */
+  NMAT[i]  = Math.max(1, Math.min(MATB-1, (matBase*(1.60-1.20*pace))|0));
+  NLIFE[i] = Math.max(PARAMS.hostile|0, (PARAMS.life*NFIT[i]*(1.40-0.80*pace))|0);
+  recordOutputs(cap, spr, pace, Math.tanh(OUTV[O_VIG]*0.25));
+}
+
+function addNode(x,y,z,hx,hy,hz,src,par,amt,stepUsed){
+  const i = freeN>0 ? PFREE[--freeN] : nodeHigh++;
+  NPX[i]=x; NPY[i]=y; NPZ[i]=z;
+  NHX[i]=hx; NHY[i]=hy; NHZ[i]=hz;
+  NKID[i]=0; NSLOT[i]=0; NLIVE[i]=1; NSTEP[i]=stepUsed;
+  if(src<0) randomGenome(i);
+  else if(amt>0) inheritMutated(src,i,amt);
+  else inherit(src,i);
+  NGEN[i]++; NPAR[i]=par; NPGEN[i] = par>=0 ? NGEN[par] : -1;
+  NLK[i]=0; if(par>=0) NLK[par]++;
+  PROOT[i] = par>=0 ? PROOT[par] : i;   /* body identity, kept fresh between sweeps */
+  /* Depth is depth below the body's *own* root, not generations since the
+     world began, because that is the quantity architecture can be built on.
+     pruneFragments recomputes it whenever a body splits; between sweeps a new
+     node simply counts on from its parent. */
+  NDEP[i] = par>=0 ? Math.min(65535, NDEP[par]+1) : 0;
+  NPCAP[i] = par>=0 ? NCAP[par] : 0;
+  NBORN[i]=ptick;
+  if(par<0) BVIG[i]=0;
+  const key = binOf(x,y,z);
+  NBIN[i]=key;
+  const list = pbins.get(key);
+  if(list) list.push(i); else pbins.set(key,[i]);
+  const cc = coarseOf(x,y,z); NCC[i]=cc; CCOUNT[cc]++;
+  refreshEnv(i);
+
+  readBirthOutputs(i);
+  liveN++; plantsDirty=true;
+  joinWhenMature(i);
+  return i;
+}
+
+/* A node that dies still holding children does not vanish: it stops growing,
+   stops counting as alive, and stays in the tree as structure — heartwood,
+   which is dead in a real trunk too and still holds the tree up. It is let go
+   only when its last child goes, and then its own dead parent may follow.
+   Without this, ageing alone split a fifth of all deaths into separate bodies
+   and nothing could grow larger than about ten nodes; splitting is now
+   something only the world can do, by killing a whole region. */
+function freeNode(i){
+  for(let j=i;;){
+    const par = rooted(j) ? NPAR[j] : -1;
+    if(NLIVE[j]===2) woodN--;
+    else if(NLIVE[j]===1){ CCOUNT[NCC[j]]--; freeGround(NPX[j],NPY[j],NPZ[j]); }
+    NLIVE[j]=0; NONF[j]=0; unbin(j); PFREE[freeN++]=j;
+    if(par<0) break;
+    if(--NLK[par] > 0) break;
+    if(NLIVE[par]!==2) break;      /* a living parent simply loses a child */
+    j = par;                       /* wood with nothing left to hold: let go */
+  }
+  plantsDirty=true;
+}
+
+function killNode(i){
+  if(NLIVE[i]!==1) return;
+  liveN--; deaths++; plantsDirty=true;
+  if(NLK[i]>0){
+    /* Wood holds the body together but stops holding *ground*. Left in the
+       collision bins it walled off two fifths of the planet against the very
+       plants that made it, and a body could never grow back through its own
+       dead interior — which is exactly what a crust does. */
+    CCOUNT[NCC[i]]--;              /* wood is structure, not a living neighbour */
+    NLIVE[i]=2; NONF[i]=0; woodN++; unbin(i);
+    freeGround(NPX[i],NPY[i],NPZ[i]);   /* and it stops holding ground, too */
+    /* Wood is only ever released from the tips inward, while growth runs the
+       other way, so it accumulates without limit and eventually crowds the
+       living out. Real crust sheds. Give it its own clock: when it rots
+       through, whatever it was holding becomes a body in its own right — so
+       decay, not ageing, is what fragments a plant, at a rate we choose. */
+    NLIFE[i] = (ptick - NBORN[i]) + (PARAMS.rot|0);
+  }
+  else freeNode(i);
+}
+
+/* All nodes die, and because lifespan follows fit the oldest wood is nearest
+   the root — so a body hollows out from the middle and breaks into a ring of
+   pieces that go on independently. Checked a slice at a time on a rolling
+   cursor, the way the terrain is rebuilt, rather than scanning every node
+   every tick. */
+function reap(){
+  const slice = Math.max(256, (nodeHigh/9)|0);
+  for(let n=0;n<slice;n++){
+    const i = reapCursor++; if(reapCursor>=nodeHigh) reapCursor=0;
+    if(NLIVE[i]===0) continue;
+    if(NLIVE[i]===2){
+      if(ptick-NBORN[i] > NLIFE[i]) freeNode(i);   /* rotted through */
+      continue;
+    }
+    if(ptick-NBORN[i] > NLIFE[i]){ dbgAgeDeaths++; killNode(i); continue; }
+    /* The climate moves under them, so the ground is re-read and the allowance
+       revised. Hostile ground shortens a life, it does not end one: a node that
+       the sea has just closed over goes on for a while and then expires early,
+       which is both what was intended and far less violent than killing on
+       sight. Killing outright severed a body at every interior node the moment
+       a niche shifted, and the shower of fragments that followed read as the
+       design failing when it was only this. */
+    if((n&7)===0){
+      const o=i*G, f=refreshEnv(i);
+      const crowd = PARAMS.kin>0 ? kinPressure(i) : 0;
+      const freq  = PARAMS.rare>0 ? commonness(o) : 0;
+      const raw = PARAMS.life*f*(1.40-0.80*NPACE[i])*(1-PARAMS.kin*crowd)*(1-PARAMS.rare*freq);
+      const nl = Math.max(PARAMS.hostile|0, raw|0);
+      dbgHits++; dbgLife+=nl;
+      if(!isFinite(f)) dbgNaN++; else { dbgFit+=f; dbgFitOk++; dbgRaw+=raw; if(raw < (PARAMS.hostile|0)) dbgFloor++; }
+      NLIFE[i]=nl;
+    }
+  }
+}
+
+function bud(ni){
+  const go = ni*G;
+  const px=NPX[ni], py=NPY[ni], pz=NPZ[ni];
+  const hx=NHX[ni], hy=NHY[ni], hz=NHZ[ni];
+
+  /* One of the slots still open, chosen at random from those remaining. A slot
+     blocked by a neighbour is simply not taken this time: the node stays
+     eligible and may be picked again later, by which time the obstruction may
+     be gone. That is what replaces the old failure counter and its arbitrary
+     retry constant — being passed over is not a penalty, and a node is done
+     only when it is full. */
+  const cap=NCAP[ni], mask=NSLOT[ni];
+  let nfree=0;
+  for(let s=0;s<cap;s++) if(!(mask&(1<<s))) FREESLOT[nfree++]=s;
+  if(nfree===0) return false;
+  const slot = FREESLOT[(prnd()*nfree)|0];
+  const th = SLOTS[cap][slot] + (prnd()*2-1)*PARAMS.jitter;
+
+  /* turn the heading about the surface normal */
+  const cx=py*hz-pz*hy, cy=pz*hx-px*hz, cz=px*hy-py*hx;
+  const c=Math.cos(th), s=Math.sin(th);
+  const ax=hx*c+cx*s, ay=hy*c+cy*s, az=hz*c+cz*s;
+
+  /* step along the geodesic, and carry the heading with it. The distance is
+     the parent's spread: long steps cover ground quickly but leave a loose
+     body others can grow into, short steps build a dense mat that resists
+     invasion and claims territory slowly. */
+  const d=PARAMS.step*NSPRD[ni], cd=Math.cos(d), sd=Math.sin(d);
+  let nx=px*cd+ax*sd, ny=py*cd+ay*sd, nz=pz*cd+az*sd;
+  let l=1/Math.hypot(nx,ny,nz); nx*=l; ny*=l; nz*=l;
+  let ex=-px*sd+ax*cd, ey=-py*sd+ay*cd, ez=-pz*sd+az*cd;
+  const dp=ex*nx+ey*ny+ez*nz; ex-=nx*dp; ey-=ny*dp; ez-=nz*dp;
+  l=1/Math.hypot(ex,ey,ez); ex*=l; ey*=l; ez*=l;
+
+  if(fitAt(nx,ny,nz,go) < PARAMS.viable) return false;
+  if(occupied(nx,ny,nz)) return false;
+  /* The first child continues the sector on its parent's genome exactly; the
+     second and later are true bifurcations and mint a mutated one. Mutating
+     every node instead would let drift inside one body swamp the differences
+     between bodies — lineages would blur and selection could not accumulate.
+     This way a sector is a coherent unit for selection to act on, and a piece
+     that breaks off carries a real identity rather than a smear. */
+  addNode(nx,ny,nz,ex,ey,ez,ni,ni, NKID[ni] > 0 ? PARAMS.mut : 0, d);
+  NSLOT[ni] |= (1<<slot); NKID[ni]++;
+  return true;
+}
+
+/* thrown clear of the parent, landing anywhere that suits, and rooted in its
+   own right — a new body, carrying its parent's colour */
+function spore(ni){
+  const go = ni*G;
+  for(let a=0;a<24;a++){
+    const u=prnd()*2-1, ph=prnd()*Math.PI*2, r=Math.sqrt(Math.max(0,1-u*u));
+    const x=r*Math.cos(ph), y=u, z=r*Math.sin(ph);
+    if(fitAt(x,y,z,go) < PARAMS.viable) continue;
+    if(occupied(x,y,z)) continue;
+    let ax=-Math.sin(ph), ay=0, az=Math.cos(ph);
+    const bx=y*az-z*ay, by=z*ax-x*az, bz=x*ay-y*ax;
+    const th=prnd()*Math.PI*2, cc=Math.cos(th), ss=Math.sin(th);
+    let hx=ax*cc+bx*ss, hy=ay*cc+by*ss, hz=az*cc+bz*ss;
+    const dp=hx*x+hy*y+hz*z; hx-=x*dp; hy-=y*dp; hz-=z*dp;
+    const l=1/Math.hypot(hx,hy,hz);
+    addNode(x,y,z,hx*l,hy*l,hz*l,ni,-1,PARAMS.mut,PARAMS.step);
+    return true;
+  }
+  return false;
+}
+
+/* A severed piece too small to be a body is debris: it costs bookkeeping,
+   clutters any measure of diversity, and reads as noise rather than as life.
+   Identity is the connected component, found by walking parent links — and a
+   link is only believed when the generation matches, because a slot freed by
+   one death is handed straight to the next birth and would otherwise graft a
+   fragment onto a stranger. */
+const PROOT=new Int32Array(PMAX), PSIZE=new Int32Array(PMAX), PSTK=new Int32Array(PMAX);
+function rooted(i){
+  const p=NPAR[i];
+  return p>=0 && NLIVE[p]!==0 && NGEN[p]===NPGEN[i];
+}
+function pruneFragments(){
+  const minf = PARAMS.minfrag|0;
+  if(nodeHigh===0) return;
+  PROOT.fill(-1,0,nodeHigh);
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]===0 || PROOT[i]>=0) continue;
+    let sn=0, j=i;
+    for(;;){
+      PSTK[sn++]=j;
+      if(!rooted(j)) break;
+      const p=NPAR[j];
+      if(PROOT[p]>=0) break;
+      j=p;
+    }
+    const last=PSTK[sn-1];
+    const known = rooted(last) && PROOT[NPAR[last]]>=0;
+    const r = known ? PROOT[NPAR[last]] : last;
+    /* The chain unwinds root-first, so depth below the body's own root falls
+       straight out of the same walk. It has to be recomputed here rather than
+       only counted from the parent at birth: when a body splits, every node in
+       the severed half is suddenly nearer its root than it was, and depth is
+       the input a lineage builds architecture on. */
+    let d = known ? NDEP[NPAR[last]]+1 : 0;
+    while(sn>0){ const q=PSTK[--sn]; PROOT[q]=r; NDEP[q]=d<65535?d:65535; d++; }
+  }
+  /* size is counted in living nodes: a body held up by wood alone is a corpse */
+  PSIZE.fill(0,0,nodeHigh);
+  for(let i=0;i<nodeHigh;i++) if(NLIVE[i]===1) PSIZE[PROOT[i]]++;
+  /* A body's root is nearly always wood now, so counting living nodes that
+     are their own root counts nothing at all. Count the distinct roots that
+     still have anything living under them. */
+  comps=0; bigFrag=0; let tot=0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]===0 || PROOT[i]!==i || PSIZE[i]===0) continue;
+    comps++; tot+=PSIZE[i]; if(PSIZE[i]>bigFrag) bigFrag=PSIZE[i];
+  }
+  meanComp = comps? tot/comps : 0;
+  /* A body that has just been founded is one node, which is below any sane
+     minimum. Spare it until it has had time to establish, or the cull becomes
+     a ratchet that removes bodies and never lets one begin. */
+  const settle = PARAMS.settle|0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]===1 && PSIZE[PROOT[i]] < minf && ptick-NBORN[PROOT[i]] > settle) killNode(i);
+    else if(NLIVE[i]===2 && PSIZE[PROOT[i]]===0) freeNode(i);
+  }
+}
+
+/* Candidates come from the frontier, never from the body. Sampling the body
+   would make a large plant spend its turns on interior nodes that cannot grow,
+   and the size distribution would then be set by that accident rather than by
+   anything chosen. */
+function plantsStep(){
+  if(!plantsOn) return;
+  ptick++;
+  admitMature();
+  reap();
+  if(PARAMS.sweep>0 && ptick%(PARAMS.sweep|0)===0){ pruneFragments(); census(); }
+
+  /* Attempts used to be drawn from one global frontier, which made a form's
+     growth proportional to how much of the world it already held — so the
+     seeding lottery decided the final shares and the sea stayed empty beside
+     perfectly good shelf. One attempt per body per turn instead: a small
+     population then expands at the same rate per body as a large one and can
+     actually converge on its niche. Capped, so cost stays bounded. */
+  const cap = PARAMS.grow|0, perBody = PARAMS.perbody > 0;
+  const vote = Math.max(1, PARAMS.vote|0), vmem = PARAMS.vmem, tries = PARAMS.tries|0;
+  let tried=0, guard=cap*8;
+  while(tried < cap && guard-- > 0 && frontN > 0 && (liveN+woodN) < PMAX){
+    /* Vigour ranks nodes *within* a body and never bodies against each other.
+       A tournament between whichever tips happen to be drawn would do the
+       opposite, and the runaway is obvious: the lineage that shouts loudest
+       wins every draw, vigour pins at its ceiling, and the output becomes a
+       constant — losing exactly the conditional behaviour it exists for. So a
+       candidate is scored against its own body's running level instead, which
+       a uniform shift cannot move, exactly as a within-plant maximum cannot be
+       moved by a plant-wide multiplier. Between bodies the score is then noise,
+       and allocation stays where the frontier put it: proportional to tips. */
+    let best=-1, bestFi=-1, bestTag=0, bestScore=-Infinity;
+    for(let v=0;v<vote;v++){
+      const fi = (prnd()*frontN)|0;
+      const fv = PFRONT[fi], ni = fv%PMAX;
+      /* eligibility, and the only place the frontier is cleaned: a node is
+         eligible while it has an unused slot and is old enough to use it */
+      if(NLIVE[ni]!==1 || !same(fv,ni) || NKID[ni]>=NCAP[ni]){ retire(fi); frontDrop++; continue; }
+      frontDraw++;
+      if(ptick-NBORN[ni] < NMAT[ni]){ frontYoung++; continue; }
+      runProgram(ni);
+      const vg = Math.tanh(OUTV[O_VIG]*0.25);
+      const b = PROOT[ni], s = vg - BVIG[b];
+      BVIG[b] += s*vmem;
+      if(s > bestScore){ bestScore=s; best=ni; bestFi=fi; bestTag=fv; }
+    }
+    if(best<0) continue;
+    /* Sampling the frontier is already the fair rule the brief was reaching
+       for: the frontier is the perimeter, so a body's growth follows its
+       number of tips rather than its area, and per unit area it still slows
+       as 1/r. Strict one-bud-per-body only made sense while fragmentation was
+       minting plants by the thousand; with nothing splitting, forty plants
+       taking one node a turn cannot fill a planet. */
+    if(perBody){
+      const body = PROOT[best];
+      if(CSTAMP[body] === ptick) continue;
+      CSTAMP[body] = ptick;
+    }
+    tried++;
+    /* Fragmentation used to found new bodies as a side effect of falling
+       apart. Now that nothing falls apart, nothing is founded either, and the
+       population can only decline — so the spore the brief asked for is no
+       longer optional. Rare enough that an arrival still reads as an event. */
+    if(prnd() < PARAMS.spore){ spore(best); continue; }
+    /* Retiring by index is only safe if that index still holds this node: the
+       draws above may have swapped the array about while cleaning stale
+       entries. If it has moved, leave it — the next draw that finds it full
+       will drop it, which is the same lazy cleaning as everywhere else. */
+    const stillThere = PFRONT[bestFi]===bestTag;
+    if(bud(best)){
+      budOk++; NTRY[best]=0;
+      if(NKID[best] >= NCAP[best] && stillThere) retire(bestFi);
+    } else {
+      budNo++;
+      if(tries>0 && ++NTRY[best] >= tries && stillThere) retire(bestFi);
+    }
+  }
+}
+
+function plantsSeed(){
+  if(!plantsOn) return;
+  /* Uniformly random genomes normalise to near-generalists, and a world of
+     identical generalists gives selection nothing to work on. Tip each seed
+     toward one of the five so there is variation on the board at tick zero. */
+  for(let n=0, guard=0; n<PARAMS.seeds && guard<80000; guard++){
+    const u=prnd()*2-1, ph=prnd()*Math.PI*2, r=Math.sqrt(Math.max(0,1-u*u));
+    const x=r*Math.cos(ph), y=u, z=r*Math.sin(ph);
+    let ax=-Math.sin(ph), ay=0, az=Math.cos(ph);
+    const th=prnd()*Math.PI*2, cc=Math.cos(th), ss=Math.sin(th);
+    const bx=y*az-z*ay, by=z*ax-x*az, bz=x*ay-y*ax;
+    let hx=ax*cc+bx*ss, hy=ay*cc+by*ss, hz=az*cc+bz*ss;
+    const dp=hx*x+hy*y+hz*z; hx-=x*dp; hy-=y*dp; hz-=z*dp;
+    const l=1/Math.hypot(hx,hy,hz);
+    const i = addNode(x,y,z,hx*l,hy*l,hz*l,-1,-1,0,PARAMS.step);
+    const o = i*G, fav = (prnd()*5)|0;
+    for(let g=0;g<5;g++) GENE[o+g] = 0.25+prnd()*0.5;
+    GENE[o+fav] += 2.2+prnd()*1.6;
+    normalise(o);
+    /* the affinities were rewritten after the node was built, so everything the
+       program read off them has to be taken again */
+    if(refreshEnv(i) < PARAMS.viable){ killNode(i); continue; }
+    readBirthOutputs(i);
+    n++;
+  }
+  resetStats();   /* seeding is not a sample of what the world is doing */
+}
+
+/* ---- the scout-and-nursery test ----
+   Two plants each internally uniform look identical, by every population
+   statistic, to one plant carrying both kinds of node. Only the spread of pace
+   and capacity *within* single bodies tells them apart, and the second is the
+   thing this design exists to produce. Pooled within-body variance against the
+   population's is the answer in one number: near zero and bodies are uniform
+   and the formulas are only reading the genome, not the situation. */
+const BN=new Int32Array(PMAX), BP=new Float32Array(PMAX), BP2=new Float32Array(PMAX);
+const BC=new Float32Array(PMAX), BC2=new Float32Array(PMAX), BCM=new Uint8Array(PMAX);
+const POPPACE=new Int32Array(NBIN_H), POPSPRD=new Int32Array(NBIN_H);
+const POPCAP=new Int32Array(6);
+function withinBody(){
+  BN.fill(0,0,nodeHigh); BP.fill(0,0,nodeHigh); BP2.fill(0,0,nodeHigh);
+  BC.fill(0,0,nodeHigh); BC2.fill(0,0,nodeHigh); BCM.fill(0,0,nodeHigh);
+  POPPACE.fill(0); POPSPRD.fill(0); POPCAP.fill(0);
+  const slo=PARAMS.splo, srange=Math.max(1e-6,PARAMS.sphi-PARAMS.splo);
+  let n=0, sp=0, sp2=0, sc=0, sc2=0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]!==1) continue;
+    const r=PROOT[i], p=NPACE[i], c=NCAP[i];
+    BN[r]++; BP[r]+=p; BP2[r]+=p*p; BC[r]+=c; BC2[r]+=c*c; BCM[r]|=(1<<c);
+    n++; sp+=p; sp2+=p*p; sc+=c; sc2+=c*c;
+    POPCAP[c<6?c:5]++;
+    let t=p; t=t<0?0:(t>0.99999?0.99999:t); POPPACE[(t*NBIN_H)|0]++;
+    t=(NSPRD[i]-slo)/srange; t=t<0?0:(t>0.99999?0.99999:t); POPSPRD[(t*NBIN_H)|0]++;
+  }
+  /* pooled within-body sums of squares, over bodies big enough to have a shape */
+  let wss=0, wdf=0, css=0, mixed=0, bodies=0, bestSD=0, bestN=0;
+  for(let r=0;r<nodeHigh;r++){
+    const nb=BN[r]; if(nb<2) continue;
+    const ss = Math.max(0, BP2[r] - BP[r]*BP[r]/nb);
+    wss+=ss; wdf+=nb-1;
+    css+=Math.max(0, BC2[r] - BC[r]*BC[r]/nb);
+    if(nb>=8){
+      bodies++;
+      let m=BCM[r], bits=0; while(m){ bits+=m&1; m>>=1; }
+      if(bits>=2) mixed++;
+      const sd=Math.sqrt(ss/(nb-1));
+      if(sd>bestSD){ bestSD=sd; bestN=nb; }
+    }
+  }
+  const pv = n>1 ? Math.max(0, sp2/n - (sp/n)*(sp/n)) : 0;
+  const cv = n>1 ? Math.max(0, sc2/n - (sc/n)*(sc/n)) : 0;
+  const wp = wdf>0 ? wss/wdf : 0, wc = wdf>0 ? css/wdf : 0;
+  return {
+    paceSD:+Math.sqrt(pv).toFixed(4), paceWithinSD:+Math.sqrt(wp).toFixed(4),
+    paceWithinShare:+(pv>1e-9 ? wp/pv : 0).toFixed(3),
+    capSD:+Math.sqrt(cv).toFixed(4), capWithinSD:+Math.sqrt(wc).toFixed(4),
+    capWithinShare:+(cv>1e-9 ? wc/cv : 0).toFixed(3),
+    /* the plainest version of the same question: how many bodies of any size
+       hold more than one kind of node at all */
+    bodies8:bodies, mixedCapBodies:+(bodies? mixed/bodies : 0).toFixed(3),
+    widestBodySD:+bestSD.toFixed(4), widestBodyN:bestN,
+    meanPace:+(n?sp/n:0).toFixed(3), meanCap:+(n?sc/n:0).toFixed(3),
+    capShare:Array.from(POPCAP.subarray(1)).map(v=>+(v/Math.max(1,n)).toFixed(3))
+  };
+}
+
+function plantStats(reset){
+  const per=[0,0,0,0,0]; let spec=0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]!==1) continue;
+    const o=i*G; let mx=0, at=0;
+    for(let g=0;g<5;g++) if(GENE[o+g]>mx){ mx=GENE[o+g]; at=g; }
+    per[at]++; spec+=(mx-1)/4;
+  }
+  /* how much of a program actually reaches an output. One means nothing is
+     being computed, however long the list is */
+  let act=0, actN=0, actMin=1e9, actMax=0, badGene=0, badK=0;
+  for(let i=0;i<nodeHigh;i+=53){
+    if(NLIVE[i]!==1) continue;
+    const a=activeCount(i); act+=a; actN++;
+    if(a<actMin) actMin=a; if(a>actMax) actMax=a;
+    for(let g=0;g<G;g++) if(!isFinite(GENE[i*G+g])) badGene++;
+    for(let g=0;g<NK;g++) if(!isFinite(KONST[i*NK+g])) badK++;
+  }
+  const outs={};
+  for(let j=0;j<NOUT;j++){
+    const q=quantiles(j);
+    outs[OUTNAME[j]]={ min:+(OUTMIN[j]===Infinity?0:OUTMIN[j]).toFixed(3),
+                       q1:q.q1, med:q.med, q3:q.q3,
+                       max:+(OUTMAX[j]===-Infinity?0:OUTMAX[j]).toFixed(3),
+                       peakShare:q.peak,
+                       meanRawMag:+(OUTRAW[j]/Math.max(1,outN)).toFixed(2) };
+  }
+  const ins={};
+  for(let j=0;j<NIN;j++){
+    const m=INSUM[j]/Math.max(1,inN);
+    ins[INNAME[j]]={ mean:+m.toFixed(3),
+                     sd:+Math.sqrt(Math.max(0,INSUM2[j]/Math.max(1,inN)-m*m)).toFixed(3),
+                     min:+(INMIN[j]===Infinity?0:INMIN[j]).toFixed(2),
+                     max:+(INMAX[j]===-Infinity?0:INMAX[j]).toFixed(2) };
+  }
+  const out = {
+    live:liveN, wood:woodN, slots:nodeHigh, deaths, bodies:comps,
+    meanBody:+meanComp.toFixed(1), largestBody:bigFrag, frontier:frontN, tick:ptick,
+    /* expected to stay at zero, and checked rather than assumed */
+    nonFinite:progNonFinite, progRuns, badGenes:badGene, badKonst:badK, nanFits:dbgNaN,
+    outputs:outs, births:outN,
+    capBirthShare:Array.from(CAPHIST.subarray(1)).map(v=>+(v/Math.max(1,outN)).toFixed(3)),
+    active:{ mean:+(act/Math.max(1,actN)).toFixed(1),
+             min:actN?actMin:0, max:actMax, of:PLEN, sampled:actN },
+    inputs:ins,
+    body:withinBody(),
+    /* where the growth loop's draws went, which is the open question about
+       whether the eligible set is small enough to draw from uniformly */
+    draws:{ eligible:frontDraw, dropped:frontDrop, immature:frontYoung,
+            budOk, budBlocked:budNo,
+            eligibleShare:+(frontDraw/Math.max(1,frontDraw+frontDrop)).toFixed(3),
+            matureShare:+((frontDraw-frontYoung)/Math.max(1,frontDraw)).toFixed(3),
+            budShare:+(budOk/Math.max(1,budOk+budNo)).toFixed(3) },
+    meanFit:+(dbgFit/Math.max(1,dbgFitOk)).toFixed(3),
+    meanLifeSet:+(dbgLife/Math.max(1,dbgHits)).toFixed(0),
+    hitFloor:dbgFloor, ageDeaths:dbgAgeDeaths,
+    strategies:Array.from(CENSUS).filter(v=>v>0).length,
+    topStrategy:+(Math.max(...CENSUS)/Math.max(1,censusN)).toFixed(3),
+    specialisation:+(spec/Math.max(1,liveN)).toFixed(3),
+    niche:{sea:per[0], ice:per[1], desert:per[2], grass:per[3], forest:per[4]}
+  };
+  if(reset){ resetStats(); frontDraw=frontDrop=frontYoung=budOk=budNo=0; }
+  return out;
+}
+
+/* An algorithm can be printed, which a neural net cannot, and that is half the
+   reason for choosing this representation. Inactive instructions are marked
+   rather than hidden: they are the neutral reservoir mutation draws on. */
+function genomeText(i){
+  if(i==null){
+    for(let n=0;n<nodeHigh;n++) if(NLIVE[n]===1 && PROOT[n]===n){ i=n; break; }
+    if(i==null) for(let n=0;n<nodeHigh;n++) if(NLIVE[n]===1){ i=n; break; }
+  }
+  if(i==null) return "no live nodes";
+  activeCount(i);
+  const nm=a=> a<NIN ? INNAME[a]
+            : a<NIN+NK ? "k"+(a-NIN)+"="+KONST[i*NK+(a-NIN)].toFixed(2)
+            : "r"+(a-NIN-NK);
+  const L=[];
+  for(let j=0;j<PLEN;j++){
+    const q=(i*PLEN+j)*4, op=PROG[q], ar=ARITY[op];
+    const args=[]; for(let t=1;t<=ar;t++) args.push(nm(PROG[q+t]));
+    L.push((AMARK[j]?"  ":"· ")+"r"+j+" = "+OPNAME[op]+"("+args.join(", ")+")");
+  }
+  for(let j=0;j<NOUT;j++) L.push("  "+OUTNAME[j]+" <- "+nm(POUT[i*NOUT+j]));
+  L.push("  affinity ["+Array.from(GENE.subarray(i*G,i*G+5)).map(v=>v.toFixed(2)).join(" ")+"]");
+  L.push("  built: capacity "+NCAP[i]+"  spread "+NSPRD[i].toFixed(2)+
+         "  pace "+NPACE[i].toFixed(2)+"  depth "+NDEP[i]);
+  return L.join("\n");
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   3.  WebGL
+   ══════════════════════════════════════════════════════════════════════ */
+const canvas=document.getElementById("gl");
+const gl = canvas.getContext("webgl2",{antialias:true,alpha:false,powerPreference:"high-performance"});
+if(!gl){ document.getElementById("fail").style.display="flex";
+         document.getElementById("splash").style.display="none"; return; }
+
+function sh(type,src){
+  const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))
+    throw new Error(gl.getShaderInfoLog(s)+"\n"+src.split("\n").map((l,i)=>(i+1)+": "+l).join("\n"));
+  return s;
+}
+function prog(vs,fs){
+  const p=gl.createProgram();
+  gl.attachShader(p,sh(gl.VERTEX_SHADER,vs));
+  gl.attachShader(p,sh(gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u={}; const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
+  for(let i=0;i<n;i++){ const nm=gl.getActiveUniform(p,i).name.replace("[0]","");
+    u[nm]=gl.getUniformLocation(p,nm); }
+  p.u=u; return p;
+}
+
+const GLSL_NOISE = `
+vec3 hash33(vec3 p){
+  p = fract(p*vec3(0.1031,0.1030,0.0973));
+  p += dot(p, p.yxz+33.33);
+  vec3 g = fract((p.xxy+p.yxx)*p.zyx)*2.0-1.0;
+  /* unit-length gradients: without this the cube diagonals dominate and
+     the noise shows a herringbone lattice */
+  return g*inversesqrt(dot(g,g)+1e-5);
+}
+vec3 hash33r(vec3 p){
+  p = fract(p*vec3(0.1031,0.1030,0.0973));
+  p += dot(p, p.yxz+33.33);
+  return fract((p.xxy+p.yxx)*p.zyx);
+}
+float gnoise(vec3 p){
+  vec3 i=floor(p), f=fract(p);
+  vec3 u=f*f*(3.0-2.0*f);
+  return mix(mix(mix(dot(hash33(i+vec3(0,0,0)),f-vec3(0,0,0)),
+                     dot(hash33(i+vec3(1,0,0)),f-vec3(1,0,0)),u.x),
+                 mix(dot(hash33(i+vec3(0,1,0)),f-vec3(0,1,0)),
+                     dot(hash33(i+vec3(1,1,0)),f-vec3(1,1,0)),u.x),u.y),
+             mix(mix(dot(hash33(i+vec3(0,0,1)),f-vec3(0,0,1)),
+                     dot(hash33(i+vec3(1,0,1)),f-vec3(1,0,1)),u.x),
+                 mix(dot(hash33(i+vec3(0,1,1)),f-vec3(0,1,1)),
+                     dot(hash33(i+vec3(1,1,1)),f-vec3(1,1,1)),u.x),u.y),u.z)*1.32;
+}
+/* rotate between octaves so the lattices never line up */
+const mat3 NR = mat3( 0.00, 0.80, 0.60, -0.80, 0.36,-0.48, -0.60,-0.48, 0.64);
+float fbm2(vec3 p){
+  float s=0.6667*gnoise(p); p=NR*p*2.07+11.1;
+  return s+0.3333*gnoise(p);
+}
+float fbm3(vec3 p){
+  float s=0.5333*gnoise(p); p=NR*p*2.03+11.1;
+  s+=0.2667*gnoise(p);      p=NR*p*2.11-7.3;
+  return s+0.1333*gnoise(p);
+}
+float fbm5(vec3 p){
+  float a=0.5,s=0.0;
+  for(int i=0;i<5;i++){ s+=a*gnoise(p); p=NR*p*2.04+vec3(5.2,1.3,9.7); a*=0.5; }
+  return s;
+}`;
+
+/* ---------- sphere geometry ---------- */
+function makeSphere(seg,rings){
+  const pos=[],idx=[];
+  for(let j=0;j<=rings;j++){
+    const v=j/rings, th=v*Math.PI, st=Math.sin(th), ct=Math.cos(th);
+    for(let i=0;i<=seg;i++){
+      const u=i/seg, ph=u*Math.PI*2;
+      pos.push(st*Math.cos(ph), ct, st*Math.sin(ph));
+    }
+  }
+  /* counter-clockwise when seen from outside the sphere */
+  for(let j=0;j<rings;j++)for(let i=0;i<seg;i++){
+    const a=j*(seg+1)+i, b=a+seg+1;
+    idx.push(a,a+1,b, b,a+1,b+1);
+  }
+  return {pos:new Float32Array(pos), idx:new Uint32Array(idx)};
+}
+const SPH = makeSphere(320,160);
+const sphVAO = gl.createVertexArray();
+gl.bindVertexArray(sphVAO);
+const sphVBO=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,sphVBO); gl.bufferData(gl.ARRAY_BUFFER,SPH.pos,gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
+const sphIBO=gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,sphIBO);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,SPH.idx,gl.STATIC_DRAW);
+gl.bindVertexArray(null);
+
+/* ---------- ring geometry ----------
+   Held in tight against the planet the ring reads as small, because this world
+   already looks Earth-sized and a close ring borrows that scale. Standing it
+   further off buys back the sense that both are enormous. It costs framing:
+   fitDist puts the edge of a square window at about 1.3 radii, so seen exactly
+   edge-on in a narrow window the ring can fall outside the picture entirely.
+   Worth it — in any ordinary landscape window it is all there, and the shape
+   is what sells the size. The mesh is only a proxy for the rasteriser:
+   every fragment works out its own radius from the view ray, so neither these
+   radii nor the thickness the vertex shader gives it ever show in the picture.
+   What they do decide is where fragments get generated at all. */
+const RING_R0 = 1.36, RING_R1 = 2.18;
+function makeRing(seg, r0, r1){
+  /* a frame spanning the ring plane; any pair perpendicular to the axis does */
+  const U = (()=>{ const a = Math.abs(POLE[1])<0.9 ? [0,1,0] : [1,0,0];
+    const c = [POLE[1]*a[2]-POLE[2]*a[1], POLE[2]*a[0]-POLE[0]*a[2], POLE[0]*a[1]-POLE[1]*a[0]];
+    const l = 1/Math.hypot(c[0],c[1],c[2]); return [c[0]*l,c[1]*l,c[2]*l]; })();
+  const W = [POLE[1]*U[2]-POLE[2]*U[1], POLE[2]*U[0]-POLE[0]*U[2], POLE[0]*U[1]-POLE[1]*U[0]];
+  const pos=[], side=[], idx=[];
+  /* four rings of vertices: inner and outer, each on both faces of the slab */
+  for(const rs of [[r0,1],[r1,1],[r0,-1],[r1,-1]]){
+    for(let i=0;i<=seg;i++){
+      const th=i/seg*Math.PI*2, c=Math.cos(th), s=Math.sin(th);
+      pos.push((U[0]*c+W[0]*s)*rs[0], (U[1]*c+W[1]*s)*rs[0], (U[2]*c+W[2]*s)*rs[0]);
+      side.push(rs[1]);
+    }
+  }
+  const N=seg+1;
+  /* counter-clockwise seen from outside each of the four faces, or back-face
+     culling renders the far side of the slab and the shading doubles up */
+  for(let i=0;i<seg;i++){
+    const it=i, ot=N+i, ib=2*N+i, ob=3*N+i;
+    idx.push(it, ot, ot+1,   it, ot+1, it+1);      // face toward the north pole
+    idx.push(ib, ib+1, ob+1, ib, ob+1, ob);        // face toward the south pole
+    idx.push(ot, ob, ob+1,   ot, ob+1, ot+1);      // outer rim
+    idx.push(it, ib+1, ib,   it, it+1, ib+1);      // inner rim
+  }
+  return {pos:new Float32Array(pos), side:new Float32Array(side), idx:new Uint32Array(idx)};
+}
+const RING = makeRing(256, RING_R0, RING_R1);
+const ringVAO = gl.createVertexArray();
+gl.bindVertexArray(ringVAO);
+const ringVBO=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,ringVBO); gl.bufferData(gl.ARRAY_BUFFER,RING.pos,gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
+const ringSVBO=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,ringSVBO); gl.bufferData(gl.ARRAY_BUFFER,RING.side,gl.STATIC_DRAW);
+gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,1,gl.FLOAT,false,0,0);
+const ringIBO=gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ringIBO);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,RING.idx,gl.STATIC_DRAW);
+gl.bindVertexArray(null);
+
+const quadVAO=gl.createVertexArray();   /* fullscreen triangle, no attribs */
+
+/* ---------- data texture ---------- */
+const dataTex=gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D,dataTex);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,GW,GH,0,gl.RGBA,gl.FLOAT,null);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+function uploadData(){
+  gl.bindTexture(gl.TEXTURE_2D,dataTex);
+  gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,GW,GH,gl.RGBA,gl.FLOAT,TEXDATA);
+}
+
+/* ---------- plant sheet ----------
+   Plants are drawn into an equirectangular sheet the planet shader folds into
+   its albedo before any lighting, so they are shaded, cut by the terminator
+   and hazed by the atmosphere exactly as the ground is, for nothing. The sheet
+   is rebuilt from the live nodes rather than accumulated, because a node that
+   dies has to stop being drawn and blended paint cannot be taken back. */
+const plantTex=gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D,plantTex);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,PW,PH,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+gl.generateMipmap(gl.TEXTURE_2D);
+const plantFBO=gl.createFramebuffer();
+gl.bindFramebuffer(gl.FRAMEBUFFER,plantFBO);
+gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,plantTex,0);
+gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+
+const plantProg = prog(`#version 300 es
+layout(location=0) in vec2 aCorner;   /* the quad */
+layout(location=1) in vec2 aUV;       /* where the node sits on the sheet */
+layout(location=2) in vec2 aSize;     /* along the branch, and across it */
+layout(location=3) in float aRot;
+layout(location=4) in vec4 aCol;
+uniform float uSeam;
+out vec2 vC; out vec4 vCol;
+void main(){
+  float lat = (0.5 - aUV.y)*3.14159265;
+  float cl  = max(cos(lat), 0.02);
+  float ca=cos(aRot), sa=sin(aRot);
+  vec2 e = aCorner*aSize;
+  /* the footprint is an ellipse lying along the heading, in radians of arc,
+     which longitude has to be widened by 1/cos(lat) to hold */
+  vec2 arc = vec2(e.x*ca - e.y*sa, e.x*sa + e.y*ca);
+  float u = aUV.x + arc.x/(6.2831853*cl) + uSeam;
+  float v = aUV.y - arc.y/3.14159265;
+  vC = aCorner; vCol = aCol;
+  gl_Position = vec4(u*2.0-1.0, v*2.0-1.0, 0.0, 1.0);
+}`, `#version 300 es
+precision highp float;
+in vec2 vC; in vec4 vCol;
+uniform float uSoft;
+out vec4 o;
+void main(){
+  float q = length(vC);
+  /* ascending, always: a descending smoothstep is undefined and vanishes on
+     some drivers */
+  float a = (1.0 - smoothstep(1.0-uSoft, 1.0, q))*vCol.a;
+  if(a <= 0.004) discard;
+  o = vec4(vCol.rgb, a);
+}`);
+
+const plantVAO=gl.createVertexArray();
+gl.bindVertexArray(plantVAO);
+const quadVBO=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,quadVBO);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1, 1,-1, -1,1, 1,1]),gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+const instVBO=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,instVBO);
+gl.bufferData(gl.ARRAY_BUFFER,PMAX*INST*4,gl.DYNAMIC_DRAW);
+const STRIDE=INST*4;
+[[1,2,0],[2,2,8],[3,1,16],[4,4,20]].forEach(a=>{
+  gl.enableVertexAttribArray(a[0]);
+  gl.vertexAttribPointer(a[0],a[1],gl.FLOAT,false,STRIDE,a[2]);
+  gl.vertexAttribDivisor(a[0],1);
+});
+gl.bindVertexArray(null);
+
+function renderPlants(){
+  if(!plantsDirty) return;
+  plantsDirty=false;
+  buildInstances();
+  gl.bindBuffer(gl.ARRAY_BUFFER,instVBO);
+  gl.bufferSubData(gl.ARRAY_BUFFER,0,IBUF,0,instN*INST);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,plantFBO);
+  gl.viewport(0,0,PW,PH);
+  gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+  gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
+  if(instN>0){
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(plantProg);
+    gl.uniform1f(plantProg.u.uSoft, Math.max(0.02,PARAMS.soft));
+    gl.bindVertexArray(plantVAO);
+    /* three passes a turn apart, so a footprint straddling the back meridian
+       is drawn on both sides of it instead of being torn in half */
+    for(const off of [-1,0,1]){
+      gl.uniform1f(plantProg.u.uSeam, off);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,instN);
+    }
+    gl.bindVertexArray(null);
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.bindTexture(gl.TEXTURE_2D,plantTex);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  /* the frame loop sets its own viewport before it draws anything */
+}
+
+/* ---------- baked deep-sky (nebula / milky way) ---------- */
+const SKY_W=1024, SKY_H=512;
+const skyTex=gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D,skyTex);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,SKY_W,SKY_H,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+
+const VS_QUAD=`#version 300 es
+void main(){
+  vec2 p = vec2((gl_VertexID<<1)&2, gl_VertexID&2);
+  gl_Position = vec4(p*2.0-1.0, 0.0, 1.0);
+}`;
+
+const bakeProg = prog(VS_QUAD, `#version 300 es
+precision highp float;
+out vec4 o;
+uniform vec2 uRes;
+${GLSL_NOISE}
+void main(){
+  vec2 uv = gl_FragCoord.xy/uRes;
+  float lon = (uv.x-0.5)*6.28318530718;
+  float lat = (0.5-uv.y)*3.14159265359;
+  vec3 d = vec3(cos(lat)*cos(lon), sin(lat), cos(lat)*sin(lon));
+
+  vec3 gn = normalize(vec3(0.36,0.84,-0.40));
+  float b = dot(d,gn);
+  float band  = exp(-b*b*20.0);
+  float band2 = exp(-b*b*6.0);
+
+  float n  = fbm5(d*2.6)*0.5+0.5;
+  float n2 = fbm3(d*6.5+31.0)*0.5+0.5;
+  float dust = smoothstep(0.30,0.78, fbm3(d*4.2-17.0)*0.5+0.5);
+
+  vec3 warm = vec3(0.62,0.55,0.47);
+  vec3 cool = vec3(0.26,0.33,0.55);
+  vec3 mw = mix(cool,warm,n2);
+  float bright = band*(0.42+1.55*n*n) * mix(0.22,1.0,dust);
+  bright += band2*0.075*n;
+
+  // a couple of far, faint nebulae away from the plane
+  float neb = smoothstep(0.55,0.95, fbm3(d*1.7+61.0)*0.5+0.5);
+  vec3 nc = mix(vec3(0.18,0.10,0.30), vec3(0.10,0.22,0.30), n2);
+
+  vec3 col = mw*bright*1.85 + nc*neb*0.26;
+  col += vec3(0.008,0.010,0.018);           // faint airless background
+  o = vec4(col,1.0);
+}`);
+
+(function bakeSky(){
+  const fbo=gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,skyTex,0);
+  gl.viewport(0,0,SKY_W,SKY_H);
+  gl.disable(gl.DEPTH_TEST); gl.disable(gl.BLEND);
+  gl.useProgram(bakeProg); gl.uniform2f(bakeProg.u.uRes,SKY_W,SKY_H);
+  gl.bindVertexArray(quadVAO); gl.drawArrays(gl.TRIANGLES,0,3);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.deleteFramebuffer(fbo);
+})();
+
+/* ---------- background (stars over the baked sky) ---------- */
+const bgProg = prog(VS_QUAD, `#version 300 es
+precision highp float;
+out vec4 o;
+uniform vec2 uRes; uniform mat4 uInvVP; uniform vec3 uCam; uniform float uT;
+uniform sampler2D uSky; uniform vec3 uSun;
+${GLSL_NOISE}
+
+float starLayer(vec3 rd, float scale, float thresh, float rad, out vec3 tint){
+  vec3 p = rd*scale;
+  vec3 i = floor(p), f = fract(p);
+  vec3 h = hash33r(i);
+  tint = vec3(1.0);
+  if(h.x < thresh) return 0.0;
+  vec3 c = 0.22+0.56*fract(h*7.31+h.zxy*3.77);
+  float d = length(f-c);
+  float core = 1.0 - smoothstep(rad*0.10, rad, d);          // the star
+  float halo = (1.0 - smoothstep(rad*0.6, rad*2.6, d))*0.16; // its bloom
+  float br = pow((h.x-thresh)/max(1e-4,1.0-thresh), 1.55);
+  float tw = 0.82 + 0.18*sin(uT*0.8 + h.y*61.0);
+  tint = mix(vec3(1.0,0.76,0.58), vec3(0.70,0.83,1.0), fract(h.z*3.1));
+  tint = mix(vec3(1.0), tint, 0.6);
+  return (core+halo)*br*tw;
+}
+
+void main(){
+  vec2 ndc = (gl_FragCoord.xy/uRes)*2.0-1.0;
+  vec4 w = uInvVP*vec4(ndc,1.0,1.0);
+  vec3 rd = normalize(w.xyz/w.w - uCam);
+
+  float lon = atan(rd.z,rd.x), lat = asin(clamp(rd.y,-1.0,1.0));
+  vec2 uv = vec2(lon*0.15915494+0.5, 0.5-lat*0.31830989);
+  vec3 col = texture(uSky, uv).rgb;
+
+  vec3 gn = normalize(vec3(0.36,0.84,-0.40));
+  float band = exp(-pow(dot(rd,gn),2.0)*12.0);
+
+  vec3 t; float s;
+  s = starLayer(rd, 46.0, 0.930, 0.17, t);  col += t*s*1.70;
+  s = starLayer(rd,105.0, 0.888, 0.21, t);  col += t*s*1.00;
+  s = starLayer(rd,230.0, 0.878-0.11*band, 0.26, t); col += t*s*0.58;
+  s = starLayer(rd,480.0, 0.892-0.13*band, 0.34, t); col += t*s*0.34;
+  s = starLayer(rd,980.0, 0.940-0.10*band, 0.46, t); col += t*s*0.17;
+
+  /* ---- the world's own star ---- */
+  float cs  = clamp(dot(rd, uSun), -1.0, 1.0);
+  float ang = acos(cs);
+  vec3  perp = normalize(rd - uSun*cs + vec3(1e-6));
+  vec3  sx = normalize(cross(uSun, vec3(0.0,1.0,0.0)));
+  vec3  sy = cross(sx, uSun);
+  float spoke = pow(abs(sin(atan(dot(perp,sy), dot(perp,sx))*3.0)), 8.0);
+
+  const float SR = 0.0072;                       // angular radius
+  float disk  = 1.0 - smoothstep(SR*0.80, SR*1.12, ang);
+  float inner = pow(max(0.0, 1.0 - ang/0.045), 2.0);
+  float mid   = pow(max(0.0, 1.0 - ang/0.16),  2.6);
+  float outer = pow(max(0.0, 1.0 - ang/0.46),  3.4);
+  vec3 sunTint = vec3(1.0, 0.965, 0.905);
+  col += sunTint*(disk*4.0 + inner*0.75 + mid*0.20 + outer*0.085*(0.72+0.55*spoke));
+
+  col = col/(1.0+col*0.22);                      // soft shoulder, no hard clip
+  o = vec4(col,1.0);
+}`);
+
+/* ---------- ring: shared by the ring itself and by everything it shadows ---------- */
+const GLSL_RING = `
+uniform vec3 uRingN;        /* ring plane normal — the axis, without the spin */
+uniform float uRingFade;
+const float RR0 = ${RING_R0}, RR1 = ${RING_R1};
+
+/* Optical depth across the ring as a function of radius. One profile serves
+   both the ring and the shadow it throws, so a faint ring can never cast a
+   strong band. pw is how much radius one pixel spans: structure finer than
+   that is faded to its own mean rather than left to alias, which is the whole
+   difference between a ring that looks expensive and one that shimmers. The
+   profile reaches zero at both edges, so the rim of the proxy mesh carries no
+   density and cannot draw a hard line of its own. */
+float ringTau(float r, float pw){
+  float u  = (r - RR0)/(RR1 - RR0);
+  if(u < 0.0 || u > 1.0) return 0.0;
+  float du = pw/(RR1 - RR0);
+
+  /* The edges soften with the footprint too, not just the banding inside them.
+     The shadow is sampled with a wide penumbra, and if only the fine structure
+     washed out the band would still land with cut edges. */
+  float env  = smoothstep(0.0, 0.14 + du*1.7, u)*(1.0 - smoothstep(1.0 - (0.22 + du*1.7), 1.0, u));
+  float fine = 1.0 - smoothstep(0.012, 0.055, du);
+  float band = 1.0 + 0.26*fine*sin(u*15.0 + 0.6);
+  float gapF = 1.0 - smoothstep(0.020, 0.075, du);
+  float gx   = (u - 0.63)/0.040;
+  float gap  = 1.0 - 0.90*gapF*exp(-gx*gx);
+  /* Low enough that the planet shows through the near half at any ordinary
+     angle. Because the slant term below divides by the view angle, a value
+     that reads as translucent face-on still closes up into a solid line
+     edge-on, which is what a ring actually does. */
+  return env*band*gap*0.155;
+}
+
+/* How much sunlight still reaches P after crossing the ring plane. Sunlight
+   hits the ring at an angle, so a shallow sun means a longer path through the
+   same material and a darker band — and because the axis is tilted, that band
+   migrates north and south across the year on its own. The crossing radius is
+   found without branching so the derivative below is taken in uniform flow. */
+float ringShade(vec3 P, vec3 L){
+  float dN = dot(L, uRingN);
+  float sd = max(abs(dN), 0.02)*(dN < 0.0 ? -1.0 : 1.0);
+  float t  = -dot(P, uRingN)/sd;
+  vec3  X  = P + L*max(t, 0.0);
+  float r  = length(X - uRingN*dot(X, uRingN));
+  float pw = fwidth(r);
+  if(t <= 0.0) return 1.0;
+  /* The star is a disc, not a point, so the shadow carries a penumbra that
+     widens with the distance it has been thrown. Without it the ring's fine
+     banding survives all the way down to the ground and the shadow lands as
+     a flat slab with cut edges instead of a band.
+     The floor on dN matters more. Twice a year the sun crosses the ring plane,
+     and there the sunlight's path through the ring runs to infinity: divide by
+     it honestly and the band saturates into a hard black stripe exactly at
+     equinox. Real ring shadows do sharpen then; a coarse grid and a thin ring
+     make it read as a rendering fault instead. Capped, and capped again on the
+     way out so the ring can never take more than a third of the daylight. */
+  float tau = ringTau(r, pw + 0.05*t)/max(abs(dN), 0.19);
+  return 1.0 - uRingFade*0.34*(1.0 - exp(-tau*0.85));
+}`;
+
+/* ---------- planet ---------- */
+const VS_SPH=`#version 300 es
+layout(location=0) in vec3 aPos;
+uniform mat4 uVP; uniform mat3 uRot; uniform float uScale;
+out vec3 vObj; out vec3 vWorld;
+void main(){
+  vObj = aPos;
+  vWorld = uRot*(aPos*uScale);
+  gl_Position = uVP*vec4(vWorld,1.0);
+}`;
+
+const planetProg = prog(VS_SPH, `#version 300 es
+precision highp float;
+in vec3 vObj; in vec3 vWorld;
+out vec4 o;
+uniform sampler2D uData;
+uniform sampler2D uPlant;
+uniform mat3 uRot;
+uniform vec3 uSun, uCam;
+uniform float uSea, uSolarLat, uGT, uT;
+uniform int uDebug;
+${GLSL_NOISE}
+${GLSL_RING}
+
+const vec2 RES = vec2(${GW}.0,${GH}.0);
+
+/* smooth (C1) lookup done by hand: never depends on the driver's
+   filtering support for float textures, and softens the 256x128 grid
+   into something continuous */
+vec4 fetchSmooth(vec3 d){
+  vec2 uv = vec2(atan(d.z,d.x)*0.15915494+0.5, 0.5-asin(clamp(d.y,-1.0,1.0))*0.31830989);
+  vec2 st = uv*RES-0.5;
+  vec2 i = floor(st), f = fract(st);
+  f = f*f*(3.0-2.0*f);
+  int x0 = int(mod(i.x, RES.x)), x1 = int(mod(i.x+1.0, RES.x));
+  int y0 = int(clamp(i.y,0.0,RES.y-1.0)), y1 = int(clamp(i.y+1.0,0.0,RES.y-1.0));
+  vec4 a = texelFetch(uData, ivec2(x0,y0), 0);
+  vec4 b = texelFetch(uData, ivec2(x1,y0), 0);
+  vec4 c = texelFetch(uData, ivec2(x0,y1), 0);
+  vec4 e = texelFetch(uData, ivec2(x1,y1), 0);
+  return mix(mix(a,b,f.x), mix(c,e,f.x), f.y);
+}
+vec4 dataAt(vec3 d){ return fetchSmooth(d); }
+
+/* Catmull-Rom sample of the elevation channel returning value *and* both
+   derivatives from a single 4x4 neighbourhood. Smooth-bilinear was cheaper
+   but its gradient falls to zero on every cell boundary, so relief shading
+   beat against the grid and drew stripes across mountain belts. Samples are
+   clamped at sea level first, so the continental shelf drop cannot pose as
+   a coastal cliff. */
+vec3 heightCR(vec3 dir, float sea){
+  vec2 uv = vec2(atan(dir.z,dir.x)*0.15915494+0.5,
+                 0.5-asin(clamp(dir.y,-1.0,1.0))*0.31830989);
+  vec2 st = uv*RES-0.5;
+  vec2 i = floor(st), f = st-i;
+
+  float x2=f.x*f.x, x3=x2*f.x, y2=f.y*f.y, y3=y2*f.y;
+  float wx[4], wy[4], dx[4], dy[4];
+  wx[0]=-0.5*x3+x2-0.5*f.x;  wx[1]= 1.5*x3-2.5*x2+1.0;
+  wx[2]=-1.5*x3+2.0*x2+0.5*f.x; wx[3]= 0.5*x3-0.5*x2;
+  dx[0]=-1.5*x2+2.0*f.x-0.5; dx[1]= 4.5*x2-5.0*f.x;
+  dx[2]=-4.5*x2+4.0*f.x+0.5; dx[3]= 1.5*x2-f.x;
+  wy[0]=-0.5*y3+y2-0.5*f.y;  wy[1]= 1.5*y3-2.5*y2+1.0;
+  wy[2]=-1.5*y3+2.0*y2+0.5*f.y; wy[3]= 0.5*y3-0.5*y2;
+  dy[0]=-1.5*y2+2.0*f.y-0.5; dy[1]= 4.5*y2-5.0*f.y;
+  dy[2]=-4.5*y2+4.0*f.y+0.5; dy[3]= 1.5*y2-f.y;
+
+  float v=0.0, gx=0.0, gy=0.0;
+  for(int b=0;b<4;b++){
+    int yy = int(clamp(i.y-1.0+float(b), 0.0, RES.y-1.0));
+    float rv=0.0, rg=0.0;
+    for(int a=0;a<4;a++){
+      int xx = int(mod(i.x-1.0+float(a), RES.x));
+      float h = max(texelFetch(uData, ivec2(xx,yy), 0).r, sea);
+      rv += wx[a]*h;  rg += dx[a]*h;
+    }
+    v += wy[b]*rv;  gx += wy[b]*rg;  gy += dy[b]*rv;
+  }
+  return vec3(v, gx, gy);
+}
+
+/* the grid supplies the shape of the land; the shader only adds a
+   small fractal crinkle, so coastlines stay organic instead of being
+   overwhelmed by the noise lattice */
+float crinkle(vec3 d){ return 0.021*fbm3(d*11.0) + 0.0115*fbm2(d*31.0); }
+float heightOf(vec3 d){ return fetchSmooth(d).r + crinkle(d); }
+
+void main(){
+  vec3 d = normalize(vObj);
+  vec4 dat = dataAt(d);
+  float moist = dat.a;
+  float h0 = dat.r + crinkle(d);
+
+  if(uDebug==1){ o=vec4(vec3(step(uSea,h0)),1.0); return; }
+  if(uDebug==2){ o=vec4(vec3(step(uSea,dat.r)),1.0); return; }
+  if(uDebug==3){ o=vec4(vec3(fract(dat.r*14.0)),1.0); return; }
+
+  /* How much of the sphere one pixel covers. Detail finer than this cannot
+     be resolved and aliases into moire instead — which is what produced
+     the hatching across mountain belts in the twilight band. The fine
+     octaves below fade out using these. */
+  float pw = max(length(dFdx(d)), length(dFdy(d))) + 1e-7;
+  float fadeA = 1.0 - smoothstep(0.006, 0.048, pw);
+  float fadeB = 1.0 - smoothstep(0.003, 0.030, pw);
+
+  /* Local tangent frame, always the lat/lon one so it agrees with the
+     analytic derivatives below. It must not switch basis at high latitude:
+     doing so rotated the relief direction discontinuously and drew a hard
+     circle around each pole. */
+  vec3 t1 = cross(vec3(0.0,1.0,0.0), d);
+  float t1l = length(t1);
+  t1 = t1l > 1e-4 ? t1/t1l : vec3(1.0,0.0,0.0);
+  vec3 t2 = cross(d,t1);
+
+  /* macro relief: differentiate the smooth grid over roughly one cell,
+     which keeps the finite difference free of aliasing */
+  /* true surface gradient, in units of elevation per radian of arc.
+     t1 points west and t2 points south, hence the signs. */
+  vec3 hcr = heightCR(d, uSea);
+  float cosLat = sqrt(max(1.0-d.y*d.y, 0.0));
+  /* smooth floor, so the longitude scale has no kink near the poles */
+  float sLon = (6.28318530718/RES.x)*sqrt(cosLat*cosLat + 0.020);
+  float sLat = 3.14159265359/RES.y;
+  vec2 gRaw = vec2(-hcr.y/sLon, hcr.z/sLat);
+  float gm = length(gRaw);
+  /* Saturating slope, and capped low. Seen from orbit even a great range
+     is a faint shading gradient — a real planet has nothing that reads as
+     a black gash. This tops out near 13 degrees of tilt however steep the
+     ground actually gets. */
+  vec2 g = gm>1e-5 ? (gRaw/gm)*(gm*0.30/(1.0+gm*0.30))*0.245 : vec2(0.0);
+
+  float land = h0-uSea;
+  float isLand = step(0.0, land);
+  float steep = smoothstep(2.6, 11.5, gm);
+
+  /* Read vegetation and ice through a warped lens. Displacing *where* we
+     sample, rather than nudging the value, is what turns a smooth ice
+     margin into a ragged one with peninsulas and stranded floes. */
+  /* relief fades out as the land meets the sea, so beaches stay flat */
+  float shoreFade = smoothstep(0.0, 0.085, land);
+
+  float wa = fbm2(d*7.0), wb = fbm2(d*7.0+vec3(19.3,4.1,-7.7));
+  vec4 datW = fetchSmooth(normalize(d + (t1*wa + t2*wb)*0.075));
+  float veg  = datW.g;
+  float snow = datW.b;
+
+  /* approximate temperature, matching the simulation, for tinting */
+  float lat = asin(clamp(d.y,-1.0,1.0));
+  float c = max(0.0, cos(lat - uSolarLat*mix(0.35,1.0,isLand)));
+  float cp = pow(c,0.85);
+  float T = -30.0 + 62.0*cp - max(0.0,land)*52.0 + uGT*(0.45+1.25*(1.0-cp)) - snow*4.2;
+
+  /* ---------------- albedo ---------------- */
+  vec3 albedo; float gloss;
+  float micro  = fbm3(d*30.0)*0.5+0.5;
+  /* fractal wobble on the snow line, so no ice edge is ever a clean arc */
+  float snowEdge = snow + 0.105*fbm2(d*14.0) + 0.070*fbm2(d*30.0) + 0.030*fadeA*fbm2(d*66.0);
+  float micro2 = (0.70*gnoise(d*40.0) + 0.30*fadeA*gnoise(d*84.0+3.9))*0.5+0.5;
+
+  if(land < 0.0){
+    float depth = clamp(-land*2.4, 0.0, 1.0);
+    vec3 shallow = vec3(0.115,0.400,0.435);
+    vec3 midw    = vec3(0.040,0.155,0.310);
+    vec3 deep    = vec3(0.009,0.045,0.130);
+    vec3 col = mix(shallow, midw, smoothstep(0.0,0.30,depth));
+    col = mix(col, deep, smoothstep(0.26,0.85,depth));
+    col *= 0.93+0.14*micro;
+    float ice = smoothstep(0.34,0.72,snowEdge);
+    vec3 iceCol = mix(vec3(0.70,0.79,0.86), vec3(0.94,0.97,1.0), micro);
+    col = mix(col, iceCol, ice);
+    albedo = col;
+    gloss = 1.0-ice*0.95;
+  } else {
+    /* Barren ground is not one colour. A cold desert is grey-brown rock,
+       frozen soil and gravel; a hot desert is sand. Keying both to the same
+       sand meant melting snow uncovered the Sahara — so seasonal snow looked
+       like it had been lying on nothing at all. */
+    vec3 barrenCold = mix(vec3(0.430,0.408,0.356), vec3(0.338,0.318,0.274), micro);
+    vec3 barrenCool = mix(vec3(0.548,0.496,0.376), vec3(0.444,0.400,0.302), micro);
+    vec3 barrenWarm = mix(vec3(0.800,0.690,0.470), vec3(0.650,0.500,0.320), micro);
+    vec3 sand = mix(barrenCold, barrenCool, smoothstep(-9.0, 3.0, T));
+    sand      = mix(sand,       barrenWarm, smoothstep(5.0, 19.0, T));
+
+    vec3 steppeCold = mix(vec3(0.436,0.428,0.336), vec3(0.352,0.344,0.272), micro);
+    vec3 steppeWarm = mix(vec3(0.600,0.560,0.340), vec3(0.500,0.490,0.290), micro);
+    vec3 steppe = mix(steppeCold, steppeWarm, smoothstep(-2.0, 14.0, T));
+    vec3 grass  = mix(vec3(0.36,0.49,0.21), vec3(0.29,0.42,0.17), micro);
+    vec3 forest = mix(vec3(0.155,0.325,0.145), vec3(0.110,0.250,0.118), micro);
+    vec3 jungle = mix(vec3(0.095,0.280,0.110), vec3(0.070,0.210,0.092), micro);
+    vec3 taiga  = mix(vec3(0.130,0.245,0.180), vec3(0.098,0.188,0.148), micro);
+    vec3 tundra = mix(vec3(0.445,0.400,0.310), vec3(0.352,0.315,0.246), micro);
+    vec3 rock   = mix(vec3(0.470,0.428,0.372), vec3(0.392,0.352,0.303), micro2);
+
+    vec3 col = mix(sand, steppe, smoothstep(0.02,0.24,veg));
+    col = mix(col, grass,  smoothstep(0.20,0.48,veg));
+    col = mix(col, forest, smoothstep(0.44,0.74,veg));
+    col = mix(col, jungle, smoothstep(0.74,0.96,veg)*smoothstep(16.0,24.0,T));
+    col = mix(col, taiga,  (1.0-smoothstep(-3.0,8.0,T))*smoothstep(0.25,0.6,veg));
+    col = mix(col, tundra, (1.0-smoothstep(-13.0,-1.0,T))*(1.0-veg*0.55)*0.60);
+
+    /* beaches: narrow, and broken up so coasts are not outlined */
+    float beach = (1.0-smoothstep(0.0,0.013,land))*(0.35+0.80*micro);
+    col = mix(col, vec3(0.74,0.68,0.53), clamp(beach,0.0,1.0));
+
+    /* exposed rock, but only where ground is truly steep or truly high;
+       dramatic cliffs exist on real worlds and they are rare */
+    col = mix(col, rock, clamp(steep*0.42 + smoothstep(0.44,0.82,land)*0.50, 0.0, 0.72));
+
+    /* snow, favouring flat ground */
+    float sn = smoothstep(0.30,0.52,snowEdge)*(1.0-steep*0.30);
+    col = mix(col, mix(vec3(0.86,0.90,0.95), vec3(0.97,0.99,1.0), micro), sn);
+
+    albedo = col;
+    gloss = 0.06;
+  }
+
+  /* Plants go into the albedo, not over the finished picture, so everything
+     downstream treats them as ground. */
+  float pu = atan(d.z,d.x)*0.15915494+0.5;
+  float pv = 0.5-asin(clamp(d.y,-1.0,1.0))*0.31830989;
+  /* u jumps by a whole turn across the back meridian. Left alone the hardware
+     sees an enormous derivative there, drops to the coarsest mip, and draws a
+     blurred line from pole to pole. Take the derivatives by hand and subtract
+     the wrap before asking for the sample. */
+  vec2 pdx = vec2(dFdx(pu), dFdx(pv)), pdy = vec2(dFdy(pu), dFdy(pv));
+  pdx.x -= round(pdx.x);  pdy.x -= round(pdy.x);
+  vec4 pl = textureGrad(uPlant, vec2(pu,pv), pdx, pdy);
+  albedo = mix(albedo, pl.rgb, pl.a);
+  gloss  = mix(gloss, 0.02, pl.a);
+
+  /* ---------------- normal ----------------
+     micro relief comes from a noise *vector*, not a finite difference,
+     so there is no sampling lattice to alias against               */
+  vec3 Nw = normalize(uRot*d);
+  vec3 V  = normalize(uCam - vWorld);
+  float graze = smoothstep(0.03, 0.42, dot(Nw,V));
+
+  vec3 nObj;
+  if(land < 0.0){
+    vec3 wv = vec3(gnoise(d*66.0+vec3(uT*0.010,0.0,4.0)),
+                   gnoise(d*66.0+vec3(0.0,uT*0.010,19.0)),
+                   gnoise(d*66.0+vec3(7.0,3.0,uT*0.010)));
+    nObj = normalize(d + wv*(0.013*fadeB));
+  } else {
+    vec3 m1 = vec3(gnoise(d*22.0+vec3(3.1,0.0,0.0)),
+                   gnoise(d*22.0+vec3(0.0,17.7,0.0)),
+                   gnoise(d*22.0+vec3(0.0,0.0,-9.4)));
+    vec3 m2 = fadeA*vec3(gnoise(d*46.0+vec3(41.0,0.0,0.0)),
+                         gnoise(d*46.0+vec3(0.0,-5.0,0.0)),
+                         gnoise(d*46.0+vec3(0.0,0.0,23.0)));
+    float amt = (0.30 + 0.55*steep)*graze;
+    nObj = normalize(d - (t1*g.x + t2*g.y)*shoreFade
+                       + (m1*0.038 + m2*0.016)*amt);
+  }
+
+  vec3 N = normalize(uRot*nObj);
+  vec3 L = uSun;
+
+  float ndlG = dot(Nw,L);          // true surface, no relief
+  float ndlB = dot(N,L);           // with relief
+
+  /* Relief works by tilting the normal, which is honest in open daylight
+     but wrong at the terminator: with the sun almost tangent, a few
+     degrees of tilt throws a whole region into shadow, and the coarse
+     grid beneath the relief shows through as blotches. So the terminator
+     is decided by geometry alone, and relief fades in as the sun climbs. */
+  float reliefMix = smoothstep(0.02, 0.34, ndlG);
+  float ndl  = mix(ndlG, ndlB, reliefMix);
+  float ndlS = ndlG;
+  float lam  = smoothstep(-0.14, 0.26, ndl);
+
+  vec3 sunHigh = vec3(1.00,0.975,0.940);
+  vec3 sunLow  = vec3(1.00,0.560,0.300);
+  vec3 sunCol  = mix(sunLow, sunHigh, smoothstep(0.0,0.40,ndlS));
+
+  /* The ring blocks direct sun only — skylight still reaches the band, so it
+     reads as a soft dark stripe rather than a hole punched in the day side. */
+  float rShade = ringShade(vWorld, L);
+
+  vec3 col = albedo*sunCol*lam*1.14*rShade;
+
+  vec3 Hv = normalize(L+V);
+  vec3  Ns   = normalize(mix(Nw, N, reliefMix));
+  float spec = pow(max(dot(Ns,Hv),0.0), mix(24.0,120.0,gloss))*gloss*lam;
+  col += sunCol*spec*0.55*rShade;
+
+  float rim = pow(1.0-max(dot(Nw,V),0.0), 3.2);
+  col += vec3(0.34,0.54,0.95)*rim*lam*0.55;
+  col += vec3(1.00,0.45,0.20)*rim*(1.0-smoothstep(-0.10,0.30,ndlS))*smoothstep(-0.35,0.05,ndlS)*0.75;
+
+  /* skylight: scattered blue from the atmosphere itself, keyed to the
+     geometric normal so relief never punches a hole to pure black */
+  col += albedo*vec3(0.115,0.135,0.170)*smoothstep(-0.05,0.28,ndlS);
+  /* Night side. Starlight and airglow alone leave it at ink, and the cloud
+     deck — which carries its own floor — ends up the brightest thing on the
+     dark half, so weather reads and the world underneath does not. Lift the
+     ground until it sits above the clouds again.
+     Ambient by itself would be legible but shapeless, so the lift carries a
+     directional term aimed along the view: slopes still shade and coastlines
+     still turn. The graze term drops it back to the geometric normal at the
+     limb —
+     edge-on, a tilted normal shows the grid rather than the ground, which is
+     the same reason the terminator ignores relief. */
+  float night = 1.0 - lam;
+  float head  = max(dot(normalize(mix(Nw, N, graze)), V), 0.0);
+  col += albedo*(vec3(0.108,0.124,0.163) + vec3(0.160,0.176,0.206)*head)*night;
+
+  col = col/(1.0+col*0.32);
+  o = vec4(col,1.0);
+}`);
+
+/* ---------- clouds ---------- */
+const cloudProg = prog(VS_SPH, `#version 300 es
+precision highp float;
+in vec3 vObj; in vec3 vWorld;
+out vec4 o;
+uniform sampler2D uData;
+uniform mat3 uRot;
+uniform vec3 uSun, uCam;
+uniform float uT, uDrift, uFade;
+${GLSL_NOISE}
+${GLSL_RING}
+const vec2 RES = vec2(${GW}.0,${GH}.0);
+float moistAt(vec3 d){
+  vec2 uv = vec2(atan(d.z,d.x)*0.15915494+0.5, 0.5-asin(clamp(d.y,-1.0,1.0))*0.31830989);
+  vec2 st = uv*RES-0.5; vec2 i=floor(st), f=fract(st); f=f*f*(3.0-2.0*f);
+  int x0=int(mod(i.x,RES.x)), x1=int(mod(i.x+1.0,RES.x));
+  int y0=int(clamp(i.y,0.0,RES.y-1.0)), y1=int(clamp(i.y+1.0,0.0,RES.y-1.0));
+  float a=texelFetch(uData,ivec2(x0,y0),0).a, b=texelFetch(uData,ivec2(x1,y0),0).a;
+  float c=texelFetch(uData,ivec2(x0,y1),0).a, e=texelFetch(uData,ivec2(x1,y1),0).a;
+  return mix(mix(a,b,f.x), mix(c,e,f.x), f.y);
+}
+void main(){
+  vec3 d = normalize(vObj);
+  /* Taken before the discard below: ringShade differentiates, and a derivative
+     is only defined while the whole quad is still alive. */
+  float rShade = ringShade(vWorld, uSun);
+
+  float ca=cos(uDrift), sa=sin(uDrift);
+  vec3 dq = vec3(d.x*ca+d.z*sa, d.y, -d.x*sa+d.z*ca);
+  float moist = moistAt(dq);
+
+  /* stretch the noise along latitude a little so weather forms bands */
+  vec3 q = vec3(dq.x, dq.y*1.9, dq.z)*4.0 + vec3(0.0, uT*0.0035, 0.0);
+  float n = fbm5(q)*0.5+0.5;
+  n = mix(n, fbm3(dq*11.0+uT*0.009)*0.5+0.5, 0.38);
+
+  float lat = asin(clamp(d.y,-1.0,1.0));
+  float bands = 0.55 + 0.45*cos(lat*6.0);
+  float cover = clamp((moist-0.22)*1.25*bands, 0.0, 1.0);
+  float thr = 0.635 - 0.235*cover;
+  float dens = smoothstep(thr, thr+0.115, n);
+  if(dens <= 0.004) discard;
+
+  vec3 Nw = normalize(uRot*d);
+  float ndl = dot(Nw, uSun);
+  float lam = smoothstep(-0.22, 0.22, ndl);
+  vec3 warm = vec3(1.00,0.62,0.40);
+  vec3 lit  = mix(warm, vec3(1.0,0.99,0.98), smoothstep(0.0,0.38,ndl));
+  /* the shadow has to cross the weather too, or the band stops dead at every
+     cloud edge and reads as a rendering fault */
+  vec3 col = lit*(0.05+1.10*lam*rShade) + vec3(0.020,0.028,0.050)*(1.0-lam);
+
+  /* A wide, gentle limb fade so the cloud shell never shows an edge, and a
+     single global fade so zooming right in dissolves the whole cloud deck
+     instead of cutting a circle through it. */
+  vec3 V = normalize(uCam-vWorld);
+  float edge = smoothstep(-0.10, 0.42, dot(Nw,V));
+  o = vec4(col, dens*0.86*edge*uFade);
+}`);
+
+/* ---------- ring ---------- */
+const VS_RING=`#version 300 es
+layout(location=0) in vec3 aPos;    /* position in the ring plane */
+layout(location=1) in float aSide;  /* which face of the slab, -1 or +1 */
+uniform mat4 uVP; uniform vec3 uCam, uRingN; uniform float uPixel;
+out vec3 vWorld;
+out float vOff;    /* how far this vertex was pushed, in pixels */
+void main(){
+  /* A ring is flat, so edge-on it has no thickness for the rasteriser to
+     cover and breaks into crawling dashes — exactly the view that is supposed
+     to tell you where you are. Give the slab its thickness in *pixels* rather
+     than in world units: invisible face-on, always a couple of pixels edge-on,
+     and unchanged by resolution or by the adaptive DPR. */
+  float px = uPixel*distance(uCam, aPos);
+  vOff   = aSide*1.7;
+  vWorld = aPos + uRingN*(vOff*px);
+  gl_Position = uVP*vec4(vWorld,1.0);
+}`;
+
+const ringProg = prog(VS_RING, `#version 300 es
+precision highp float;
+in vec3 vWorld;
+in float vOff;
+out vec4 o;
+uniform vec3 uSun, uCam;
+${GLSL_RING}
+void main(){
+  vec3 rd = normalize(vWorld - uCam);
+  float cN = dot(rd, uRingN);
+
+  /* Where does this sightline cross the ring, and at what radius? Nearly
+     edge-on the crossing runs off to infinity, so fall back to the ray's
+     closest approach to the axis — the radius it spends most of its path
+     beside. The two agree everywhere in between, so the blend is seamless. */
+  float sc = max(abs(cN), 1e-4)*(cN < 0.0 ? -1.0 : 1.0);
+  vec3  Pc = uCam + rd*max(-dot(uCam, uRingN)/sc, 0.0);
+  vec3  Pg = uCam + rd*max(-dot(uCam, rd), 0.0);
+  float rC = length(Pc - uRingN*dot(Pc, uRingN));
+  float rG = length(Pg - uRingN*dot(Pg, uRingN));
+  float w  = smoothstep(0.015, 0.10, abs(cN));
+  float r  = mix(rG, rC, w);
+  vec3  P  = mix(Pg, Pc, w);
+
+  float pw  = fwidth(r);
+  float tau = ringTau(r, pw);
+
+  /* A grazing sightline crosses far more material for the same patch of
+     screen. Extinction rather than a plain multiply, so it saturates into a
+     clean bright line instead of blowing out. */
+  /* Face-on the slab's cap covers the ring and its 1.7px push is along the
+     line of sight, so it costs nothing. Edge-on the cap is degenerate and the
+     rims do the covering, and there the push is across the screen — left
+     alone it would draw a hard-edged strip 3.4px wide. Taper across it, but
+     only once the ring is thin enough for the rims to matter, or the taper
+     would eat the cap at every ordinary angle. */
+  float sinv = sqrt(max(1.0 - cN*cN, 0.0));
+  float thin = 1.0 - smoothstep(0.05, 0.22, abs(cN));
+  float cov  = mix(1.0, 1.0 - smoothstep(0.25, 1.05, abs(vOff)*sinv), thin);
+
+  float a = (1.0 - exp(-tau*1.25/max(abs(cN), 0.045)))*uRingFade*cov;
+  if(a <= 0.003) discard;
+
+  /* The planet's shadow: one ray-sphere test, and the single thing that makes
+     a ring read as something in orbit rather than a decal on the sky. */
+  float sL   = dot(P, uSun);
+  float perp = sqrt(max(dot(P,P) - sL*sL, 0.0));
+  float lit  = sL < 0.0 ? smoothstep(0.990, 1.13, perp) : 1.0;
+
+  float obliq = abs(dot(uSun, uRingN));   /* how squarely the sun strikes it */
+  /* From the sun's side of the plane we see reflected light; from the other,
+     only what filters through */
+  float face  = smoothstep(-0.10, 0.10, -cN*dot(uSun, uRingN));
+
+  /* Rings brighten hard when backlit, which lands exactly as the star passes
+     behind the planet. Restrained, so it lifts that moment instead of
+     competing with the limb, which already owns it. */
+  float fwd = pow(max(dot(rd, uSun), 0.0), 9.0);
+
+  /* A ring is particles, not a surface: each one is lit the same however
+     obliquely the sheet is struck, so brightness leans only gently on the
+     sun's angle. Keyed hard to it, the ring would go murky whenever the
+     season brought the sun back toward the ring plane — which is most of the
+     time, since the sun never rises more than the axial tilt above it. */
+  vec3 col = mix(vec3(0.62,0.66,0.79), vec3(0.95,0.91,0.83), obliq)
+           * (0.46 + 0.38*obliq) * mix(0.32, 1.0, face);
+  col += vec3(1.00,0.94,0.84)*fwd*(0.20 + 0.42*obliq);
+  col *= mix(0.09, 1.0, lit);
+
+  o = vec4(col, a);
+}`);
+
+/* ---------- atmosphere shell ---------- */
+const atmoProg = prog(VS_SPH, `#version 300 es
+precision highp float;
+in vec3 vObj; in vec3 vWorld;
+out vec4 o;
+uniform vec3 uSun, uCam; uniform mat3 uRot; uniform float uAtmR;
+void main(){
+  vec3 rd = normalize(vWorld-uCam);
+  /* shade the point where this ray grazes closest to the planet, not the
+     far wall of the shell: that is the air the light is actually passing
+     through, and it makes the terminator glow sit where it belongs */
+  vec3 Pc = uCam + rd*max(0.0, -dot(uCam, rd));
+  float b = length(Pc);
+  vec3 P = Pc/max(b,1e-4);
+
+  /* bright close to the surface, with a long soft halo beyond it */
+  float t = clamp((b-0.995)/(uAtmR-0.995), 0.0, 1.0);
+  float g = exp(-t*5.0)*(1.0-t);
+
+  /* A line of sight skimming the limb passes through a whole chord of air,
+     not one point. Find the sunniest air anywhere along that chord — that
+     is what decides how brightly this piece of limb glows. Without it the
+     ring vanishes exactly when the star is behind the planet, which is the
+     one time you most want to see it. */
+  float L    = sqrt(max(0.0, uAtmR*uAtmR - b*b));
+  float span = atan(L/max(b,1e-4));
+  vec2  su   = vec2(dot(uSun,P), dot(uSun,rd));
+  float m    = length(su);
+  float pOpt = atan(su.y, su.x);
+  float sunMax = m*cos(clamp(pOpt,-span,span) - pOpt);
+
+  float sunT = dot(P, uSun);            // the air right at the horizon
+  float lit  = smoothstep(-0.32, 0.02, sunMax);
+  vec3 day   = vec3(0.40,0.64,0.98);
+  vec3 dusk  = vec3(1.00,0.52,0.26);
+  vec3 col   = mix(dusk, day, smoothstep(-0.04, 0.20, sunT));
+  float i = g*lit*0.92;
+  o = vec4(col*i, 1.0);
+}`);
+
+/* ══════════════════════════════════════════════════════════════════════
+   4.  camera + interaction
+   ══════════════════════════════════════════════════════════════════════ */
+const FOVY = 42*Math.PI/180;
+/* frame the planet so it never touches the edge of the window, whatever
+   shape that window is */
+function fitDist(){
+  const asp = Math.max(0.2, canvas.width/Math.max(1,canvas.height));
+  const vHalf = FOVY*0.5;
+  const hHalf = Math.atan(Math.tan(vHalf)*asp);
+  return 1.0/Math.sin(Math.min(vHalf,hHalf)*0.82);
+}
+const CAM = {yaw:1.42, pitch:0.26, dist:3.4, tDist:3.4, zoom:1.0};
+let dragging=false, lastX=0, lastY=0;
+let paused=false, speed=1;
+const hud=document.getElementById("hud");
+
+/* the interface is shown or hidden by a click on the world; it never
+   disappears on a timer */
+let hudShown=true;
+function setHud(v){ hudShown=v; hud.classList.toggle("hidden", !v); }
+
+const ICON_PAUSE='<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.1" y="1.4" width="3" height="9.2" fill="currentColor"/><rect x="6.9" y="1.4" width="3" height="9.2" fill="currentColor"/></svg>';
+const ICON_PLAY ='<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.2 1.3 L10.4 6 L3.2 10.7 Z" fill="currentColor"/></svg>';
+const ppBtn = document.getElementById("playpause");
+function setPaused(v){
+  paused = v;
+  ppBtn.innerHTML = paused ? ICON_PLAY : ICON_PAUSE;
+  ppBtn.setAttribute("aria-label", paused ? "play" : "pause");
+  ppBtn.title = paused ? "play" : "pause";
+}
+setPaused(false);
+ppBtn.addEventListener("click", e=>{ e.stopPropagation(); setPaused(!paused); });
+
+/* ── input ─────────────────────────────────────────────────────────────
+   One pointer orbits, two pinch to zoom. Every transition between those
+   states re-baselines the deltas, because reusing a stale baseline when a
+   second finger lands is exactly what made the planet jump at the start of
+   a pinch. Pointers are tracked by id rather than assuming one at a time. */
+const ptrs = new Map();
+let mode = 0;                       // 0 idle · 1 orbit · 2 pinch
+let pinchSpread = 0, pinchZoom0 = 1;
+let cx0 = 0, cy0 = 0;               // pinch centroid baseline
+let downX=0, downY=0, downT=0, travel=0, didPinch=false;
+
+function centroid(){
+  let x=0,y=0;
+  for(const p of ptrs.values()){ x+=p.x; y+=p.y; }
+  const k = ptrs.size || 1;
+  return {x:x/k, y:y/k};
+}
+function spread(){
+  const a = [...ptrs.values()];
+  if(a.length < 2) return 0;
+  return Math.hypot(a[0].x-a[1].x, a[0].y-a[1].y);
+}
+function orbitBy(dx, dy){
+  CAM.yaw   -= dx*0.0055;
+  CAM.pitch  = clamp(CAM.pitch + dy*0.0055, -1.35, 1.35);
+}
+/* called whenever the number of pointers changes */
+function rebase(){
+  if(ptrs.size === 1){
+    mode = 1;
+    const p = ptrs.values().next().value;
+    lastX = p.x; lastY = p.y;
+  } else if(ptrs.size >= 2){
+    mode = 2;
+    pinchSpread = spread() || 1;
+    pinchZoom0  = CAM.zoom;
+    const c = centroid(); cx0 = c.x; cy0 = c.y;
+  } else {
+    mode = 0;
+  }
+  dragging = ptrs.size > 0;
+  canvas.classList.toggle("dragging", dragging);
+}
+
+canvas.addEventListener("pointerdown",e=>{
+  if(ptrs.size === 0){
+    downX=e.clientX; downY=e.clientY; downT=performance.now();
+    travel=0; didPinch=false;
+  }
+  ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if(ptrs.size >= 2) didPinch = true;
+  rebase();
+  e.preventDefault();
+},{passive:false});
+
+/* on window, so a drag that leaves the canvas still tracks */
+addEventListener("pointermove",e=>{
+  if(!ptrs.has(e.pointerId)) return;
+  ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+
+  if(mode === 1){
+    travel += Math.abs(e.clientX-lastX) + Math.abs(e.clientY-lastY);
+    orbitBy(e.clientX-lastX, e.clientY-lastY);
+    lastX = e.clientX; lastY = e.clientY;
+  } else if(mode === 2){
+    const d = spread();
+    if(d > 12 && pinchSpread > 12){
+      /* fingers apart -> closer to the planet -> smaller camera distance */
+      CAM.zoom  = clamp(pinchZoom0*(pinchSpread/d), 0.44, 2.6);
+      CAM.tDist = fitDist()*CAM.zoom;
+    }
+    const c = centroid();
+    orbitBy(c.x-cx0, c.y-cy0);
+    cx0 = c.x; cy0 = c.y;
+  }
+},{passive:false});
+
+function liftPointer(e){
+  const rec = ptrs.get(e.pointerId);
+  if(!rec) return;
+  ptrs.delete(e.pointerId);
+  const wasLast = ptrs.size === 0;
+  rebase();
+  /* Use the last position we tracked for this pointer, not the coordinates
+     on the release event: some touch stacks report those as zero. Movement
+     is the real test of tap-versus-drag; the time limit is generous so that
+     a slow device cannot turn a tap into a non-event. */
+  if(wasLast && !didPinch
+     && performance.now()-downT < 1500
+     && Math.hypot(rec.x-downX, rec.y-downY) < 12 && travel < 18){
+    setHud(!hudShown);
+  }
+}
+addEventListener("pointerup", liftPointer);
+addEventListener("pointercancel", liftPointer);
+
+/* If a release is ever lost — the OS claims the gesture, the user switches
+   apps mid-pinch — the tracked pointers would stick and input would stay
+   jammed. Drop them whenever we lose the window. */
+function clearPointers(){ if(ptrs.size){ ptrs.clear(); rebase(); } }
+addEventListener("blur", clearPointers);
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden) clearPointers(); });
+
+canvas.addEventListener("wheel",e=>{
+  e.preventDefault();
+  CAM.zoom = clamp(CAM.zoom*Math.exp(e.deltaY*0.0011), 0.44, 2.6);
+  CAM.tDist = fitDist()*CAM.zoom;
+},{passive:false});
+
+/* Belt and braces against the browser zooming the whole page: trackpad
+   pinch arrives as ctrl+wheel, and Safari sends its own gesture events. */
+addEventListener("wheel", e=>{ if(e.ctrlKey) e.preventDefault(); }, {passive:false});
+["gesturestart","gesturechange","gestureend"].forEach(t=>
+  addEventListener(t, e=>e.preventDefault(), {passive:false}));
+document.addEventListener("dblclick", e=>e.preventDefault());
+document.addEventListener("contextmenu", e=>{ if(e.target===canvas) e.preventDefault(); });
+
+document.querySelectorAll(".sp").forEach(b=>{
+  b.addEventListener("click",e=>{
+    e.stopPropagation();
+    speed=parseFloat(b.dataset.s);
+    document.querySelectorAll(".sp").forEach(x=>x.classList.toggle("on",x===b));
+    updateHUD();
+  });
+});
+addEventListener("keydown",e=>{
+  if(e.code==="Space"){ e.preventDefault(); setPaused(!paused); }
+  else if(e.key==="h"||e.key==="H"){ setHud(!hudShown); }
+  else if(e.key==="1"||e.key==="2"||e.key==="3"){
+    const b=document.querySelectorAll(".sp")[+e.key-1]; if(b) b.click();
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+   5.  HUD
+   ══════════════════════════════════════════════════════════════════════ */
+const BARDEF=[
+  {k:"ocean", lab:"sea",    col:"#3b7fa8"},
+  {k:"forest",lab:"forest", col:"#3f7a3a"},
+  {k:"grass", lab:"grass",  col:"#8a9245"},
+  {k:"desert",lab:"desert", col:"#c1a06a"},
+  {k:"ice",   lab:"ice",    col:"#cfe0ea"}
+];
+const barsEl=document.getElementById("bars");
+BARDEF.forEach(b=>{
+  const d=document.createElement("div"); d.className="bar";
+  d.innerHTML='<div class="val">--</div><div class="track"><div class="fill" style="background:'+b.col+'"></div></div><div class="lab">'+b.lab+'</div>';
+  barsEl.appendChild(d); b.el=d;
+});
+/* Explicit units. "0:40" left it ambiguous whether that was 40 seconds or
+   40 minutes, which is exactly the confusion the line was meant to remove. */
+const dur = sec => {
+  if(sec < 90) return Math.round(sec)+" sec";
+  if(sec < 600) return (sec/60).toFixed(1).replace(/\.0$/,"")+" min";
+  return Math.round(sec/60)+" min";
+};
+function updateHUD(){
+  const t=Math.max(0, S.time-S.epoch0);
+  const hh=Math.floor(t/3600), mm=Math.floor(t/60)%60, ss=Math.floor(t)%60;
+  document.getElementById("clock").textContent =
+    hh+":"+String(mm).padStart(2,"0")+":"+String(ss).padStart(2,"0");
+
+  const yr=Math.floor(t/YEAR)+1;
+  const sl=S.solarLat;
+  const season = sl >  TILT*0.35 ? "northern summer"
+              : (sl < -TILT*0.35 ? "southern summer" : "equinox");
+  const meanF = S.stats.temp*9/5 + 32;
+  document.getElementById("clocklabel").textContent =
+    "watching · year "+yr+" · "+season+" · mean "+Math.round(meanF)+"°F";
+
+  /* The three processes are compressed by deliberately different factors,
+     so there is no single geological clock to show. State the rates instead. */
+  /* three short lines rather than one long one, so it survives a phone */
+  document.getElementById("sc1").textContent =
+    "a day is "+dur(DAY)+(speed>1 ? "   (×"+speed+" — rotation not sped up)" : "");
+  document.getElementById("sc2").textContent = "a year is "+dur(YEAR/speed);
+  document.getElementById("sc3").textContent = "continents change in "+dur(2400/speed);
+  BARDEF.forEach(b=>{
+    const v=(S.stats[b.k]||0);
+    b.el.querySelector(".fill").style.width=Math.min(100,v*100/0.7)+"%";
+    b.el.querySelector(".val").textContent=Math.round(v*100)+"%";
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   6.  boot: build a world that already has a history
+   ══════════════════════════════════════════════════════════════════════ */
+function seedWorld(){
+  const __t0=performance.now();
+  rebuildBand(0,GH,0);
+  computeProx();
+  for(let k=0;k<GN;k++){ F.moist[k]=0.5; F.veg[k]=0.25; F.snow[k]=0.0; }
+  let settled=0;
+  for(let n=0;n<440;n++){
+    S.time += 8;
+    if(n%14===0) rebuildBand(0,GH,S.time);
+    if(n%4===0)  computeProx();
+    stepFields(8);
+    if(n>110){
+      const st=S.stats;
+      const dOfL = st.desert/Math.max(1e-6, st.land);
+      const ok = Math.abs(st.ocean-TARGET.ocean) < 0.020 &&
+                 Math.abs(st.ice  -TARGET.ice)   < 0.030 &&
+                 Math.abs(dOfL-TARGET.desertOfLand) < 0.105;
+      if(ok){ if(++settled > 18) break; } else settled = 0;
+    }
+  }
+  S.epoch0 = S.time;
+  window.__bootMs = Math.round(performance.now()-__t0);
+  packTexture(); uploadData();
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   7.  frame loop
+   ══════════════════════════════════════════════════════════════════════ */
+const mVP=M4(), mProj=M4(), mView=M4(), mInvVP=M4();
+const rot3=new Float32Array(9);
+/* The planet's axis is fixed in space. Seasons come from the sun riding up
+   and down across the equator through the year — which gives the same
+   advancing and retreating snow line as an orbit, without swinging the
+   surface around or putting the world into phases. */
+const SUNU = (()=>{ const v=[0.80,0.0,0.60];
+  const dp=v[0]*POLE[0]+v[1]*POLE[1]+v[2]*POLE[2];
+  const u=[v[0]-POLE[0]*dp, v[1]-POLE[1]*dp, v[2]-POLE[2]*dp];
+  const l=1/Math.hypot(u[0],u[1],u[2]); return [u[0]*l,u[1]*l,u[2]*l]; })();
+const SUN=[SUNU[0],SUNU[1],SUNU[2]];
+function updateSun(){
+  const c=Math.cos(S.solarLat), s=Math.sin(S.solarLat);
+  SUN[0]=SUNU[0]*c+POLE[0]*s;
+  SUN[1]=SUNU[1]*c+POLE[1]*s;
+  SUN[2]=SUNU[2]*c+POLE[2]*s;
+}
+
+const DAY = 150;                 // real seconds per rotation
+let spin=0, cloudDrift=0, frozen=false;
+let dpr = Math.min(devicePixelRatio||1, 2);
+let frameAcc=0, frameN=0;
+let simAccum=0, bandCursor=0, hudAcc=0, DEBUG=0;
+let last=performance.now();
+let started=false;
+
+function resize(){
+  /* measure the canvas box itself rather than innerHeight: on phones the
+     address bar makes innerHeight disagree with what is actually painted */
+  const cw = canvas.clientWidth  || innerWidth;
+  const ch = canvas.clientHeight || innerHeight;
+  const w=Math.max(1,Math.round(cw*dpr)), h=Math.max(1,Math.round(ch*dpr));
+  if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; }
+}
+function relayout(){
+  dpr=Math.min(devicePixelRatio||1,2); resize();
+  CAM.tDist = fitDist()*CAM.zoom;
+}
+addEventListener("resize", relayout);
+addEventListener("orientationchange", ()=>setTimeout(relayout,220));
+if(window.visualViewport){
+  visualViewport.addEventListener("resize", relayout);
+}
+
+function frame(now){
+  requestAnimationFrame(frame);
+  let dt=(now-last)/1000; last=now;
+  if(dt>0.25) dt=0.25;
+
+  /* adaptive resolution */
+  frameAcc+=dt; frameN++;
+  if(frameN>=45){
+    const fps=frameN/frameAcc;
+    if(fps<38 && dpr>0.75){ dpr=Math.max(0.75,dpr*0.82); resize(); }
+    else if(fps>57 && dpr < Math.min(devicePixelRatio||1,2)-0.02){
+      dpr=Math.min(Math.min(devicePixelRatio||1,2), dpr*1.08); resize(); }
+    frameAcc=0; frameN=0;
+  }
+
+  if(!paused && !frozen){
+    spin += dt*(Math.PI*2/DAY);
+    cloudDrift += dt*(Math.PI*2/DAY)*0.06;
+  }
+  if(!paused) simAccum += dt;
+
+  /* ---- world update at ~12 Hz, terrain rebuilt one band at a time ---- */
+  if(simAccum >= 0.084 && !paused){
+    const step = Math.min(simAccum*speed, 45);
+    simAccum = 0;
+    S.time += step;
+    const rows = Math.ceil(GH/10);
+    rebuildBand(bandCursor, Math.min(GH,bandCursor+rows), S.time);
+    bandCursor = (bandCursor+rows) % GH;
+    if(bandCursor===0) computeProx();
+    stepFields(step);
+    /* The ecology needs its own clock scaled against the climate's, or the
+       piece breaks at exactly the settings people use to watch it change: run
+       the plants once per tick and at x100 the coastlines race away from them,
+       leaving an ecology permanently chasing a world it can never catch. */
+    plantDebt = Math.min(400, plantDebt + Math.max(1, Math.min(64, Math.round(speed))));
+    packTexture(); uploadData();
+    hudAcc++; if(hudAcc>=4){ hudAcc=0; updateHUD(); }
+  }
+  renderPlants();
+
+  /* Growth is *owed* by the simulation tick and *paid* across the frames that
+     follow, against a wall-clock budget. Sixty-four steps in one lump is forty
+     milliseconds — a dropped frame every tick at x100, which is precisely the
+     setting someone reaches for to watch it change. Spread, the same work is
+     invisible, and on slow hardware the budget simply pays less. */
+  if(plantsOn && plantDebt > 0 && !paused){
+    const t0 = performance.now();
+    while(plantDebt > 0 && performance.now() - t0 < 3.0){ plantsStep(); plantDebt--; }
+  }
+
+  updateSun();
+
+  /* ---- camera ---- */
+  CAM.dist += (CAM.tDist-CAM.dist)*Math.min(1,dt*3.0);
+  /* a very slow breath, so the framing never feels locked off */
+  const bob = 0.028*Math.sin(now*0.000012);
+  const py=CAM.pitch+bob;
+  const eye=[Math.cos(py)*Math.sin(CAM.yaw)*CAM.dist,
+             Math.sin(py)*CAM.dist,
+             Math.cos(py)*Math.cos(CAM.yaw)*CAM.dist];
+  const W=canvas.width, Hh=canvas.height;
+  perspective(mProj, FOVY, W/Hh, 0.35, 30);
+  lookAt(mView, eye,[0,0,0],[0,1,0]);
+  mul(mVP,mProj,mView); invert(mInvVP,mVP);
+
+  /* planet orientation: a fixed tilted axis, spinning */
+  const ca=Math.cos(AZ0), sa=Math.sin(AZ0), ct=Math.cos(TILT), st=Math.sin(TILT);
+  const cs=Math.cos(spin), ss=Math.sin(spin);
+  /* R = Ry(az) * Rz(tilt) * Ry(spin), column-major mat3 */
+  const A=[ca,0,-sa, 0,1,0, sa,0,ca];
+  const B=[ct,st,0, -st,ct,0, 0,0,1];
+  const C=[cs,0,-ss, 0,1,0, ss,0,cs];
+  const AB=m3(A,B), R=m3(AB,C);
+  rot3.set(R);
+
+  /* The ring is an orientation cue, so it is worth most where the whole
+     ellipse is in frame and worth nothing close in, where it is just an arc
+     sweeping past. Fade it out as you come down, hold it at full strength on
+     the way out — and take its shadow with it, or the band would go on
+     falling from a ring that is no longer there. */
+  const ringFade = smoothstep(1.95, 3.05, CAM.dist);
+
+  gl.viewport(0,0,W,Hh);
+  gl.clearColor(0,0,0,1);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+
+  /* background */
+  gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
+  gl.useProgram(bgProg);
+  gl.uniform2f(bgProg.u.uRes,W,Hh);
+  gl.uniformMatrix4fv(bgProg.u.uInvVP,false,mInvVP);
+  gl.uniform3fv(bgProg.u.uCam,eye);
+  gl.uniform1f(bgProg.u.uT, now*0.001);
+  gl.uniform3fv(bgProg.u.uSun, SUN);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,skyTex);
+  gl.uniform1i(bgProg.u.uSky,1);
+  gl.bindVertexArray(quadVAO); gl.drawArrays(gl.TRIANGLES,0,3);
+
+  /* planet */
+  gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+  gl.useProgram(planetProg);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,dataTex);
+  gl.uniform1i(planetProg.u.uData,0);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,plantTex);
+  gl.uniform1i(planetProg.u.uPlant,2);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.uniformMatrix4fv(planetProg.u.uVP,false,mVP);
+  gl.uniformMatrix3fv(planetProg.u.uRot,false,rot3);
+  gl.uniform1f(planetProg.u.uScale,1.0);
+  gl.uniform3fv(planetProg.u.uSun,SUN);
+  gl.uniform3fv(planetProg.u.uCam,eye);
+  gl.uniform1f(planetProg.u.uSea,S.seaLevel);
+  gl.uniform1f(planetProg.u.uSolarLat,S.solarLat);
+  gl.uniform1f(planetProg.u.uGT,S.globalTemp);
+  gl.uniform1f(planetProg.u.uT, S.time);
+  gl.uniform1i(planetProg.u.uDebug, DEBUG);
+  gl.uniform3fv(planetProg.u.uRingN, POLE);
+  gl.uniform1f(planetProg.u.uRingFade, ringFade);
+  gl.bindVertexArray(sphVAO);
+  gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
+
+  /* clouds */
+  gl.depthMask(false); gl.enable(gl.BLEND);
+  gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(cloudProg);
+  gl.uniform1i(cloudProg.u.uData,0);
+  gl.uniformMatrix4fv(cloudProg.u.uVP,false,mVP);
+  gl.uniformMatrix3fv(cloudProg.u.uRot,false,rot3);
+  gl.uniform1f(cloudProg.u.uScale,1.016);
+  gl.uniform3fv(cloudProg.u.uSun,SUN);
+  gl.uniform3fv(cloudProg.u.uCam,eye);
+  gl.uniform1f(cloudProg.u.uT,S.time);
+  gl.uniform1f(cloudProg.u.uDrift,cloudDrift);
+  gl.uniform1f(cloudProg.u.uFade, smoothstep(1.55,2.50,CAM.dist));
+  gl.uniform3fv(cloudProg.u.uRingN, POLE);
+  gl.uniform1f(cloudProg.u.uRingFade, ringFade);
+  gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
+
+  /* Ring. Same blend and culling the clouds just left set, and the depth the
+     planet wrote already hides the far half. */
+  if(ringFade > 0.002){
+    gl.useProgram(ringProg);
+    gl.uniformMatrix4fv(ringProg.u.uVP,false,mVP);
+    gl.uniform3fv(ringProg.u.uSun,SUN);
+    gl.uniform3fv(ringProg.u.uCam,eye);
+    gl.uniform3fv(ringProg.u.uRingN,POLE);
+    gl.uniform1f(ringProg.u.uRingFade, ringFade);
+    gl.uniform1f(ringProg.u.uPixel, 2.0*Math.tan(FOVY*0.5)/Math.max(1,Hh));
+    gl.bindVertexArray(ringVAO);
+    gl.drawElements(gl.TRIANGLES,RING.idx.length,gl.UNSIGNED_INT,0);
+    gl.bindVertexArray(sphVAO);
+  }
+
+  /* atmosphere */
+  gl.blendFunc(gl.ONE,gl.ONE); gl.cullFace(gl.FRONT);
+  gl.useProgram(atmoProg);
+  gl.uniformMatrix4fv(atmoProg.u.uVP,false,mVP);
+  gl.uniformMatrix3fv(atmoProg.u.uRot,false,rot3);
+  gl.uniform1f(atmoProg.u.uScale,1.34);
+  gl.uniform3fv(atmoProg.u.uSun,SUN);
+  gl.uniform3fv(atmoProg.u.uCam,eye);
+  gl.uniform1f(atmoProg.u.uAtmR,1.34);
+  gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
+  gl.cullFace(gl.BACK);
+  gl.bindVertexArray(null);
+}
+
+function m3(a,b){
+  const o=new Float32Array(9);
+  for(let c=0;c<3;c++)for(let r=0;r<3;r++){
+    o[c*3+r]=a[0*3+r]*b[c*3+0]+a[1*3+r]*b[c*3+1]+a[2*3+r]*b[c*3+2];
+  }
+  return o;
+}
+
+/* ---- go ---- */
+resize();
+CAM.dist = CAM.tDist = fitDist();
+requestAnimationFrame(()=>{
+  seedWorld();
+  plantsSeed();
+  updateHUD();
+  started=true;
+  requestAnimationFrame(frame);
+  setTimeout(()=>document.getElementById("splash").classList.add("gone"),120);
+  setTimeout(()=>{ const s=document.getElementById("splash"); if(s) s.remove(); },2200);
+});
+
+/* small hook used for testing / scripted fast-forward */
+window.__world = {
+  S, F,
+  setSpeed(v){ speed=v; },
+  debug(v){ DEBUG=v|0; },
+  freeze(v){ spin=v; frozen=true; },
+  setView(y,pi,z){ CAM.yaw=y; CAM.pitch=pi; if(z){CAM.zoom=z;} CAM.tDist=fitDist()*CAM.zoom; },
+  sunDir(){ return [SUN[0],SUN[1],SUN[2]]; },
+  cam(){ return CAM; },
+  pointerCount(){ return ptrs.size; },
+  params(){ return PARAMS; },
+  /* pass true to zero the sampling accumulators, so the next reading covers
+     only the interval since this one */
+  plants(reset){ return plantStats(reset); },
+  /* the algorithm one lineage is actually running, printed. A genome that can
+     be read is the difference between "selection is doing something" and
+     knowing what it is doing */
+  printGenome(i){ return genomeText(i); },
+  /* run growth on its own, so the form can be judged without waiting for the
+     climate to catch up */
+  growPlants(ticks){ for(let i=0;i<(ticks|0);i++) plantsStep(); },
+  /* Run the world the way the frame loop does — climate and plants together at
+     the same relative rate — because everything measured with growPlants above
+     was measured on a planet that never moved, and this project's whole claim
+     is that a moving climate is what stops adaptation completing. */
+  runWorld(ticks, mult){
+    const spd = mult || 1;
+    for(let i=0;i<(ticks|0);i++){
+      const step = Math.min(0.084*spd, 45);
+      S.time += step;
+      const rows = Math.ceil(GH/10);
+      rebuildBand(bandCursor, Math.min(GH,bandCursor+rows), S.time);
+      bandCursor = (bandCursor+rows) % GH;
+      if(bandCursor===0) computeProx();
+      stepFields(step);
+      plantsStep();
+    }
+    packTexture(); uploadData(); updateHUD();
+  },
+  advance(seconds, chunks){
+    chunks = chunks || Math.max(1, Math.round(seconds/8));
+    const step = seconds/chunks;
+    for(let i=0;i<chunks;i++){
+      S.time += step;
+      rebuildBand(0,GH,S.time);
+      if(i%3===0) computeProx();
+      stepFields(step);
+    }
+    packTexture(); uploadData(); updateHUD();
+  }
+};
+
+})();
+</script>
+</body>
+</html>
