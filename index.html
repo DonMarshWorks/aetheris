@@ -421,6 +421,19 @@ const PARAMS = {
   kinr:    3.0,     // how far that crowd is counted, in steps
   kind:    1.30,    // affinity distance within which a neighbour counts as kin
   rare:    0.00,    // how much being a COMMON strategy globally shortens a life
+  nodemut: 0.07,    // chance a *first* child mutates anyway. Variation is
+                    // otherwise minted only at bifurcations, so an unbranched
+                    // lineage cannot evolve at all — it copies itself down a
+                    // vine for ever. This is the floor under that.
+  affmod:  1.60,    // how far the formula may swing an inherited affinity,
+                    // as a multiplier either way. Not a replacement for the
+                    // inherited vector, deliberately: a node that could set
+                    // its own affinity outright would simply copy the ground
+                    // it stands on, score maximum fit everywhere, and the
+                    // whole niche structure would dissolve into one immortal
+                    // generalist wearing local colours. Modulating a heritable
+                    // base keeps the budget and the lineage, and still lets one
+                    // plant hold sea nodes and forest nodes at once.
   hgt:     0.05,    // chance a bifurcation copies a block of instructions from a
                     // touching *foreign* lineage instead of only mutating.
                     // Lichens are literally symbioses, so it is thematically
@@ -433,6 +446,12 @@ const PARAMS = {
                     // measured on the affinity vector. This is what makes
                     // species barriers emergent rather than declared.
   mut:     1.00,    // strength of the affinity mutation minted at a bifurcation
+  younger: 0.30,    // a young body is held to this fraction of `minfrag`, the
+                    // threshold rising to the full value as it ages through
+                    // `settle`. Clear out the deadwood, give the young a
+                    // chance — and it takes the sharp edge off a cull that
+                    // was all-or-nothing at a fixed age, which is what made
+                    // raising `minfrag` an extinction cliff.
   minfrag: 45,      // a severed piece smaller than this is not viable. Wood
                     // rotting through chops plants up at a fixed rate, so
                     // without a real floor the world silts up with two- and
@@ -463,7 +482,15 @@ const PARAMS = {
                     // winning, flung across the planet, so a high rate is the
                     // current champion reseeding itself everywhere. Dropping
                     // 0.030 -> 0.006 took niche evenness from 0.56 to 0.86.
-  settle:  400,     // ticks a young body is spared the fragment cull
+  settle:  2000,    // ticks over which a young body grows into the fragment
+                    // cull. It was 400, set when a fixed slot table made
+                    // growth efficient; once the genome picks its own angles
+                    // it wastes far more buds, no founder could reach the
+                    // threshold in time, and the world went sterile. This is
+                    // the parameter that decides whether a new strategy gets
+                    // long enough to prove itself, and it has to be generous:
+                    // at 2000 every one of the twenty strategies stays
+                    // occupied and mean fit nearly doubles.
   rot:     900,     // ticks dead wood holds before the connection rots through
 };
 (function(){
@@ -970,9 +997,10 @@ const NADDR = NIN + NK + PLEN;                             // the read space
 
    Between them: fan 0 drift 0 is a spike, fan 0 drift small is an arc, fan wide
    is a bush, and each is one number away from the others. */
-const NOUT  = 5;
-const O_CAP=0, O_SPREAD=1, O_PACE=2, O_VIG=3, O_ANGLE=4;
-const OUTNAME = ["capacity","spread","pace","vigour","angle"];
+const NOUT  = 10;
+const O_CAP=0, O_SPREAD=1, O_PACE=2, O_VIG=3, O_ANGLE=4, O_AFF=5;
+const OUTNAME = ["capacity","spread","pace","vigour","angle",
+                 "affSea","affIce","affDesert","affGrass","affForest"];
 
 /* One instruction is (op, a, b, c). Writing to slot *i* rather than to a named
    register is what makes the active path walkable backwards from the outputs,
@@ -1397,8 +1425,9 @@ const OUTHIST = new Int32Array(NOUT*NBIN_H);
 const OUTMIN = new Float32Array(NOUT), OUTMAX = new Float32Array(NOUT);
 const OUTRAW = new Float64Array(NOUT);              // mean |raw|, before squashing
 let outN = 0, angN = 0;
-const OUTLO = new Float32Array([1, PARAMS.splo, 0, -1, -PARAMS.angmax]);
-const OUTHI = new Float32Array([KIDMAX+1, PARAMS.sphi, 1,  1, PARAMS.angmax]);
+const AFLO = 1/PARAMS.affmod, AFHI = PARAMS.affmod;
+const OUTLO = new Float32Array([1, PARAMS.splo, 0, -1, -PARAMS.angmax, AFLO,AFLO,AFLO,AFLO,AFLO]);
+const OUTHI = new Float32Array([KIDMAX+1, PARAMS.sphi, 1,  1, PARAMS.angmax, AFHI,AFHI,AFHI,AFHI,AFHI]);
 /* Does a node give its children *different* headings? That is the question the
    evolved angle exists to make interesting, and no population statistic answers
    it — a lineage emitting one constant angle and one emitting a spread of them
@@ -1794,6 +1823,21 @@ function readBirthOutputs(i){
   runProgram(i);
   const cap = 1 + (((KIDMAX-0.001)*squash(OUTV[O_CAP]))|0);
   const pace = squash(OUTV[O_PACE]);
+  /* The inherited vector says what this lineage is for; the formula says how
+     this particular node leans, given where it found itself. One body can then
+     hold sea nodes and forest nodes at once — which is what a plant that can
+     sense terrain ought to be able to do — without any node being able to
+     simply become whatever it is standing on. */
+  const o=i*G;
+  for(let n=0;n<5;n++){
+    const m = AFLO*Math.pow(AFHI/AFLO, squash(OUTV[O_AFF+n]));
+    GENE[o+n] = Math.max(0.02, Math.min(5, GENE[o+n]*m));
+    recordOut(O_AFF+n, m);
+  }
+  normalise(o);
+  { const e=i*5; let f=0;
+    for(let n=0;n<5;n++) f+=GENE[o+n]*NENV[e+n];
+    NFIT[i]=f; }
   NCAP[i]=cap; NPACE[i]=pace;
   /* Two plants of similar colour standing side by side were impossible to tell
      apart. Size and aspect are quantised into a few classes off the genome
@@ -1868,7 +1912,17 @@ function addNode(x,y,z,hx,hy,hz,src,par,amt,stepUsed){
        no need to exclude it */
     if(PARAMS.hgt>0 && prnd()<PARAMS.hgt) borrowFrom(i,x,y,z,PROOT[src]);
   }
-  else inherit(src,i);
+  else {
+    inherit(src,i);
+    /* Variation is otherwise minted only where a branch forks, so a lineage
+       that never branches copies itself down a vine for ever and cannot
+       evolve at all. A small chance on every node is the floor under that. */
+    if(prnd() < PARAMS.nodemut){
+      const n=PARAMS.pmut*mutScale();
+      let k=n|0; if(prnd() < n-k) k++;
+      for(let t=0;t<k;t++) pointMutate(i);
+    }
+  }
   NGEN[i]++; NPAR[i]=par; NPGEN[i] = par>=0 ? NGEN[par] : -1;
   NLK[i]=0; if(par>=0) NLK[par]++;
   PROOT[i] = par>=0 ? PROOT[par] : i;   /* body identity, kept fresh between sweeps */
@@ -2207,9 +2261,25 @@ function pruneFragments(){
   /* A body that has just been founded is one node, which is below any sane
      minimum. Spare it until it has had time to establish, or the cull becomes
      a ratchet that removes bodies and never lets one begin. */
-  const settle = PARAMS.settle|0;
+  const settle = Math.max(1, PARAMS.settle|0), yf = PARAMS.younger;
   for(let i=0;i<nodeHigh;i++){
-    if(NLIVE[i]===1 && PSIZE[PROOT[i]] < minf && ptick-NBORN[PROOT[i]] > settle) killNode(i);
+    if(NLIVE[i]===1){
+      const r=PROOT[i];
+      /* the threshold a body must clear rises as it ages: lenient while it is
+         establishing, full strength once it has had its chance. A single
+         switch at a fixed age is what made raising `minfrag` an extinction
+         cliff — every founder was measured against the full bar the instant
+         its grace ran out. */
+      /* A body is founded with exactly one node, so the bar has to start at
+         nothing and rise — starting it at a *fraction* of the full threshold
+         culls every founder on the tick it appears, and the planet is sterile
+         within a few hundred ticks. Spared outright for the first `younger` of
+         its grace, then the bar climbs to full by the end of it. */
+      let a=((ptick-NBORN[r])/settle - yf)/Math.max(1e-3,1-yf);
+      a = a<0?0:(a>1?1:a);
+      const need=minf*a*a*(3-2*a);
+      if(PSIZE[r] < need) killNode(i);
+    }
     else if(NLIVE[i]===2 && PSIZE[PROOT[i]]===0) freeNode(i);
   }
 }
