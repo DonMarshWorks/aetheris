@@ -268,6 +268,7 @@ const PARAMS = {
   kin:     0.72,    // how much a crowd of near-relatives shortens a life
   kinr:    3.0,     // how far that crowd is counted, in steps
   kind:    1.30,    // affinity distance within which a neighbour counts as kin
+  rare:    0.00,    // how much being a COMMON strategy globally shortens a life
   mut:     1.00,    // strength of the mutation minted at each bifurcation
   minfrag: 5,       // a severed piece smaller than this is not viable
   hostile: 150,     // ticks a node lasts on ground that does not suit it at all
@@ -835,6 +836,30 @@ function kinPressure(i){
   return all>0 ? kin/all : 0;
 }
 
+/* The strategy a genome is pursuing, coarsely: which of the five it leans on,
+   and how hard. Coarse on purpose — scored finely enough, every lineage is
+   unique, everyone is rare, and frequency dependence has nothing to bite on. */
+const CENSUS = new Int32Array(32);
+let censusN = 0, kinMean = 0, kinSpread = 0;
+function strategyOf(o){
+  let mx=0, at=0;
+  for(let g=0;g<5;g++) if(GENE[o+g]>mx){ mx=GENE[o+g]; at=g; }
+  const spec = Math.max(0, Math.min(0.999, (mx-1)/4));
+  return at*4 + ((spec*4)|0);
+}
+/* Rarity has to be measured where rarity exists. A neighbourhood cannot see it:
+   growth here is clonal and local, so a node sits among its own siblings whether
+   its strategy is unique in the world or universal. Count the whole living
+   population instead, and let being common be what costs. */
+function census(){
+  CENSUS.fill(0); censusN = 0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]!==1) continue;
+    CENSUS[strategyOf(i*G)]++; censusN++;
+  }
+}
+function commonness(o){ return censusN>0 ? CENSUS[strategyOf(o)]/censusN : 0; }
+
 function cellAt(x,y,z){
   const lat=Math.asin(Math.max(-1,Math.min(1,y)));
   const lon=Math.atan2(z,x);
@@ -1033,8 +1058,10 @@ function reap(){
     if((n&7)===0){
       const o=i*G, f=fitAt(NPX[i],NPY[i],NPZ[i],o);
       const crowd = PARAMS.kin>0 ? kinPressure(i) : 0;
+      const freq  = PARAMS.rare>0 ? commonness(o) : 0;
       NLIFE[i]=Math.max(PARAMS.hostile|0,
-        (PARAMS.life*f*(1.40-0.80*GENE[o+G_PACE])*(1-PARAMS.kin*crowd))|0);
+        (PARAMS.life*f*(1.40-0.80*GENE[o+G_PACE])
+          *(1-PARAMS.kin*crowd)*(1-PARAMS.rare*freq))|0);
     }
   }
 }
@@ -1165,7 +1192,7 @@ function plantsStep(){
   if(!plantsOn) return;
   ptick++;
   reap();
-  if(PARAMS.sweep>0 && ptick%(PARAMS.sweep|0)===0) pruneFragments();
+  if(PARAMS.sweep>0 && ptick%(PARAMS.sweep|0)===0){ pruneFragments(); census(); }
 
   /* Attempts used to be drawn from one global frontier, which made a form's
      growth proportional to how much of the world it already held — so the
@@ -2668,6 +2695,16 @@ window.__world = {
        are differentiating: which of the five each is committed to, and how
        committed. A collapse to one column, or to no commitment at all, is the
        failure this whole design is trying to avoid. */
+    /* the test of the diagnosis: if local kin pressure barely varies between
+       nodes, it is measuring how clonal growth is and not how rare a strategy
+       is, and it can never create frequency dependence */
+    let ks=0, ks2=0, kn=0;
+    for(let i=0;i<nodeHigh;i+=97){
+      if(NLIVE[i]!==1) continue;
+      const c=kinPressure(i); ks+=c; ks2+=c*c; kn++;
+    }
+    kinMean = kn? ks/kn : 0;
+    kinSpread = kn? Math.sqrt(Math.max(0, ks2/kn - kinMean*kinMean)) : 0;
     const per=[0,0,0,0,0]; let spec=0, pace=0;
     for(let i=0;i<nodeHigh;i++){
       if(NLIVE[i]!==1) continue;
@@ -2678,6 +2715,9 @@ window.__world = {
     return { live:liveN, wood:woodN, slots:nodeHigh, deaths, bodies:comps,
              meanBody:+meanComp.toFixed(1), largestBody:bigFrag,
              frontier:frontN, tick:ptick,
+             kinMean:+kinMean.toFixed(3), kinSpread:+kinSpread.toFixed(3),
+             strategies:Array.from(CENSUS).filter(v=>v>0).length,
+             topStrategy:+(Math.max(...CENSUS)/Math.max(1,censusN)).toFixed(3),
              specialisation:+(spec/Math.max(1,liveN)).toFixed(3),
              pace:+(pace/Math.max(1,liveN)).toFixed(3),
              niche:{sea:per[0], ice:per[1], desert:per[2], grass:per[3], forest:per[4]} };
