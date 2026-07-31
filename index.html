@@ -263,8 +263,9 @@ const PARAMS = {
   soft:    0.50,    // how soft the footprint edge is, 0..1
   alpha:   0.80,    // how much of the ground a mature node hides
   mature:  90,      // ticks from bud to full width
-  life:    2600,    // ticks a perfectly placed node lives; poor fits die sooner
-  vary:    0.30,    // colour drift minted at each bifurcation
+  life:    1500,    // ticks per unit of fit; a pure specialist at home gets 5x
+  viable:  0.40,    // fit below which a node will not even be attempted
+  mut:     1.00,    // strength of the mutation minted at each bifurcation
   minfrag: 5,       // a severed piece smaller than this is not viable
   hostile: 150,     // ticks a node lasts on ground that does not suit it at all
   sweep:   40,      // ticks between one pass of connected-component labelling
@@ -627,11 +628,10 @@ const PW = 2048, PH = 1024;                 // the sheet plants are drawn into
 const PMAX  = PARAMS.budget|0;
 const NPX=new Float32Array(PMAX), NPY=new Float32Array(PMAX), NPZ=new Float32Array(PMAX);
 const NHX=new Float32Array(PMAX), NHY=new Float32Array(PMAX), NHZ=new Float32Array(PMAX);
-const NKID=new Uint8Array(PMAX), NSP=new Uint8Array(PMAX), NFAIL=new Uint8Array(PMAX);
+const NKID=new Uint8Array(PMAX), NFAIL=new Uint8Array(PMAX);
 const NLIVE=new Uint8Array(PMAX), NBIN=new Int32Array(PMAX);
 const NBORN=new Int32Array(PMAX), NLIFE=new Int32Array(PMAX);
 const NPAR=new Int32Array(PMAX), NPGEN=new Int32Array(PMAX), NGEN=new Int32Array(PMAX);
-const NTINT=new Float32Array(PMAX);         // colour drift, inherited along a sector
 const PFRONT = new Int32Array(PMAX), PFREE = new Int32Array(PMAX);
 let nodeHigh = 0, liveN = 0, frontN = 0, freeN = 0;
 let ptick = 0, reapCursor = 0, plantsDirty = true, deaths = 0, woodN = 0, comps = 0, meanComp = 0, bigFrag = 0;
@@ -642,29 +642,112 @@ const CSTAMP=new Int32Array(PMAX);   // last turn a body was allowed to bud
 let pseed = (SEED ^ 0x85ebca6b)>>>0 || 1;
 function prnd(){ pseed=(pseed*1664525+1013904223)>>>0; return pseed/4294967296; }
 
-/* Four hand-written forms with overlapping niches, so they have to contest
-   ground and the borders can be judged. Colour is picked to match the niche
-   rather than the lineage — the rule the real genome→colour mapping will
-   follow, worth honouring even while the genome is imaginary.
-   Colours are lichen colours, not leaf colours, and that is deliberate: the
-   ground already owns the greens and ochres, so a plant painted in them is
-   invisible from orbit however well it is grown. */
-const SPECIES = [
-  { name:"weft",  branch:0.22, turn:0.60, wander:0.35, spread:0.55, elong:3.0,
-    tlo:-8, thi:15, mlo:0.30, mhi:1.0, col:[178,192,166] },
-  { name:"crown", branch:0.44, turn:1.00, wander:0.40, spread:0.85, elong:1.0,
-    tlo:10, thi:40, mlo:0.42, mhi:1.0, col:[ 26, 82, 76] },
-  { name:"scurf", branch:0.52, turn:0.75, wander:0.55, spread:1.10, elong:1.0,
-    tlo: 4, thi:40, mlo:0.00, mhi:0.46, col:[176, 98, 42] },
-  { name:"rime",  branch:0.26, turn:0.95, wander:0.15, spread:0.60, elong:2.2,
-    tlo:-40, thi: 3, mlo:0.00, mhi:1.0, col:[208,206,222] },
-  /* The sea is two thirds of the arena and was inert. Depth stands in for the
-     nutrient limit that makes real ocean productivity coastal: a shelf-dweller
-     fringes every shore and leaves the open water empty, which is both what
-     the ocean actually looks like and what stops one marine form sweeping it. */
-  { name:"kelp",  sea:true, branch:0.30, turn:0.85, wander:0.45, spread:0.75, elong:2.4,
-    tlo:-2, thi:27, dmax:0.085, col:[112,128, 52] },
+/* ---- the genome ----
+   Eleven numbers, inherited whole and mutated where a branch forks. Numbers
+   before programs: this is enough for real selection — specialists against
+   generalists, fast and cheap against slow and tough — and if lineages will
+   not differentiate on eleven floats they will not differentiate on sixty
+   instructions either, only it will be much harder to see why. Conditional
+   behaviour, and with it any question about formula length, comes after.
+
+   The first five are affinities for the five environments the climate
+   controller already holds in balance. That is the whole argument for this
+   planet as an arena: the controller guarantees each of the five continues to
+   exist and merely moves it, so a specialist for any one of them always has
+   somewhere to live, and never has it for long. */
+const G = 11;                   // genes per node
+const G_SEA=0, G_ICE=1, G_DES=2, G_GRA=3, G_FOR=4,
+      G_PACE=5, G_BRANCH=6, G_TURN=7, G_WANDER=8, G_SPREAD=9, G_ELONG=10;
+const GENE = new Float32Array(PMAX*G);
+/* lo, hi, mutation step */
+const GLIM = [
+  [0.02,5,0.30],[0.02,5,0.30],[0.02,5,0.30],[0.02,5,0.30],[0.02,5,0.30],
+  [0.00,1.00,0.10],   // pace: growth bought with lifespan
+  [0.05,0.75,0.07],   // branch
+  [0.20,1.50,0.14],   // turn
+  [0.05,0.90,0.09],   // wander
+  [0.40,1.40,0.10],   // spread
+  [1.00,3.50,0.25],   // elongation
 ];
+/* Nothing costs affinity and lifespan rises with it, so unconstrained they all
+   drift upward until every node likes everything and lives for ever — not
+   hyperspecialisation but affinity inflation, ending in a bland immortal
+   generalist. A fixed budget makes specialising zero-sum, so "generalists
+   short-lived, specialists long-lived at home" follows from the structure
+   rather than from tuning. */
+function normalise(o){
+  let sum=0;
+  for(let i=0;i<5;i++){ if(GENE[o+i]<0.02) GENE[o+i]=0.02; sum+=GENE[o+i]; }
+  const f=5/sum;
+  for(let i=0;i<5;i++) GENE[o+i]*=f;
+}
+function mutate(src,dst,amt){
+  for(let i=0;i<G;i++){
+    let v = GENE[src+i] + (prnd()*2-1)*GLIM[i][2]*amt;
+    GENE[dst+i] = Math.max(GLIM[i][0], Math.min(GLIM[i][1], v));
+  }
+  normalise(dst);
+}
+
+/* ---- what a place is ----
+   Soft membership of the five, summing to one, so there are no hard biome
+   edges for a genome to snap against. */
+const ENV = new Float32Array(5);
+function sstep(x,a,b){ const t=Math.max(0,Math.min(1,(x-a)/(b-a))); return t*t*(3-2*t); }
+function envAt(k){
+  const land=F.h[k]-S.seaLevel;
+  const water = 1 - sstep(land, 0.0, 0.014);
+  const ice   = sstep(F.snow[k], 0.30, 0.58);
+  const rest  = 1 - ice;
+  const veg   = F.veg[k];
+  const forest = sstep(veg, 0.42, 0.74);
+  const grass  = sstep(veg, 0.13, 0.38)*(1-forest);
+  const desert = Math.max(0, 1 - forest - grass);
+  const dry    = (1-water)*rest;
+  ENV[0]=water*rest; ENV[1]=ice;
+  ENV[2]=dry*desert; ENV[3]=dry*grass; ENV[4]=dry*forest;
+  return ENV;
+}
+
+/* How well a genome suits a place. A generalist scores about 1 everywhere; a
+   specialist scores up to 5 at home and almost nothing away from it. Lifespan
+   reads straight off this and is never itself a gene: a lifespan gene under
+   selection only ratchets toward immortality, whereas fit means the ground
+   sculpts how long a body persists, and a niche that walks away kills what it
+   left behind. */
+function fitOf(o,k){
+  const m=envAt(k);
+  return GENE[o]*m[0]+GENE[o+1]*m[1]+GENE[o+2]*m[2]+GENE[o+3]*m[3]+GENE[o+4]*m[4];
+}
+function fitAt(x,y,z,o){ return fitOf(o, cellAt(x,y,z)); }
+
+/* ---- colour is a fixed projection of the genome, never a lineage palette ----
+   Hue says which of the five a lineage is for, so related plants look related
+   and convergent evolution shows up as the same colour appearing twice in
+   similar places. Saturation says how committed it is, so generalists wash out
+   toward grey. Lightness carries the life-history axis. */
+const ENVCOL = [
+  [ 96,132, 74],   // sea
+  [206,206,224],   // ice
+  [176, 98, 42],   // desert
+  [162,158, 60],   // grass
+  [ 34, 88, 66],   // forest
+];
+function geneColour(o,out){
+  let r=0,g=0,b=0,mx=0;
+  for(let i=0;i<5;i++){
+    const w=GENE[o+i]*0.2;
+    r+=ENVCOL[i][0]*w; g+=ENVCOL[i][1]*w; b+=ENVCOL[i][2]*w;
+    if(GENE[o+i]>mx) mx=GENE[o+i];
+  }
+  const spec = Math.max(0, Math.min(1, (mx-1)/3));       // 0 generalist, 1 pure
+  const lum = 0.30*r+0.59*g+0.11*b;
+  const sat = 0.30+0.70*spec;
+  const lift = 0.82+0.36*GENE[o+G_PACE];                 // fast lineages are paler
+  out[0]=(lum+(r-lum)*sat)*lift;
+  out[1]=(lum+(g-lum)*sat)*lift;
+  out[2]=(lum+(b-lum)*sat)*lift;
+}
 
 /* ---- collision: a uniform bin over the cube the sphere sits in. No poles,
    no seam, and a query touches 27 bins whatever the latitude. ---- */
@@ -755,6 +838,7 @@ function fitAt(x,y,z,sp){
    been blended with its neighbours — so the sheet is rebuilt from the live set
    each tick instead, on the GPU, where fifty thousand quads cost nothing.
    Everything the look depends on becomes a per-node attribute for free. */
+const GC = new Float32Array(3);
 const INST = 9;                                  // floats per node
 const IBUF = new Float32Array(PMAX*INST);
 let instN = 0;
@@ -772,7 +856,6 @@ function buildInstances(){
     const hx=NHX[i], hy=NHY[i], hz=NHZ[i];
     const he=-hx*sn + hz*cs;
     const hn=-hx*sl*cs + hy*cl - hz*sl*sn;
-    const sp=SPECIES[NSP[i]];
 
     /* A branch reads as a branch because it tapers. Width comes from age, so
        the old wood near the root is broad and the growing tips are fine —
@@ -780,14 +863,14 @@ function buildInstances(){
        tells all three. */
     const age=ptick-NBORN[i];
     const grow=wood ? 1 : Math.min(1, age/mat);
-    const wid=sp0*sp.spread*(0.30+0.70*grow);
+    const go=i*G;
+    const wid=sp0*GENE[go+G_SPREAD]*(0.30+0.70*grow);
 
     /* colour: the form's own, drifted by the sector's inherited tint and
        lifted at the young tips, so expansion reads as motion */
-    const t=NTINT[i], young=1-grow;
-    let r=sp.col[0]*(1+t*0.26)+young*46;
-    let g=sp.col[1]*(1-t*0.10)+young*40;
-    let b=sp.col[2]*(1-t*0.22)+young*34;
+    geneColour(go, GC);
+    const young=1-grow;
+    let r=GC[0]+young*44, g=GC[1]+young*40, b=GC[2]+young*34;
     /* Dead wood is not black. Black would swamp hue, which is the channel
        carrying niche, and half the standing structure would go to it — the
        planet would read as scorched. Keep the lineage's hue, take the colour
@@ -801,7 +884,7 @@ function buildInstances(){
 
     IBUF[w  ]=(lon+Math.PI)/(Math.PI*2);
     IBUF[w+1]=(Math.PI*0.5-lat)/Math.PI;
-    IBUF[w+2]=wid*sp.elong;
+    IBUF[w+2]=wid*GENE[go+G_ELONG];
     IBUF[w+3]=wid;
     IBUF[w+4]=Math.atan2(hn,he);
     IBUF[w+5]=Math.min(255,r)/255;
@@ -813,16 +896,24 @@ function buildInstances(){
   instN=w/INST;
 }
 
-function addNode(x,y,z,hx,hy,hz,s,tint,par){
+function addNode(x,y,z,hx,hy,hz,src,par,amt){
   const i = freeN>0 ? PFREE[--freeN] : nodeHigh++;
   NPX[i]=x; NPY[i]=y; NPZ[i]=z;
   NHX[i]=hx; NHY[i]=hy; NHZ[i]=hz;
-  NKID[i]=0; NSP[i]=s; NFAIL[i]=0; NLIVE[i]=1; NTINT[i]=tint;
+  NKID[i]=0; NFAIL[i]=0; NLIVE[i]=1;
+  const o=i*G;
+  if(src<0){ for(let n=0;n<G;n++) GENE[o+n]=GLIM[n][0]+prnd()*(GLIM[n][1]-GLIM[n][0]); normalise(o); }
+  else if(amt>0) mutate(src*G, o, amt);
+  else { const so=src*G; for(let n=0;n<G;n++) GENE[o+n]=GENE[so+n]; }
   NGEN[i]++; NPAR[i]=par; NPGEN[i] = par>=0 ? NGEN[par] : -1;
   NLK[i]=0; if(par>=0) NLK[par]++;
   PROOT[i] = par>=0 ? PROOT[par] : i;   /* body identity, kept fresh between sweeps */
   NBORN[i]=ptick;
-  NLIFE[i]=Math.max(30, (PARAMS.life*fitAt(x,y,z,SPECIES[s]))|0);
+  /* pace buys growth with life: a weed is quick and brief, a persister slow
+     and durable, and cleared ground becomes an opening only a weed can take */
+  const pace=GENE[o+G_PACE];
+  NLIFE[i]=Math.max(PARAMS.hostile|0,
+    (PARAMS.life*fitAt(x,y,z,o)*(1.40-0.80*pace))|0);
   const key = binOf(x,y,z);
   NBIN[i]=key;
   const list = pbins.get(key);
@@ -896,14 +987,15 @@ function reap(){
        a niche shifted, and the shower of fragments that followed read as the
        design failing when it was only this. */
     if((n&7)===0){
-      const f=fitAt(NPX[i],NPY[i],NPZ[i],SPECIES[NSP[i]]);
-      NLIFE[i]=Math.max(PARAMS.hostile|0,(PARAMS.life*f)|0);
+      const o=i*G, f=fitAt(NPX[i],NPY[i],NPZ[i],o);
+      NLIFE[i]=Math.max(PARAMS.hostile|0,
+        (PARAMS.life*f*(1.40-0.80*GENE[o+G_PACE]))|0);
     }
   }
 }
 
 function bud(ni){
-  const sp = SPECIES[NSP[ni]];
+  const go = ni*G;
   const px=NPX[ni], py=NPY[ni], pz=NPZ[ni];
   const hx=NHX[ni], hy=NHY[ni], hz=NHZ[ni];
 
@@ -917,8 +1009,8 @@ function bud(ni){
   const th = NFAIL[ni] > 0
     ? (prnd()*2-1)*2.0
     : NKID[ni] > 0
-      ? (prnd()<0.5?-1:1)*sp.turn*(0.65+0.7*prnd())
-      : (prnd()-0.5)*2*sp.wander;
+      ? (prnd()<0.5?-1:1)*GENE[go+G_TURN]*(0.65+0.7*prnd())
+      : (prnd()-0.5)*2*GENE[go+G_WANDER];
 
   /* turn the heading about the surface normal */
   const cx=py*hz-pz*hy, cy=pz*hx-px*hz, cz=px*hy-py*hx;
@@ -933,15 +1025,15 @@ function bud(ni){
   const dp=ex*nx+ey*ny+ez*nz; ex-=nx*dp; ey-=ny*dp; ez-=nz*dp;
   l=1/Math.hypot(ex,ey,ez); ex*=l; ey*=l; ez*=l;
 
-  if(fitAt(nx,ny,nz,sp) <= 0) return false;
+  if(fitAt(nx,ny,nz,go) < PARAMS.viable) return false;
   if(occupied(nx,ny,nz)) return false;
-  /* The first child continues the sector and carries its colour unchanged; a
-     bifurcation mints a new one. That is where the genome will be minted once
-     there is a genome, and it is already enough to make sectors visible. */
-  const tint = NKID[ni] > 0
-    ? Math.max(-1, Math.min(1, NTINT[ni] + (prnd()*2-1)*PARAMS.vary))
-    : NTINT[ni];
-  addNode(nx,ny,nz,ex,ey,ez,NSP[ni],tint,ni);
+  /* The first child continues the sector on its parent's genome exactly; the
+     second and later are true bifurcations and mint a mutated one. Mutating
+     every node instead would let drift inside one body swamp the differences
+     between bodies — lineages would blur and selection could not accumulate.
+     This way a sector is a coherent unit for selection to act on, and a piece
+     that breaks off carries a real identity rather than a smear. */
+  addNode(nx,ny,nz,ex,ey,ez,ni,ni, NKID[ni] > 0 ? PARAMS.mut : 0);
   NKID[ni]++;
   return true;
 }
@@ -951,11 +1043,11 @@ function retire(fi){ PFRONT[fi]=PFRONT[--frontN]; }
 /* thrown clear of the parent, landing anywhere that suits, and rooted in its
    own right — a new body, carrying its parent's colour */
 function spore(ni){
-  const sp = SPECIES[NSP[ni]];
+  const go = ni*G;
   for(let a=0;a<24;a++){
     const u=prnd()*2-1, ph=prnd()*Math.PI*2, r=Math.sqrt(Math.max(0,1-u*u));
     const x=r*Math.cos(ph), y=u, z=r*Math.sin(ph);
-    if(fitAt(x,y,z,sp) <= 0) continue;
+    if(fitAt(x,y,z,go) < PARAMS.viable) continue;
     if(occupied(x,y,z)) continue;
     let ax=-Math.sin(ph), ay=0, az=Math.cos(ph);
     const bx=y*az-z*ay, by=z*ax-x*az, bz=x*ay-y*ax;
@@ -963,7 +1055,7 @@ function spore(ni){
     let hx=ax*cc+bx*ss, hy=ay*cc+by*ss, hz=az*cc+bz*ss;
     const dp=hx*x+hy*y+hz*z; hx-=x*dp; hy-=y*dp; hz-=z*dp;
     const l=1/Math.hypot(hx,hy,hz);
-    addNode(x,y,z,hx*l,hy*l,hz*l,NSP[ni],NTINT[ni],-1);
+    addNode(x,y,z,hx*l,hy*l,hz*l,ni,-1,PARAMS.mut);
     return true;
   }
   return false;
@@ -1061,32 +1153,33 @@ function plantsStep(){
     if(prnd() < PARAMS.spore){ spore(ni); continue; }
     if(bud(ni)){
       NFAIL[ni] = 0;
-      const sp = SPECIES[NSP[ni]];
-      if(NKID[ni] >= PARAMS.kids || prnd() > sp.branch) retire(fi);
+      if(NKID[ni] >= PARAMS.kids || prnd() > GENE[ni*G+G_BRANCH]) retire(fi);
     } else if(++NFAIL[ni] >= PARAMS.tries) retire(fi);
   }
 }
 
 function plantsSeed(){
   if(!plantsOn) return;
-  /* One lottery over all forms handed the commonest niches most of the seeds,
-     and because growth then compounds on what a form already holds, those
-     opening shares were never recovered from. Seed each form for itself. */
-  const per = Math.max(1, Math.round(PARAMS.seeds/SPECIES.length));
-  for(let s=0; s<SPECIES.length; s++)
-  for(let n=0, guard=0; n<per && guard<80000; guard++){
+  /* Uniformly random genomes normalise to near-generalists, and a world of
+     identical generalists gives selection nothing to work on. Tip each seed
+     toward one of the five so there is variation on the board at tick zero. */
+  for(let n=0, guard=0; n<PARAMS.seeds && guard<80000; guard++){
     const u=prnd()*2-1, ph=prnd()*Math.PI*2, r=Math.sqrt(Math.max(0,1-u*u));
     const x=r*Math.cos(ph), y=u, z=r*Math.sin(ph);
-    if(fitAt(x,y,z,SPECIES[s]) <= 0) continue;
-    /* a random heading in the tangent plane; the first node of a plant takes
-       one whatever its formula would have said */
     let ax=-Math.sin(ph), ay=0, az=Math.cos(ph);
     const th=prnd()*Math.PI*2, cc=Math.cos(th), ss=Math.sin(th);
     const bx=y*az-z*ay, by=z*ax-x*az, bz=x*ay-y*ax;
     let hx=ax*cc+bx*ss, hy=ay*cc+by*ss, hz=az*cc+bz*ss;
     const dp=hx*x+hy*y+hz*z; hx-=x*dp; hy-=y*dp; hz-=z*dp;
     const l=1/Math.hypot(hx,hy,hz);
-    addNode(x,y,z,hx*l,hy*l,hz*l,s,(prnd()*2-1)*0.5,-1);
+    const i = addNode(x,y,z,hx*l,hy*l,hz*l,-1,-1,0);
+    const o = i*G, fav = (prnd()*5)|0;
+    for(let g=0;g<5;g++) GENE[o+g] = 0.25+prnd()*0.5;
+    GENE[o+fav] += 2.2+prnd()*1.6;
+    normalise(o);
+    if(fitOf(o, cellAt(x,y,z)) < PARAMS.viable){ killNode(i); continue; }
+    NLIFE[i]=Math.max(PARAMS.hostile|0,
+      (PARAMS.life*fitOf(o,cellAt(x,y,z))*(1.40-0.80*GENE[o+G_PACE]))|0);
     n++;
   }
 }
@@ -2526,12 +2619,23 @@ window.__world = {
   pointerCount(){ return ptrs.size; },
   params(){ return PARAMS; },
   plants(){
-    const per = SPECIES.map(()=>0);
-    for(let i=0;i<nodeHigh;i++) if(NLIVE[i]===1) per[NSP[i]]++;
+    /* No species to count any more. What matters instead is whether lineages
+       are differentiating: which of the five each is committed to, and how
+       committed. A collapse to one column, or to no commitment at all, is the
+       failure this whole design is trying to avoid. */
+    const per=[0,0,0,0,0]; let spec=0, pace=0;
+    for(let i=0;i<nodeHigh;i++){
+      if(NLIVE[i]!==1) continue;
+      const o=i*G; let mx=0, at=0;
+      for(let g=0;g<5;g++) if(GENE[o+g]>mx){ mx=GENE[o+g]; at=g; }
+      per[at]++; spec+=(mx-1)/4; pace+=GENE[o+G_PACE];
+    }
     return { live:liveN, wood:woodN, slots:nodeHigh, deaths, bodies:comps,
              meanBody:+meanComp.toFixed(1), largestBody:bigFrag,
              frontier:frontN, tick:ptick,
-             species:SPECIES.map((s,i)=>({name:s.name, nodes:per[i]})) };
+             specialisation:+(spec/Math.max(1,liveN)).toFixed(3),
+             pace:+(pace/Math.max(1,liveN)).toFixed(3),
+             niche:{sea:per[0], ice:per[1], desert:per[2], grass:per[3], forest:per[4]} };
   },
   /* run growth on its own, so the form can be judged without waiting for the
      climate to catch up */
