@@ -2405,12 +2405,13 @@ function plantsSeed(){
 const BN=new Int32Array(PMAX), BP=new Float32Array(PMAX), BP2=new Float32Array(PMAX);
 const BC=new Float32Array(PMAX), BC2=new Float32Array(PMAX), BCM=new Uint8Array(PMAX);
 const BFAN=new Float32Array(PMAX), BSTEP=new Float32Array(PMAX);
+const BNICHE=new Uint8Array(PMAX);   // which environments a body is built for
 const POPPACE=new Int32Array(NBIN_H), POPSPRD=new Int32Array(NBIN_H);
 const POPCAP=new Int32Array(10);
 function withinBody(){
   BN.fill(0,0,nodeHigh); BP.fill(0,0,nodeHigh); BP2.fill(0,0,nodeHigh);
   BC.fill(0,0,nodeHigh); BC2.fill(0,0,nodeHigh); BCM.fill(0,0,nodeHigh);
-  BFAN.fill(0,0,nodeHigh); BSTEP.fill(0,0,nodeHigh);
+  BFAN.fill(0,0,nodeHigh); BSTEP.fill(0,0,nodeHigh); BNICHE.fill(0,0,nodeHigh);
   POPPACE.fill(0); POPSPRD.fill(0); POPCAP.fill(0);
   const slo=PARAMS.splo, srange=Math.max(1e-6,PARAMS.sphi-PARAMS.splo);
   let n=0, sp=0, sp2=0, sc=0, sc2=0;
@@ -2419,6 +2420,14 @@ function withinBody(){
     const r=PROOT[i], p=NPACE[i], c=NCAP[i];
     BN[r]++; BP[r]+=p; BP2[r]+=p*p; BC[r]+=c; BC2[r]+=c*c; BCM[r]|=(1<<c);
     BFAN[r]+=Math.abs(NANG[i]); BSTEP[r]+=NSTEP[i];
+    /* which of the five *this node* leans toward, so that a body holding sea
+       nodes and forest nodes can be told from a body of one mind. This is the
+       whole point of letting a formula lean the affinities, and no population
+       statistic can see it: a planet of single-minded plants spread across
+       five environments scores identically to one where each plant spans two. */
+    { const o=i*G; let mx=-1, at=0;
+      for(let g=0;g<5;g++) if(GENE[o+g]>mx){ mx=GENE[o+g]; at=g; }
+      BNICHE[r] |= (1<<at); }
     n++; sp+=p; sp2+=p*p; sc+=c; sc2+=c*c;
     POPCAP[c<10?c:9]++;
     let t=p; t=t<0?0:(t>0.99999?0.99999:t); POPPACE[(t*NBIN_H)|0]++;
@@ -2443,11 +2452,13 @@ function withinBody(){
      about it — a planet of identically-shaped plants in five environments
      scores perfectly on evenness. Between-plant spread of the two things that
      decide form: how wide a node fans its children, and how far it puts them. */
-  let bn=0, fs=0, fs2=0, ds=0, ds2=0;
+  let bn=0, fs=0, fs2=0, ds=0, ds2=0, twoTerrain=0, nicheSpan=0;
   for(let r=0;r<nodeHigh;r++){
     if(BN[r]<8 || PROOT[r]!==r) continue;
     const mf=BFAN[r]/BN[r], md=BSTEP[r]/BN[r];
     bn++; fs+=mf; fs2+=mf*mf; ds+=md; ds2+=md*md;
+    let m=BNICHE[r], nb=0; while(m){ nb+=m&1; m>>=1; }
+    nicheSpan += nb; if(nb>=2) twoTerrain++;
   }
   const fanSD  = bn>1 ? Math.sqrt(Math.max(0, fs2/bn-(fs/bn)*(fs/bn))) : 0;
   const stepSD = bn>1 ? Math.sqrt(Math.max(0, ds2/bn-(ds/bn)*(ds/bn))) : 0;
@@ -2465,6 +2476,9 @@ function withinBody(){
     bodies8:bodies, mixedCapBodies:+(bodies? mixed/bodies : 0).toFixed(3),
     widestBodySD:+bestSD.toFixed(4), widestBodyN:bestN,
     /* shape variety between plants, and the mean shape */
+    /* the direct test of the thing affinity modulation exists for */
+    twoTerrainBodies:+(bn?twoTerrain/bn:0).toFixed(3),
+    terrainsPerBody:+(bn?nicheSpan/bn:0).toFixed(2),
     fanSD:+fanSD.toFixed(3), stepSD:+stepSD.toFixed(4),
     meanFan:+(bn?fs/bn:0).toFixed(3), meanStep:+(bn?ds/bn:0).toFixed(4),
     meanPace:+(n?sp/n:0).toFixed(3), meanCap:+(n?sc/n:0).toFixed(3),
