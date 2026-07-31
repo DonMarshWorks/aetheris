@@ -265,7 +265,10 @@ const PARAMS = {
   mature:  90,      // ticks from bud to full width
   life:    1500,    // ticks per unit of fit; a pure specialist at home gets 5x
   viable:  0.40,    // fit below which a node will not even be attempted
-  kin:     0.72,    // how much a crowd of near-relatives shortens a life
+  kin:     0.00,    // how much a crowd of near-relatives shortens a life.
+                    // Off by default: measured to do nothing for specialisation
+                    // (it acts on which strategy is common, not how committed
+                    // anyone is) and each evaluation scans 343 spatial bins.
   kinr:    3.0,     // how far that crowd is counted, in steps
   kind:    1.30,    // affinity distance within which a neighbour counts as kin
   rare:    0.00,    // how much being a COMMON strategy globally shortens a life
@@ -642,6 +645,7 @@ const NBORN=new Int32Array(PMAX), NLIFE=new Int32Array(PMAX);
 const NPAR=new Int32Array(PMAX), NPGEN=new Int32Array(PMAX), NGEN=new Int32Array(PMAX);
 const PFRONT = new Int32Array(PMAX), PFREE = new Int32Array(PMAX);
 let nodeHigh = 0, liveN = 0, frontN = 0, freeN = 0;
+let plantDebt = 0;
 let ptick = 0, reapCursor = 0, plantsDirty = true, deaths = 0, woodN = 0, comps = 0, meanComp = 0, bigFrag = 0;
 const NLK=new Int32Array(PMAX);      // children still standing, alive or wood
 const CSTAMP=new Int32Array(PMAX);   // last turn a body was allowed to bud
@@ -1993,7 +1997,7 @@ void main(){
      the same reason the terminator ignores relief. */
   float night = 1.0 - lam;
   float head  = max(dot(normalize(mix(Nw, N, graze)), V), 0.0);
-  col += albedo*(vec3(0.082,0.096,0.130) + vec3(0.125,0.138,0.164)*head)*night;
+  col += albedo*(vec3(0.108,0.124,0.163) + vec3(0.160,0.176,0.206)*head)*night;
 
   col = col/(1.0+col*0.32);
   o = vec4(col,1.0);
@@ -2514,11 +2518,25 @@ function frame(now){
     bandCursor = (bandCursor+rows) % GH;
     if(bandCursor===0) computeProx();
     stepFields(step);
-    plantsStep();
+    /* The ecology needs its own clock scaled against the climate's, or the
+       piece breaks at exactly the settings people use to watch it change: run
+       the plants once per tick and at x100 the coastlines race away from them,
+       leaving an ecology permanently chasing a world it can never catch. */
+    plantDebt = Math.min(400, plantDebt + Math.max(1, Math.min(64, Math.round(speed))));
     packTexture(); uploadData();
     hudAcc++; if(hudAcc>=4){ hudAcc=0; updateHUD(); }
   }
   renderPlants();
+
+  /* Growth is *owed* by the simulation tick and *paid* across the frames that
+     follow, against a wall-clock budget. Sixty-four steps in one lump is forty
+     milliseconds — a dropped frame every tick at x100, which is precisely the
+     setting someone reaches for to watch it change. Spread, the same work is
+     invisible, and on slow hardware the budget simply pays less. */
+  if(plantsOn && plantDebt > 0 && !paused){
+    const t0 = performance.now();
+    while(plantDebt > 0 && performance.now() - t0 < 3.0){ plantsStep(); plantDebt--; }
+  }
 
   updateSun();
 
