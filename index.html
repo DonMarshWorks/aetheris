@@ -243,6 +243,44 @@ const SEED = (()=>{
   return m ? ((+m[1])>>>0) : ((Math.random()*4294967296)>>>0);
 })();
 
+/* Every tunable in one place, and every one of them overridable from the URL:
+   #seed=7&step=0.009&spread=1.4 is an experiment with no edit, and any world
+   worth keeping is a link. A separate config file cannot ship — verify.js
+   fails the build on a fetched script and it would break file:// — so this
+   block is the single place instead. See docs/plants-design.md. */
+const PARAMS = {
+  plants:  1,       // 0 turns the whole thing off
+  seeds:   40,      // starting nodes
+  budget:  130000,  // hard cap on live nodes
+  grow:    900,     // bud attempts per simulation tick
+  step:    0.0055,  // angular distance from a node to its child (radians)
+  collide: 0.72,    // refusal radius, as a fraction of a step. Geometry, not
+                    // taste: at 1.0 a node holds 5 children and turns die
+                    // beyond 120 degrees; 8 children needs 0.68 or less.
+  kids:    6,       // cap on children, though collision usually binds first
+  tries:   22,      // consecutive refusals before a node leaves the frontier
+  spread:  0.80,    // footprint radius across the branch, per step
+  soft:    0.50,    // how soft the footprint edge is, 0..1
+  alpha:   0.80,    // how much of the ground a mature node hides
+  mature:  90,      // ticks from bud to full width
+  life:    2600,    // ticks a perfectly placed node lives; poor fits die sooner
+  vary:    0.30,    // colour drift minted at each bifurcation
+  minfrag: 5,       // a severed piece smaller than this is not viable
+  hostile: 150,     // ticks a node lasts on ground that does not suit it at all
+  sweep:   40,      // ticks between one pass of connected-component labelling
+  perbody: 0,       // 1 = at most one bud per body per turn, 0 = by frontier
+  spore:   0.004,   // chance a bud is thrown clear instead, founding a body
+  settle:  400,     // ticks a young body is spared the fragment cull
+  rot:     900,     // ticks dead wood holds before the connection rots through
+};
+(function(){
+  const h = location.hash || "";
+  for(const k in PARAMS){
+    const m = new RegExp("[#&]"+k+"=(-?[0-9.]+)").exec(h);
+    if(m) PARAMS[k] = parseFloat(m[1]);
+  }
+})();
+
 const PERM = new Uint16Array(512);
 (function(){
   const p=new Uint16Array(256); for(let i=0;i<256;i++)p[i]=i;
@@ -568,6 +606,492 @@ function packTexture(){
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   2b. plants — stage 0
+   ══════════════════════════════════════════════════════════════════════
+   Legibility only. Hand-written growth, no genome, no death, no evolution:
+   the single question this stage exists to answer is whether a branching
+   structure at planetary scale reads as vegetation or as circuitry. Every
+   later stage is built on that answer, so it is worth having before any of
+   them. See docs/plants-design.md.
+
+   Nodes carry a position and a heading, both as 3D unit vectors. Storing a
+   heading as an angle from north would break at the poles and at the seam —
+   this repo has that scar already. Growth turns the heading about the surface
+   normal, steps along the geodesic, and parallel-transports the heading to
+   where it lands, which is pole-free by construction. */
+
+let plantsOn = PARAMS.plants > 0;
+
+const PW = 2048, PH = 1024;                 // the sheet plants are drawn into
+
+const PMAX  = PARAMS.budget|0;
+const NPX=new Float32Array(PMAX), NPY=new Float32Array(PMAX), NPZ=new Float32Array(PMAX);
+const NHX=new Float32Array(PMAX), NHY=new Float32Array(PMAX), NHZ=new Float32Array(PMAX);
+const NKID=new Uint8Array(PMAX), NSP=new Uint8Array(PMAX), NFAIL=new Uint8Array(PMAX);
+const NLIVE=new Uint8Array(PMAX), NBIN=new Int32Array(PMAX);
+const NBORN=new Int32Array(PMAX), NLIFE=new Int32Array(PMAX);
+const NPAR=new Int32Array(PMAX), NPGEN=new Int32Array(PMAX), NGEN=new Int32Array(PMAX);
+const NTINT=new Float32Array(PMAX);         // colour drift, inherited along a sector
+const PFRONT = new Int32Array(PMAX), PFREE = new Int32Array(PMAX);
+let nodeHigh = 0, liveN = 0, frontN = 0, freeN = 0;
+let ptick = 0, reapCursor = 0, plantsDirty = true, deaths = 0, woodN = 0, comps = 0, meanComp = 0, bigFrag = 0;
+const NLK=new Int32Array(PMAX);      // children still standing, alive or wood
+const CSTAMP=new Int32Array(PMAX);   // last turn a body was allowed to bud
+
+/* its own stream, so changing plant parameters cannot shift the terrain */
+let pseed = (SEED ^ 0x85ebca6b)>>>0 || 1;
+function prnd(){ pseed=(pseed*1664525+1013904223)>>>0; return pseed/4294967296; }
+
+/* Four hand-written forms with overlapping niches, so they have to contest
+   ground and the borders can be judged. Colour is picked to match the niche
+   rather than the lineage — the rule the real genome→colour mapping will
+   follow, worth honouring even while the genome is imaginary.
+   Colours are lichen colours, not leaf colours, and that is deliberate: the
+   ground already owns the greens and ochres, so a plant painted in them is
+   invisible from orbit however well it is grown. */
+const SPECIES = [
+  { name:"weft",  branch:0.22, turn:0.60, wander:0.35, spread:0.55, elong:3.0,
+    tlo:-8, thi:15, mlo:0.30, mhi:1.0, col:[178,192,166] },
+  { name:"crown", branch:0.44, turn:1.00, wander:0.40, spread:0.85, elong:1.0,
+    tlo:10, thi:40, mlo:0.42, mhi:1.0, col:[ 26, 82, 76] },
+  { name:"scurf", branch:0.52, turn:0.75, wander:0.55, spread:1.10, elong:1.0,
+    tlo: 4, thi:40, mlo:0.00, mhi:0.46, col:[176, 98, 42] },
+  { name:"rime",  branch:0.26, turn:0.95, wander:0.15, spread:0.60, elong:2.2,
+    tlo:-40, thi: 3, mlo:0.00, mhi:1.0, col:[208,206,222] },
+  /* The sea is two thirds of the arena and was inert. Depth stands in for the
+     nutrient limit that makes real ocean productivity coastal: a shelf-dweller
+     fringes every shore and leaves the open water empty, which is both what
+     the ocean actually looks like and what stops one marine form sweeping it. */
+  { name:"kelp",  sea:true, branch:0.30, turn:0.85, wander:0.45, spread:0.75, elong:2.4,
+    tlo:-2, thi:27, dmax:0.085, col:[112,128, 52] },
+];
+
+/* ---- collision: a uniform bin over the cube the sphere sits in. No poles,
+   no seam, and a query touches 27 bins whatever the latitude. ---- */
+const PCELL = PARAMS.step*PARAMS.collide;
+const PGRID = Math.max(8, Math.min(250, Math.floor(2/PCELL)));
+const pbins = new Map();
+function binOf(x,y,z){
+  const i=Math.min(PGRID-1,Math.max(0,((x+1)*0.5*PGRID)|0));
+  const j=Math.min(PGRID-1,Math.max(0,((y+1)*0.5*PGRID)|0));
+  const k=Math.min(PGRID-1,Math.max(0,((z+1)*0.5*PGRID)|0));
+  return (i*PGRID+j)*PGRID+k;
+}
+function occupied(x,y,z){
+  const i=Math.min(PGRID-1,Math.max(0,((x+1)*0.5*PGRID)|0));
+  const j=Math.min(PGRID-1,Math.max(0,((y+1)*0.5*PGRID)|0));
+  const k=Math.min(PGRID-1,Math.max(0,((z+1)*0.5*PGRID)|0));
+  const r2 = PCELL*PCELL;
+  for(let a=-1;a<=1;a++){
+    const ia=i+a; if(ia<0||ia>=PGRID) continue;
+    for(let b=-1;b<=1;b++){
+      const jb=j+b; if(jb<0||jb>=PGRID) continue;
+      for(let c=-1;c<=1;c++){
+        const kc=k+c; if(kc<0||kc>=PGRID) continue;
+        const list = pbins.get((ia*PGRID+jb)*PGRID+kc);
+        if(!list) continue;
+        for(let n=0;n<list.length;n++){
+          const t=list[n];
+          const dx=NPX[t]-x, dy=NPY[t]-y, dz=NPZ[t]-z;
+          if(dx*dx+dy*dy+dz*dz < r2) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function unbin(i){
+  const list = pbins.get(NBIN[i]);
+  if(!list) return;
+  const at = list.indexOf(i);
+  if(at >= 0){ list[at] = list[list.length-1]; list.pop(); }
+}
+
+function cellAt(x,y,z){
+  const lat=Math.asin(Math.max(-1,Math.min(1,y)));
+  const lon=Math.atan2(z,x);
+  let i=Math.floor((lon+Math.PI)/(Math.PI*2)*GW); i=((i%GW)+GW)%GW;
+  let j=Math.floor((Math.PI*0.5-lat)/Math.PI*GH);
+  j=Math.max(0,Math.min(GH-1,j));
+  return j*GW+i;
+}
+/* Stage 0 stands in for the affinity formulas: a flat yes/no on where a node
+   may sit. Crude, but it is what makes the form read as vegetation rather
+   than as a pattern laid over a planet. */
+/* How well a place suits a form, 0 to 1: zero anywhere it cannot live, and
+   rising toward the middle of its window. Lifespan is read straight off this,
+   never carried as a gene — a gene under selection would only ratchet toward
+   immortality, whereas fit means the body's persistence is sculpted by the
+   ground with no code that says so, and a niche that walks away kills what it
+   leaves behind. */
+function fitAt(x,y,z,sp){
+  const k = cellAt(x,y,z);
+  const land = F.h[k] - S.seaLevel, t = F.temp[k];
+  const tc=(sp.tlo+sp.thi)*0.5, th=(sp.thi-sp.tlo)*0.5;
+  if(t<sp.tlo || t>sp.thi) return 0;
+  const ft = 1 - Math.abs(t-tc)/th;
+  if(sp.sea){
+    if(land >= 0 || F.snow[k] > 0.45) return 0;
+    const depth = -land;
+    if(depth > sp.dmax) return 0;
+    return Math.max(0.12, Math.min(ft, 1-depth/sp.dmax));
+  }
+  if(land <= 0.004 || F.snow[k] > 0.55) return 0;
+  const m=F.moist[k];
+  if(m<sp.mlo || m>sp.mhi) return 0;
+  const mc=(sp.mlo+sp.mhi)*0.5, mh=(sp.mhi-sp.mlo)*0.5;
+  /* The floor has to sit clear of the cull threshold below. Floored at 0.02
+     against a cull at 0.03, every node at the edge of its own niche was killed
+     the moment its fit was re-read — eleven deaths per standing node per ten
+     thousand ticks, and a shower of fragments that looked like the design
+     misbehaving rather than a one-character mistake. */
+  return Math.max(0.12, Math.min(ft, 1 - Math.abs(m-mc)/mh));
+}
+
+/* ---- what the renderer is handed ----
+   Nodes are not painted into a buffer any more. A node that dies has to stop
+   being drawn, and there is no way to un-paint a footprint that has already
+   been blended with its neighbours — so the sheet is rebuilt from the live set
+   each tick instead, on the GPU, where fifty thousand quads cost nothing.
+   Everything the look depends on becomes a per-node attribute for free. */
+const INST = 9;                                  // floats per node
+const IBUF = new Float32Array(PMAX*INST);
+let instN = 0;
+
+function buildInstances(){
+  const sp0=PARAMS.spread*PARAMS.step, mat=Math.max(1,PARAMS.mature);
+  let w=0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]===0) continue;
+    const wood = NLIVE[i]===2;
+    const x=NPX[i], y=NPY[i], z=NPZ[i];
+    const lat=Math.asin(Math.max(-1,Math.min(1,y))), lon=Math.atan2(z,x);
+    const cl=Math.max(Math.cos(lat),1e-3);
+    const sl=Math.sin(lat), sn=Math.sin(lon), cs=Math.cos(lon);
+    const hx=NHX[i], hy=NHY[i], hz=NHZ[i];
+    const he=-hx*sn + hz*cs;
+    const hn=-hx*sl*cs + hy*cl - hz*sl*sn;
+    const sp=SPECIES[NSP[i]];
+
+    /* A branch reads as a branch because it tapers. Width comes from age, so
+       the old wood near the root is broad and the growing tips are fine —
+       which is also the frontier, and also what is about to die. One variable
+       tells all three. */
+    const age=ptick-NBORN[i];
+    const grow=wood ? 1 : Math.min(1, age/mat);
+    const wid=sp0*sp.spread*(0.30+0.70*grow);
+
+    /* colour: the form's own, drifted by the sector's inherited tint and
+       lifted at the young tips, so expansion reads as motion */
+    const t=NTINT[i], young=1-grow;
+    let r=sp.col[0]*(1+t*0.26)+young*46;
+    let g=sp.col[1]*(1-t*0.10)+young*40;
+    let b=sp.col[2]*(1-t*0.22)+young*34;
+    /* Dead wood is not black. Black would swamp hue, which is the channel
+       carrying niche, and half the standing structure would go to it — the
+       planet would read as scorched. Keep the lineage's hue, take the colour
+       and the value out of it, and let more ground show through: one value
+       ramp from bright new tip to grey wood, so growth and die-back both read
+       as movement. */
+    if(wood){
+      const lum=0.30*r+0.59*g+0.11*b;
+      r=(r*0.24+lum*0.76)*0.52; g=(g*0.24+lum*0.76)*0.52; b=(b*0.24+lum*0.76)*0.52;
+    }
+
+    IBUF[w  ]=(lon+Math.PI)/(Math.PI*2);
+    IBUF[w+1]=(Math.PI*0.5-lat)/Math.PI;
+    IBUF[w+2]=wid*sp.elong;
+    IBUF[w+3]=wid;
+    IBUF[w+4]=Math.atan2(hn,he);
+    IBUF[w+5]=Math.min(255,r)/255;
+    IBUF[w+6]=Math.min(255,g)/255;
+    IBUF[w+7]=Math.min(255,b)/255;
+    IBUF[w+8]=PARAMS.alpha*(0.45+0.55*grow)*(wood?0.62:1.0);
+    w+=INST;
+  }
+  instN=w/INST;
+}
+
+function addNode(x,y,z,hx,hy,hz,s,tint,par){
+  const i = freeN>0 ? PFREE[--freeN] : nodeHigh++;
+  NPX[i]=x; NPY[i]=y; NPZ[i]=z;
+  NHX[i]=hx; NHY[i]=hy; NHZ[i]=hz;
+  NKID[i]=0; NSP[i]=s; NFAIL[i]=0; NLIVE[i]=1; NTINT[i]=tint;
+  NGEN[i]++; NPAR[i]=par; NPGEN[i] = par>=0 ? NGEN[par] : -1;
+  NLK[i]=0; if(par>=0) NLK[par]++;
+  PROOT[i] = par>=0 ? PROOT[par] : i;   /* body identity, kept fresh between sweeps */
+  NBORN[i]=ptick;
+  NLIFE[i]=Math.max(30, (PARAMS.life*fitAt(x,y,z,SPECIES[s]))|0);
+  const key = binOf(x,y,z);
+  NBIN[i]=key;
+  const list = pbins.get(key);
+  if(list) list.push(i); else pbins.set(key,[i]);
+  /* dead nodes are dropped from the frontier lazily, so it carries some slack;
+     never let that slack run off the end of the array */
+  if(frontN < PMAX) PFRONT[frontN++] = i;
+  liveN++; plantsDirty=true;
+  return i;
+}
+
+/* A node that dies still holding children does not vanish: it stops growing,
+   stops counting as alive, and stays in the tree as structure — heartwood,
+   which is dead in a real trunk too and still holds the tree up. It is let go
+   only when its last child goes, and then its own dead parent may follow.
+   Without this, ageing alone split a fifth of all deaths into separate bodies
+   and nothing could grow larger than about ten nodes; splitting is now
+   something only the world can do, by killing a whole region. */
+function freeNode(i){
+  for(let j=i;;){
+    const par = rooted(j) ? NPAR[j] : -1;
+    if(NLIVE[j]===2) woodN--;
+    NLIVE[j]=0; unbin(j); PFREE[freeN++]=j;
+    if(par<0) break;
+    if(--NLK[par] > 0) break;
+    if(NLIVE[par]!==2) break;      /* a living parent simply loses a child */
+    j = par;                       /* wood with nothing left to hold: let go */
+  }
+  plantsDirty=true;
+}
+
+function killNode(i){
+  if(NLIVE[i]!==1) return;
+  liveN--; deaths++; plantsDirty=true;
+  if(NLK[i]>0){
+    /* Wood holds the body together but stops holding *ground*. Left in the
+       collision bins it walled off two fifths of the planet against the very
+       plants that made it, and a body could never grow back through its own
+       dead interior — which is exactly what a crust does. */
+    NLIVE[i]=2; woodN++; unbin(i);
+    /* Wood is only ever released from the tips inward, while growth runs the
+       other way, so it accumulates without limit and eventually crowds the
+       living out. Real crust sheds. Give it its own clock: when it rots
+       through, whatever it was holding becomes a body in its own right — so
+       decay, not ageing, is what fragments a plant, at a rate we choose. */
+    NLIFE[i] = (ptick - NBORN[i]) + (PARAMS.rot|0);
+  }
+  else freeNode(i);
+}
+
+/* All nodes die, and because lifespan follows fit the oldest wood is nearest
+   the root — so a body hollows out from the middle and breaks into a ring of
+   pieces that go on independently. Checked a slice at a time on a rolling
+   cursor, the way the terrain is rebuilt, rather than scanning every node
+   every tick. */
+function reap(){
+  const slice = Math.max(256, (nodeHigh/9)|0);
+  for(let n=0;n<slice;n++){
+    const i = reapCursor++; if(reapCursor>=nodeHigh) reapCursor=0;
+    if(NLIVE[i]===0) continue;
+    if(NLIVE[i]===2){
+      if(ptick-NBORN[i] > NLIFE[i]) freeNode(i);   /* rotted through */
+      continue;
+    }
+    if(ptick-NBORN[i] > NLIFE[i]){ killNode(i); continue; }
+    /* The climate moves under them, so the ground is re-read and the allowance
+       revised. Hostile ground shortens a life, it does not end one: a node that
+       the sea has just closed over goes on for a while and then expires early,
+       which is both what was intended and far less violent than killing on
+       sight. Killing outright severed a body at every interior node the moment
+       a niche shifted, and the shower of fragments that followed read as the
+       design failing when it was only this. */
+    if((n&7)===0){
+      const f=fitAt(NPX[i],NPY[i],NPZ[i],SPECIES[NSP[i]]);
+      NLIFE[i]=Math.max(PARAMS.hostile|0,(PARAMS.life*f)|0);
+    }
+  }
+}
+
+function bud(ni){
+  const sp = SPECIES[NSP[ni]];
+  const px=NPX[ni], py=NPY[ni], pz=NPZ[ni];
+  const hx=NHX[ni], hy=NHY[ni], hz=NHZ[ni];
+
+  /* The first child continues the sector; later children are true
+     bifurcations and take a decisive turn. That distinction is where the
+     genome will be minted once there is one. */
+  /* A tip that has just been refused casts about instead of pushing at the
+     same wall. Without this a node fails its allowance of tries in nearly the
+     same direction every time and retires with open ground beside it, and
+     growth stalls at a fraction of the land. */
+  const th = NFAIL[ni] > 0
+    ? (prnd()*2-1)*2.0
+    : NKID[ni] > 0
+      ? (prnd()<0.5?-1:1)*sp.turn*(0.65+0.7*prnd())
+      : (prnd()-0.5)*2*sp.wander;
+
+  /* turn the heading about the surface normal */
+  const cx=py*hz-pz*hy, cy=pz*hx-px*hz, cz=px*hy-py*hx;
+  const c=Math.cos(th), s=Math.sin(th);
+  const ax=hx*c+cx*s, ay=hy*c+cy*s, az=hz*c+cz*s;
+
+  /* step along the geodesic, and carry the heading with it */
+  const d=PARAMS.step, cd=Math.cos(d), sd=Math.sin(d);
+  let nx=px*cd+ax*sd, ny=py*cd+ay*sd, nz=pz*cd+az*sd;
+  let l=1/Math.hypot(nx,ny,nz); nx*=l; ny*=l; nz*=l;
+  let ex=-px*sd+ax*cd, ey=-py*sd+ay*cd, ez=-pz*sd+az*cd;
+  const dp=ex*nx+ey*ny+ez*nz; ex-=nx*dp; ey-=ny*dp; ez-=nz*dp;
+  l=1/Math.hypot(ex,ey,ez); ex*=l; ey*=l; ez*=l;
+
+  if(fitAt(nx,ny,nz,sp) <= 0) return false;
+  if(occupied(nx,ny,nz)) return false;
+  /* The first child continues the sector and carries its colour unchanged; a
+     bifurcation mints a new one. That is where the genome will be minted once
+     there is a genome, and it is already enough to make sectors visible. */
+  const tint = NKID[ni] > 0
+    ? Math.max(-1, Math.min(1, NTINT[ni] + (prnd()*2-1)*PARAMS.vary))
+    : NTINT[ni];
+  addNode(nx,ny,nz,ex,ey,ez,NSP[ni],tint,ni);
+  NKID[ni]++;
+  return true;
+}
+
+function retire(fi){ PFRONT[fi]=PFRONT[--frontN]; }
+
+/* thrown clear of the parent, landing anywhere that suits, and rooted in its
+   own right — a new body, carrying its parent's colour */
+function spore(ni){
+  const sp = SPECIES[NSP[ni]];
+  for(let a=0;a<24;a++){
+    const u=prnd()*2-1, ph=prnd()*Math.PI*2, r=Math.sqrt(Math.max(0,1-u*u));
+    const x=r*Math.cos(ph), y=u, z=r*Math.sin(ph);
+    if(fitAt(x,y,z,sp) <= 0) continue;
+    if(occupied(x,y,z)) continue;
+    let ax=-Math.sin(ph), ay=0, az=Math.cos(ph);
+    const bx=y*az-z*ay, by=z*ax-x*az, bz=x*ay-y*ax;
+    const th=prnd()*Math.PI*2, cc=Math.cos(th), ss=Math.sin(th);
+    let hx=ax*cc+bx*ss, hy=ay*cc+by*ss, hz=az*cc+bz*ss;
+    const dp=hx*x+hy*y+hz*z; hx-=x*dp; hy-=y*dp; hz-=z*dp;
+    const l=1/Math.hypot(hx,hy,hz);
+    addNode(x,y,z,hx*l,hy*l,hz*l,NSP[ni],NTINT[ni],-1);
+    return true;
+  }
+  return false;
+}
+
+/* A severed piece too small to be a body is debris: it costs bookkeeping,
+   clutters any measure of diversity, and reads as noise rather than as life.
+   Identity is the connected component, found by walking parent links — and a
+   link is only believed when the generation matches, because a slot freed by
+   one death is handed straight to the next birth and would otherwise graft a
+   fragment onto a stranger. */
+const PROOT=new Int32Array(PMAX), PSIZE=new Int32Array(PMAX), PSTK=new Int32Array(PMAX);
+function rooted(i){
+  const p=NPAR[i];
+  return p>=0 && NLIVE[p]!==0 && NGEN[p]===NPGEN[i];
+}
+function pruneFragments(){
+  const minf = PARAMS.minfrag|0;
+  if(nodeHigh===0) return;
+  PROOT.fill(-1,0,nodeHigh);
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]===0 || PROOT[i]>=0) continue;
+    let sn=0, j=i;
+    for(;;){
+      PSTK[sn++]=j;
+      if(!rooted(j)) break;
+      const p=NPAR[j];
+      if(PROOT[p]>=0) break;
+      j=p;
+    }
+    const last=PSTK[sn-1];
+    const r = rooted(last) && PROOT[NPAR[last]]>=0 ? PROOT[NPAR[last]] : last;
+    while(sn>0) PROOT[PSTK[--sn]]=r;
+  }
+  /* size is counted in living nodes: a body held up by wood alone is a corpse */
+  PSIZE.fill(0,0,nodeHigh);
+  for(let i=0;i<nodeHigh;i++) if(NLIVE[i]===1) PSIZE[PROOT[i]]++;
+  /* A body's root is nearly always wood now, so counting living nodes that
+     are their own root counts nothing at all. Count the distinct roots that
+     still have anything living under them. */
+  comps=0; bigFrag=0; let tot=0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]===0 || PROOT[i]!==i || PSIZE[i]===0) continue;
+    comps++; tot+=PSIZE[i]; if(PSIZE[i]>bigFrag) bigFrag=PSIZE[i];
+  }
+  meanComp = comps? tot/comps : 0;
+  /* A body that has just been founded is one node, which is below any sane
+     minimum. Spare it until it has had time to establish, or the cull becomes
+     a ratchet that removes bodies and never lets one begin. */
+  const settle = PARAMS.settle|0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]===1 && PSIZE[PROOT[i]] < minf && ptick-NBORN[PROOT[i]] > settle) killNode(i);
+    else if(NLIVE[i]===2 && PSIZE[PROOT[i]]===0) freeNode(i);
+  }
+}
+
+/* Candidates come from the frontier, never from the body. Sampling the body
+   would make a large plant spend its turns on interior nodes that cannot grow,
+   and the size distribution would then be set by that accident rather than by
+   anything chosen. */
+function plantsStep(){
+  if(!plantsOn) return;
+  ptick++;
+  reap();
+  if(PARAMS.sweep>0 && ptick%(PARAMS.sweep|0)===0) pruneFragments();
+
+  /* Attempts used to be drawn from one global frontier, which made a form's
+     growth proportional to how much of the world it already held — so the
+     seeding lottery decided the final shares and the sea stayed empty beside
+     perfectly good shelf. One attempt per body per turn instead: a small
+     population then expands at the same rate per body as a large one and can
+     actually converge on its niche. Capped, so cost stays bounded. */
+  const cap = PARAMS.grow|0, perBody = PARAMS.perbody > 0;
+  let tried=0, guard=cap*8;
+  while(tried < cap && guard-- > 0 && frontN > 0 && (liveN+woodN) < PMAX){
+    const fi = (prnd()*frontN)|0;
+    const ni = PFRONT[fi];
+    if(NLIVE[ni]!==1){ retire(fi); continue; }
+    /* Sampling the frontier is already the fair rule the brief was reaching
+       for: the frontier is the perimeter, so a body's growth follows its
+       number of tips rather than its area, and per unit area it still slows
+       as 1/r. Strict one-bud-per-body only made sense while fragmentation was
+       minting plants by the thousand; with nothing splitting, forty plants
+       taking one node a turn cannot fill a planet. */
+    if(perBody){
+      const body = PROOT[ni];
+      if(CSTAMP[body] === ptick) continue;
+      CSTAMP[body] = ptick;
+    }
+    tried++;
+    /* Fragmentation used to found new bodies as a side effect of falling
+       apart. Now that nothing falls apart, nothing is founded either, and the
+       population can only decline — so the spore the brief asked for is no
+       longer optional. Rare enough that an arrival still reads as an event. */
+    if(prnd() < PARAMS.spore){ spore(ni); continue; }
+    if(bud(ni)){
+      NFAIL[ni] = 0;
+      const sp = SPECIES[NSP[ni]];
+      if(NKID[ni] >= PARAMS.kids || prnd() > sp.branch) retire(fi);
+    } else if(++NFAIL[ni] >= PARAMS.tries) retire(fi);
+  }
+}
+
+function plantsSeed(){
+  if(!plantsOn) return;
+  /* One lottery over all forms handed the commonest niches most of the seeds,
+     and because growth then compounds on what a form already holds, those
+     opening shares were never recovered from. Seed each form for itself. */
+  const per = Math.max(1, Math.round(PARAMS.seeds/SPECIES.length));
+  for(let s=0; s<SPECIES.length; s++)
+  for(let n=0, guard=0; n<per && guard<80000; guard++){
+    const u=prnd()*2-1, ph=prnd()*Math.PI*2, r=Math.sqrt(Math.max(0,1-u*u));
+    const x=r*Math.cos(ph), y=u, z=r*Math.sin(ph);
+    if(fitAt(x,y,z,SPECIES[s]) <= 0) continue;
+    /* a random heading in the tangent plane; the first node of a plant takes
+       one whatever its formula would have said */
+    let ax=-Math.sin(ph), ay=0, az=Math.cos(ph);
+    const th=prnd()*Math.PI*2, cc=Math.cos(th), ss=Math.sin(th);
+    const bx=y*az-z*ay, by=z*ax-x*az, bz=x*ay-y*ax;
+    let hx=ax*cc+bx*ss, hy=ay*cc+by*ss, hz=az*cc+bz*ss;
+    const dp=hx*x+hy*y+hz*z; hx-=x*dp; hy-=y*dp; hz-=z*dp;
+    const l=1/Math.hypot(hx,hy,hz);
+    addNode(x,y,z,hx*l,hy*l,hz*l,s,(prnd()*2-1)*0.5,-1);
+    n++;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    3.  WebGL
    ══════════════════════════════════════════════════════════════════════ */
 const canvas=document.getElementById("gl");
@@ -730,6 +1254,106 @@ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
 function uploadData(){
   gl.bindTexture(gl.TEXTURE_2D,dataTex);
   gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,GW,GH,gl.RGBA,gl.FLOAT,TEXDATA);
+}
+
+/* ---------- plant sheet ----------
+   Plants are drawn into an equirectangular sheet the planet shader folds into
+   its albedo before any lighting, so they are shaded, cut by the terminator
+   and hazed by the atmosphere exactly as the ground is, for nothing. The sheet
+   is rebuilt from the live nodes rather than accumulated, because a node that
+   dies has to stop being drawn and blended paint cannot be taken back. */
+const plantTex=gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D,plantTex);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,PW,PH,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+gl.generateMipmap(gl.TEXTURE_2D);
+const plantFBO=gl.createFramebuffer();
+gl.bindFramebuffer(gl.FRAMEBUFFER,plantFBO);
+gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,plantTex,0);
+gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+
+const plantProg = prog(`#version 300 es
+layout(location=0) in vec2 aCorner;   /* the quad */
+layout(location=1) in vec2 aUV;       /* where the node sits on the sheet */
+layout(location=2) in vec2 aSize;     /* along the branch, and across it */
+layout(location=3) in float aRot;
+layout(location=4) in vec4 aCol;
+uniform float uSeam;
+out vec2 vC; out vec4 vCol;
+void main(){
+  float lat = (0.5 - aUV.y)*3.14159265;
+  float cl  = max(cos(lat), 0.02);
+  float ca=cos(aRot), sa=sin(aRot);
+  vec2 e = aCorner*aSize;
+  /* the footprint is an ellipse lying along the heading, in radians of arc,
+     which longitude has to be widened by 1/cos(lat) to hold */
+  vec2 arc = vec2(e.x*ca - e.y*sa, e.x*sa + e.y*ca);
+  float u = aUV.x + arc.x/(6.2831853*cl) + uSeam;
+  float v = aUV.y - arc.y/3.14159265;
+  vC = aCorner; vCol = aCol;
+  gl_Position = vec4(u*2.0-1.0, v*2.0-1.0, 0.0, 1.0);
+}`, `#version 300 es
+precision highp float;
+in vec2 vC; in vec4 vCol;
+uniform float uSoft;
+out vec4 o;
+void main(){
+  float q = length(vC);
+  /* ascending, always: a descending smoothstep is undefined and vanishes on
+     some drivers */
+  float a = (1.0 - smoothstep(1.0-uSoft, 1.0, q))*vCol.a;
+  if(a <= 0.004) discard;
+  o = vec4(vCol.rgb, a);
+}`);
+
+const plantVAO=gl.createVertexArray();
+gl.bindVertexArray(plantVAO);
+const quadVBO=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,quadVBO);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1, 1,-1, -1,1, 1,1]),gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+const instVBO=gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER,instVBO);
+gl.bufferData(gl.ARRAY_BUFFER,PMAX*INST*4,gl.DYNAMIC_DRAW);
+const STRIDE=INST*4;
+[[1,2,0],[2,2,8],[3,1,16],[4,4,20]].forEach(a=>{
+  gl.enableVertexAttribArray(a[0]);
+  gl.vertexAttribPointer(a[0],a[1],gl.FLOAT,false,STRIDE,a[2]);
+  gl.vertexAttribDivisor(a[0],1);
+});
+gl.bindVertexArray(null);
+
+function renderPlants(){
+  if(!plantsDirty) return;
+  plantsDirty=false;
+  buildInstances();
+  gl.bindBuffer(gl.ARRAY_BUFFER,instVBO);
+  gl.bufferSubData(gl.ARRAY_BUFFER,0,IBUF,0,instN*INST);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,plantFBO);
+  gl.viewport(0,0,PW,PH);
+  gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+  gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
+  if(instN>0){
+    gl.enable(gl.BLEND);
+    gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(plantProg);
+    gl.uniform1f(plantProg.u.uSoft, Math.max(0.02,PARAMS.soft));
+    gl.bindVertexArray(plantVAO);
+    /* three passes a turn apart, so a footprint straddling the back meridian
+       is drawn on both sides of it instead of being torn in half */
+    for(const off of [-1,0,1]){
+      gl.uniform1f(plantProg.u.uSeam, off);
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,instN);
+    }
+    gl.bindVertexArray(null);
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.bindTexture(gl.TEXTURE_2D,plantTex);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  /* the frame loop sets its own viewport before it draws anything */
 }
 
 /* ---------- baked deep-sky (nebula / milky way) ---------- */
@@ -936,6 +1560,7 @@ precision highp float;
 in vec3 vObj; in vec3 vWorld;
 out vec4 o;
 uniform sampler2D uData;
+uniform sampler2D uPlant;
 uniform mat3 uRot;
 uniform vec3 uSun, uCam;
 uniform float uSea, uSolarLat, uGT, uT;
@@ -1134,6 +1759,20 @@ void main(){
     albedo = col;
     gloss = 0.06;
   }
+
+  /* Plants go into the albedo, not over the finished picture, so everything
+     downstream treats them as ground. */
+  float pu = atan(d.z,d.x)*0.15915494+0.5;
+  float pv = 0.5-asin(clamp(d.y,-1.0,1.0))*0.31830989;
+  /* u jumps by a whole turn across the back meridian. Left alone the hardware
+     sees an enormous derivative there, drops to the coarsest mip, and draws a
+     blurred line from pole to pole. Take the derivatives by hand and subtract
+     the wrap before asking for the sample. */
+  vec2 pdx = vec2(dFdx(pu), dFdx(pv)), pdy = vec2(dFdy(pu), dFdy(pv));
+  pdx.x -= round(pdx.x);  pdy.x -= round(pdy.x);
+  vec4 pl = textureGrad(uPlant, vec2(pu,pv), pdx, pdy);
+  albedo = mix(albedo, pl.rgb, pl.a);
+  gloss  = mix(gloss, 0.02, pl.a);
 
   /* ---------------- normal ----------------
      micro relief comes from a noise *vector*, not a finite difference,
@@ -1731,9 +2370,11 @@ function frame(now){
     bandCursor = (bandCursor+rows) % GH;
     if(bandCursor===0) computeProx();
     stepFields(step);
+    plantsStep();
     packTexture(); uploadData();
     hudAcc++; if(hudAcc>=4){ hudAcc=0; updateHUD(); }
   }
+  renderPlants();
 
   updateSun();
 
@@ -1788,6 +2429,9 @@ function frame(now){
   gl.useProgram(planetProg);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,dataTex);
   gl.uniform1i(planetProg.u.uData,0);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,plantTex);
+  gl.uniform1i(planetProg.u.uPlant,2);
+  gl.activeTexture(gl.TEXTURE0);
   gl.uniformMatrix4fv(planetProg.u.uVP,false,mVP);
   gl.uniformMatrix3fv(planetProg.u.uRot,false,rot3);
   gl.uniform1f(planetProg.u.uScale,1.0);
@@ -1862,6 +2506,7 @@ resize();
 CAM.dist = CAM.tDist = fitDist();
 requestAnimationFrame(()=>{
   seedWorld();
+  plantsSeed();
   updateHUD();
   started=true;
   requestAnimationFrame(frame);
@@ -1879,6 +2524,18 @@ window.__world = {
   sunDir(){ return [SUN[0],SUN[1],SUN[2]]; },
   cam(){ return CAM; },
   pointerCount(){ return ptrs.size; },
+  params(){ return PARAMS; },
+  plants(){
+    const per = SPECIES.map(()=>0);
+    for(let i=0;i<nodeHigh;i++) if(NLIVE[i]===1) per[NSP[i]]++;
+    return { live:liveN, wood:woodN, slots:nodeHigh, deaths, bodies:comps,
+             meanBody:+meanComp.toFixed(1), largestBody:bigFrag,
+             frontier:frontN, tick:ptick,
+             species:SPECIES.map((s,i)=>({name:s.name, nodes:per[i]})) };
+  },
+  /* run growth on its own, so the form can be judged without waiting for the
+     climate to catch up */
+  growPlants(ticks){ for(let i=0;i<(ticks|0);i++) plantsStep(); },
   advance(seconds, chunks){
     chunks = chunks || Math.max(1, Math.round(seconds/8));
     const step = seconds/chunks;
