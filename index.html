@@ -51,10 +51,16 @@
   canvas#gl.dragging{cursor:grabbing}
 
   #hud{position:fixed;inset:0;pointer-events:none;transition:opacity 1.2s ease;opacity:1;
-    text-shadow:0 1px 4px rgba(0,0,8,.85), 0 0 14px rgba(0,0,8,.55)}
+    text-shadow:0 1px 4px rgba(0,0,8,.85), 0 0 14px rgba(0,0,8,.55);
+    /* the readout is not a document — dragging across it selected the clock
+       and highlighted the speed buttons on the way past */
+    -webkit-user-select:none;user-select:none}
   #hud.hidden{opacity:0 !important}
   /* a hidden interface must not keep swallowing clicks */
   #hud.hidden, #hud.hidden *{pointer-events:none !important}
+  /* and it must not read through the charts either */
+  #hud.behind{opacity:0}
+  #hud.behind, #hud.behind *{pointer-events:none !important}
 
   .corner{position:absolute;padding:22px 26px}
   .bl{left:0;bottom:0}
@@ -90,6 +96,32 @@
   .bar .val{font-size:11px;color:var(--ink);font-variant-numeric:tabular-nums;margin-bottom:5px}
   .scales{margin-top:15px;font-size:10px;letter-spacing:.13em;text-transform:uppercase;
     color:rgba(233,240,255,.56);font-variant-numeric:tabular-nums;line-height:1.85}
+
+  #chartlink{
+    pointer-events:auto;font:inherit;font-size:inherit;letter-spacing:inherit;
+    text-transform:inherit;color:rgba(233,240,255,.56);background:none;border:0;
+    padding:0;margin-top:3px;cursor:pointer;transition:color .25s;
+  }
+  #chartlink:hover{color:var(--ink)}
+  /* Fixed and clipped: the page itself must never gain a scrollbar, and an
+     overlay is the easiest way to give it one by accident. */
+  #charts{
+    position:fixed;inset:0;z-index:40;display:none;overflow:hidden;
+    background:rgba(6,9,14,.965);padding:22px 26px;
+    flex-direction:column;gap:14px;
+  }
+  #charts.on{display:flex}
+  .chead{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+  .ctitle{font-size:13px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink)}
+  .csub{font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+    color:rgba(233,240,255,.5);margin-top:6px;font-variant-numeric:tabular-nums}
+  #chartclose{
+    font:inherit;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--dim);background:transparent;border:1px solid var(--faint);
+    padding:6px 11px;cursor:pointer;transition:.25s;flex:none;
+  }
+  #chartclose:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
+  #cgraph{flex:1;min-height:0;width:100%;display:block}
 
   .speeds{pointer-events:auto;display:flex;gap:2px;justify-content:flex-end}
   .sp{
@@ -158,8 +190,20 @@
     <div class="bars" id="bars"></div>
     <div class="scales" id="scales">
       <div id="sc1"></div><div id="sc2"></div><div id="sc3"></div>
+      <div><button id="chartlink" type="button">the life of it &rsaquo;</button></div>
     </div>
   </div>
+</div>
+
+<div id="charts" aria-hidden="true">
+  <div class="chead">
+    <div>
+      <div class="ctitle">the life of it</div>
+      <div class="csub" id="csub">nothing has happened yet</div>
+    </div>
+    <button id="chartclose" type="button" aria-label="close">close &times;</button>
+  </div>
+  <canvas id="cgraph"></canvas>
 </div>
 
 <div id="splash"><div class="t">forming world</div><div class="d"></div></div>
@@ -301,6 +345,16 @@ const PARAMS = {
   alpha:   0.80,    // how much of the ground a mature node hides
   mature:  90,      // reference ticks from bud to maturity, scaled by pace
   life:    1500,    // ticks per unit of fit; a pure specialist at home gets 5x
+  marine:  0.00,    // how far open ocean is nutrient-poor, 0 = uniformly rich.
+                    // Built, measured, and off: it does the opposite of what it
+                    // was for. Starving the deep does not free the planet from
+                    // the sea, it just makes the sea a place only extreme
+                    // specialists survive — niche evenness fell 0.74 to 0.30
+                    // and mean fit to 0.88, most of the world living on the
+                    // hostile floor. Kept because the idea recurs: the sea is
+                    // two thirds of the arena and has no structure, and the
+                    // blurred water-proximity field the climate already keeps,
+                    // inverted, is coastal proximity for nothing.
   viable:  0.40,    // fit below which a node will not even be attempted
   kin:     0.00,    // how much a crowd of near-relatives shortens a life.
                     // Off by default: measured to do nothing for specialisation
@@ -310,15 +364,31 @@ const PARAMS = {
   kind:    1.30,    // affinity distance within which a neighbour counts as kin
   rare:    0.00,    // how much being a COMMON strategy globally shortens a life
   mut:     1.00,    // strength of the affinity mutation minted at a bifurcation
-  minfrag: 5,       // a severed piece smaller than this is not viable
+  minfrag: 45,      // a severed piece smaller than this is not viable. Wood
+                    // rotting through chops plants up at a fixed rate, so
+                    // without a real floor the world silts up with two- and
+                    // three-node scraps that count as plants, drown every
+                    // average and read as rubble. Raising it 5 -> 45 took the
+                    // mean plant from 11 nodes to 53 and the share of plants
+                    // holding more than one kind of node from 0.39 to 0.85.
+                    // There is a cliff: at 90 nothing can reach the floor
+                    // inside `settle` and the planet goes extinct. 75 is
+                    // already unstable. Do not raise this without re-measuring,
+                    // and raise `settle` with it if you do.
   hostile: 150,     // ticks a node lasts on ground that does not suit it at all
+  topn:    100,     // draw a rim around the largest N plants. 0 turns it off.
+  rim:     0.55,    // how strongly that rim reads
   sweep:   40,      // ticks between one pass of connected-component labelling
   perbody: 0,       // 1 = at most one bud per body per turn, 0 = by frontier
-  spore:   0.030,   // chance a bud is thrown clear instead, founding a body.
-                    // Measured: the only thing that slows specialisation eroding
-                    // under a moving climate, because a specialist cannot walk
-                    // to ground that relocated but can be thrown to it. Higher
-                    // is worse -- at 0.12 spores land faster than they settle.
+  spore:   0.006,   // chance a bud is thrown clear instead, founding a body.
+                    // It slows specialisation eroding under a moving climate,
+                    // because a specialist cannot walk to ground that relocated
+                    // but can be thrown to it. But it is *homogenising*, which
+                    // the earlier measurement missed by asking only about
+                    // specialisation: a spore is a copy of whatever is already
+                    // winning, flung across the planet, so a high rate is the
+                    // current champion reseeding itself everywhere. Dropping
+                    // 0.030 -> 0.006 took niche evenness from 0.56 to 0.86.
   settle:  400,     // ticks a young body is spared the fragment cull
   rot:     900,     // ticks dead wood holds before the connection rots through
 };
@@ -1068,7 +1138,11 @@ function envAt(k){
   const grass  = sstep(veg, 0.13, 0.38)*(1-forest);
   const desert = Math.max(0, 1 - forest - grass);
   const dry    = (1-water)*rest;
-  ENV[0]=water*rest; ENV[1]=ice;
+  /* Nutrient limitation offshore. The memberships deliberately stop summing to
+     one here — that is the point, it says there is less of everything in the
+     open sea, so fit and with it lifespan fall, and only a lineage specialised
+     enough to live on a fraction can hold the deep at all. */
+  ENV[0]=water*rest*(1 - PARAMS.marine*F.prox[k]); ENV[1]=ice;
   ENV[2]=dry*desert; ENV[3]=dry*grass; ENV[4]=dry*forest;
   return ENV;
 }
@@ -1357,11 +1431,34 @@ function cellAt(x,y,z){
    Everything the look depends on becomes a per-node attribute for free. */
 const GC = new Float32Array(3);
 const INST = 9;                                  // floats per node
-const IBUF = new Float32Array(PMAX*INST);
+/* the rim below emits a second quad for a node, so the buffer has to carry
+   more than one instance per node */
+const RIMCAP = 40000;
+const IBUF = new Float32Array((PMAX+RIMCAP)*INST);
 let instN = 0;
 
 function buildInstances(){
   let w=0;
+  /* The rim goes down first, so each plant's own nodes paint over the middle
+     of it and only the edge survives. One extra quad per node of a ringed
+     plant, drawn wider and brighter — no outline detection, no boundary walk,
+     and it costs one draw because it shares the instance buffer. */
+  const rimAmt=PARAMS.rim;
+  if(PARAMS.topn>0 && rimAmt>0){
+    for(let i=0;i<nodeHigh && w<RIMCAP*INST;i++){
+      if(NLIVE[i]===0 || !BTOP[PROOT[i]]) continue;
+      const x=NPX[i], y=NPY[i], z=NPZ[i];
+      const lat=Math.asin(Math.max(-1,Math.min(1,y))), lon=Math.atan2(z,x);
+      const grow=NLIVE[i]===2 ? 1 : Math.min(1,(ptick-NBORN[i])/Math.max(1,NMAT[i]));
+      const wid=PARAMS.fat*NSTEP[i]*(0.30+0.70*grow)*1.85;
+      IBUF[w  ]=(lon+Math.PI)/(Math.PI*2);
+      IBUF[w+1]=(Math.PI*0.5-lat)/Math.PI;
+      IBUF[w+2]=wid; IBUF[w+3]=wid; IBUF[w+4]=0;
+      IBUF[w+5]=1.0; IBUF[w+6]=0.99; IBUF[w+7]=0.90;
+      IBUF[w+8]=rimAmt;
+      w+=INST;
+    }
+  }
   for(let i=0;i<nodeHigh;i++){
     if(NLIVE[i]===0) continue;
     const wood = NLIVE[i]===2;
@@ -1620,6 +1717,46 @@ function spore(ni){
    one death is handed straight to the next birth and would otherwise graft a
    fragment onto a stranger. */
 const PROOT=new Int32Array(PMAX), PSIZE=new Int32Array(PMAX), PSTK=new Int32Array(PMAX);
+const BTOP=new Uint8Array(PMAX); const SIZES=[];   // the largest plants, ringed
+
+/* ---- history, so stasis can be seen rather than guessed at ----
+   The question a run has to answer is whether anything is still improving, and
+   two endpoints cannot tell a slow climb from an oscillation from a dead stop.
+   Samples are taken on the component sweep, which already walks every plant, so
+   this costs one extra pass over the roots. When the buffer fills, every other
+   sample is dropped and the interval doubles — so the whole run stays on screen
+   at whatever resolution the run's own length allows, for ever, in fixed
+   memory. */
+const HCAP = 1024;
+const HSER = [
+  {k:"live",  label:"living nodes",        v:new Float32Array(HCAP)},
+  {k:"bodies",label:"plants",              v:new Float32Array(HCAP)},
+  {k:"meanB", label:"mean plant size",     v:new Float32Array(HCAP)},
+  {k:"maxB",  label:"largest plant",       v:new Float32Array(HCAP)},
+  {k:"fit",   label:"mean fit",            v:new Float32Array(HCAP)},
+  {k:"even",  label:"niche evenness",      v:new Float32Array(HCAP), lo:0, hi:1},
+  {k:"top",   label:"biggest lineage share",v:new Float32Array(HCAP), lo:0, hi:1},
+  {k:"mixed", label:"plants of two minds", v:new Float32Array(HCAP), lo:0, hi:1},
+  {k:"pace",  label:"mean pace",           v:new Float32Array(HCAP), lo:0, hi:1},
+  {k:"spec",  label:"specialisation",      v:new Float32Array(HCAP), lo:0, hi:1},
+];
+const HT = new Float32Array(HCAP);            // tick each sample was taken at
+let hN = 0, hEvery = 1, hSkip = 0;
+const HWHERE = new Float64Array(5);           // where life actually is
+function historySample(vals){
+  if(++hSkip < hEvery) return;
+  hSkip = 0;
+  if(hN >= HCAP){                             // halve the resolution, keep the span
+    for(let n=0;n<HCAP>>1;n++){
+      HT[n]=HT[n*2];
+      for(const s of HSER) s.v[n]=s.v[n*2];
+    }
+    hN = HCAP>>1; hEvery *= 2;
+  }
+  HT[hN]=ptick;
+  for(const s of HSER) s.v[hN]=vals[s.k];
+  hN++;
+}
 function rooted(i){
   const p=NPAR[i];
   return p>=0 && NLIVE[p]!==0 && NGEN[p]===NPGEN[i];
@@ -1661,6 +1798,60 @@ function pruneFragments(){
     comps++; tot+=PSIZE[i]; if(PSIZE[i]>bigFrag) bigFrag=PSIZE[i];
   }
   meanComp = comps? tot/comps : 0;
+  /* Which plants are the big ones, so the renderer can ring them. Colour is
+     already carrying three things — hue says which environment a lineage is
+     built for, saturation how committed it is, lightness the life-history —
+     and overriding any of those to mark size would destroy the channel that
+     makes convergent evolution visible. A rim adds a channel instead of
+     stealing one. */
+  BTOP.fill(0,0,nodeHigh);
+  const topn = PARAMS.topn|0;
+  if(topn>0){
+    SIZES.length = 0;
+    for(let i=0;i<nodeHigh;i++)
+      if(NLIVE[i]!==0 && PROOT[i]===i && PSIZE[i]>0) SIZES.push(PSIZE[i]);
+    if(SIZES.length){
+      SIZES.sort((a,b)=>b-a);
+      const cut = SIZES[Math.min(SIZES.length,topn)-1];
+      /* ties at the threshold would let the count run away on a planet of
+         equal-sized plants, so admit them only until the quota is full */
+      let left = topn;
+      for(let i=0;i<nodeHigh && left>0;i++)
+        if(NLIVE[i]!==0 && PROOT[i]===i && PSIZE[i]>=cut){ BTOP[i]=1; left--; }
+    }
+  }
+  /* Where life *is*, which is not the same question as what it is built for —
+     a lineage whose strongest affinity is forest may be living in the sea, and
+     counting genomes by their strongest affinity cannot tell you that. Summed
+     over the memberships each node actually stands in. */
+  HWHERE.fill(0); BCM.fill(0,0,nodeHigh);
+  let hn=0, hpace=0, hspec=0, hfit=0, hmixed=0, hbodies=0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]!==1) continue;
+    const e=i*5, o=i*G;
+    for(let g=0;g<5;g++) HWHERE[g]+=NENV[e+g];
+    let mx=0; for(let g=0;g<5;g++) if(GENE[o+g]>mx) mx=GENE[o+g];
+    hspec+=(mx-1)/4; hpace+=NPACE[i]; hfit+=NFIT[i]; hn++;
+    BCM[PROOT[i]] |= (1<<NCAP[i]);
+  }
+  for(let r=0;r<nodeHigh;r++){
+    if(PSIZE[r]<8 || PROOT[r]!==r) continue;
+    hbodies++;
+    let m=BCM[r], bits=0; while(m){ bits+=m&1; m>>=1; }
+    if(bits>=2) hmixed++;
+  }
+  let wtot=0; for(let g=0;g<5;g++) wtot+=HWHERE[g];
+  let ent=0;
+  if(wtot>0) for(let g=0;g<5;g++){ const p=HWHERE[g]/wtot; if(p>0) ent-=p*Math.log(p); }
+  historySample({
+    live:liveN, bodies:comps, meanB:meanComp, maxB:bigFrag,
+    fit:hn>0 ? hfit/hn : 0,
+    even:ent/Math.log(5),
+    top:censusN>0 ? Math.max.apply(null,CENSUS)/censusN : 0,
+    mixed:hbodies>0 ? hmixed/hbodies : 0,
+    pace:hn>0 ? hpace/hn : 0, spec:hn>0 ? hspec/hn : 0,
+  });
+
   /* A body that has just been founded is one node, which is below any sane
      minimum. Spare it until it has had time to establish, or the cull becomes
      a ratchet that removes bodies and never lets one begin. */
@@ -1680,7 +1871,8 @@ function plantsStep(){
   ptick++;
   admitMature();
   reap();
-  if(PARAMS.sweep>0 && ptick%(PARAMS.sweep|0)===0){ pruneFragments(); census(); }
+  /* census first: pruneFragments samples the history and reads it */
+  if(PARAMS.sweep>0 && ptick%(PARAMS.sweep|0)===0){ census(); pruneFragments(); }
 
   /* Attempts used to be drawn from one global frontier, which made a form's
      growth proportional to how much of the world it already held — so the
@@ -2152,7 +2344,7 @@ gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1, 1,-1, -1,1, 1,1]),gl.STAT
 gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
 const instVBO=gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER,instVBO);
-gl.bufferData(gl.ARRAY_BUFFER,PMAX*INST*4,gl.DYNAMIC_DRAW);
+gl.bufferData(gl.ARRAY_BUFFER,(PMAX+RIMCAP)*INST*4,gl.DYNAMIC_DRAW);
 const STRIDE=INST*4;
 [[1,2,0],[2,2,8],[3,1,16],[4,4,20]].forEach(a=>{
   gl.enableVertexAttribArray(a[0]);
@@ -2992,6 +3184,25 @@ addEventListener("pointermove",e=>{
   }
 },{passive:false});
 
+/* A tap on the world toggles the interface. The controls are small, so a near
+   miss on one lands on the world instead and the interface disappears when
+   somebody was only reaching for pause — which reads as the button doing the
+   wrong thing. Give every control a margin of forgiveness that suppresses the
+   toggle without swallowing the tap. Not applied when the interface is already
+   hidden, or there would be dead patches you cannot bring it back from. */
+const TAPSAFE = 15;
+function overControl(x,y){
+  if(!hudShown) return false;
+  const els = hud.querySelectorAll("button");
+  for(let i=0;i<els.length;i++){
+    const r = els[i].getBoundingClientRect();
+    if(r.width<=0 || r.height<=0) continue;
+    if(x >= r.left-TAPSAFE && x <= r.right+TAPSAFE &&
+       y >= r.top-TAPSAFE  && y <= r.bottom+TAPSAFE) return true;
+  }
+  return false;
+}
+
 function liftPointer(e){
   const rec = ptrs.get(e.pointerId);
   if(!rec) return;
@@ -3002,9 +3213,10 @@ function liftPointer(e){
      on the release event: some touch stacks report those as zero. Movement
      is the real test of tap-versus-drag; the time limit is generous so that
      a slow device cannot turn a tap into a non-event. */
-  if(wasLast && !didPinch
+  if(wasLast && !didPinch && !chartsOn
      && performance.now()-downT < 1500
-     && Math.hypot(rec.x-downX, rec.y-downY) < 12 && travel < 18){
+     && Math.hypot(rec.x-downX, rec.y-downY) < 12 && travel < 18
+     && !overControl(downX, downY)){
     setHud(!hudShown);
   }
 }
@@ -3349,6 +3561,120 @@ function m3(a,b){
   }
   return o;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   the life of it — the history, drawn
+   ══════════════════════════════════════════════════════════════════════
+   Hand-drawn on a 2D canvas because there are no libraries here and there is
+   not going to be one. The question it exists to answer is whether anything is
+   still moving: a line still climbing means adaptation has not finished, a flat
+   one means stasis, and a waving one means the lineages are taking turns —
+   which is the outcome worth hoping for and cannot be seen from two numbers. */
+const chartsEl = document.getElementById("charts");
+const cgraph = document.getElementById("cgraph");
+const cctx = cgraph.getContext("2d");
+let chartsOn = false, chartTimer = 0;
+
+function trendOf(v,n){
+  /* slope over the last third against the run's own spread, so "still moving"
+     is a statement about this metric's scale and not about its units */
+  if(n<8) return 0;
+  const a=Math.max(0,n-Math.max(4,n/3|0));
+  let lo=Infinity, hi=-Infinity;
+  for(let i=0;i<n;i++){ if(v[i]<lo)lo=v[i]; if(v[i]>hi)hi=v[i]; }
+  const span=hi-lo;
+  if(span<=1e-9) return 0;
+  let s0=0,c0=0,s1=0,c1=0;
+  for(let i=a;i<n;i++){ if(i<(a+n)/2){s0+=v[i];c0++;} else {s1+=v[i];c1++;} }
+  if(!c0||!c1) return 0;
+  return (s1/c1 - s0/c0)/span;
+}
+
+function drawCharts(){
+  const dprC = Math.min(devicePixelRatio||1, 2);
+  const W = cgraph.clientWidth, H = cgraph.clientHeight;
+  if(W<8 || H<8) return;
+  if(cgraph.width!==(W*dprC|0) || cgraph.height!==(H*dprC|0)){
+    cgraph.width=W*dprC|0; cgraph.height=H*dprC|0;
+  }
+  const g=cctx;
+  g.setTransform(dprC,0,0,dprC,0,0);
+  g.clearRect(0,0,W,H);
+
+  const n=hN;
+  document.getElementById("csub").textContent = n<2
+    ? "nothing has happened yet — let it run"
+    : `${HT[n-1]|0} ecology ticks · ${n} samples · every ${hEvery*(PARAMS.sweep|0)} ticks`;
+  if(n<2) return;
+
+  /* as many columns as the width can carry without the labels colliding */
+  const cols = W>1180 ? 5 : W>860 ? 4 : W>560 ? 3 : W>360 ? 2 : 1;
+  const rows = Math.ceil(HSER.length/cols);
+  const padX=8, padY=6, cw=(W-padX*(cols-1))/cols, ch=(H-padY*(rows-1))/rows;
+  const t0=HT[0], t1=Math.max(HT[n-1], t0+1);
+
+  HSER.forEach((s,idx)=>{
+    const cx=(idx%cols)*(cw+padX), cy=((idx/cols)|0)*(ch+padY);
+    const top=cy+26, bot=cy+ch-14, left=cx+2, right=cx+cw-2;
+    if(bot<=top) return;
+    let lo = s.lo!==undefined ? s.lo : Infinity;
+    let hi = s.hi!==undefined ? s.hi : -Infinity;
+    if(s.lo===undefined) for(let i=0;i<n;i++){ if(s.v[i]<lo)lo=s.v[i]; if(s.v[i]>hi)hi=s.v[i]; }
+    if(!(hi>lo)) { hi=lo+1; }
+    if(s.lo===undefined){ const pad=(hi-lo)*0.12; lo-=pad; hi+=pad; if(lo>0&&lo<hi*0.35) lo=0; }
+
+    g.fillStyle="rgba(233,240,255,.035)";
+    g.fillRect(left,top,right-left,bot-top);
+    g.strokeStyle="rgba(233,240,255,.10)"; g.lineWidth=1;
+    g.beginPath(); g.moveTo(left,bot+.5); g.lineTo(right,bot+.5); g.stroke();
+
+    g.beginPath();
+    for(let i=0;i<n;i++){
+      const x=left+(right-left)*((HT[i]-t0)/(t1-t0));
+      const y=bot-(bot-top)*((s.v[i]-lo)/(hi-lo));
+      i?g.lineTo(x,y):g.moveTo(x,y);
+    }
+    g.strokeStyle="rgba(150,205,255,.92)"; g.lineWidth=1.4; g.stroke();
+
+    const last=s.v[n-1], tr=trendOf(s.v,n);
+    const arrow = tr>0.06 ? "↑" : tr<-0.06 ? "↓" : "→";
+    const col   = tr>0.06 ? "rgba(150,235,175,.95)"
+                : tr<-0.06 ? "rgba(240,165,150,.95)" : "rgba(233,240,255,.45)";
+    g.font="10px ui-monospace,Menlo,Consolas,monospace";
+    g.fillStyle="rgba(233,240,255,.62)";
+    g.fillText(s.label.toUpperCase(), left, cy+11);
+    const val = last>=100 ? String(last|0) : last.toFixed(last>=10?1:3);
+    g.fillStyle="rgba(233,240,255,.92)";
+    g.fillText(val, left, cy+23);
+    g.fillStyle=col;
+    g.fillText(arrow, left+g.measureText(val).width+7, cy+23);
+    /* the axis, so a flat line at 40,000 is not mistaken for a flat line at 4 */
+    g.fillStyle="rgba(233,240,255,.30)";
+    const hiS = hi>=100?String(hi|0):hi.toFixed(2);
+    g.fillText(hiS, right-g.measureText(hiS).width, cy+11);
+  });
+}
+
+function setCharts(on){
+  chartsOn=on;
+  chartsEl.classList.toggle("on",on);
+  document.getElementById("hud").classList.toggle("behind",on);
+  chartsEl.setAttribute("aria-hidden",on?"false":"true");
+  clearInterval(chartTimer);
+  if(on){ drawCharts(); chartTimer=setInterval(drawCharts,1000); }
+}
+document.getElementById("chartlink").addEventListener("click",e=>{
+  e.stopPropagation(); setCharts(true);
+});
+document.getElementById("chartclose").addEventListener("click",e=>{
+  e.stopPropagation(); setCharts(false);
+});
+/* the overlay swallows its own pointers, or a tap on it would reach the canvas
+   underneath and hide the interface out from under it */
+["pointerdown","pointerup","click","wheel","touchstart"].forEach(ev=>
+  chartsEl.addEventListener(ev,e=>e.stopPropagation(),{passive:true}));
+addEventListener("keydown",e=>{ if(e.key==="Escape"&&chartsOn) setCharts(false); });
+addEventListener("resize",()=>{ if(chartsOn) drawCharts(); });
 
 /* ---- go ---- */
 resize();

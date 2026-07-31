@@ -398,6 +398,26 @@ itself at a distant free location instead of adjacent. Keep it rare enough that
 each arrival reads as an event. Reserve de-novo seeding for near-extinction
 rescue.
 
+**Measured, and "rare enough that it reads as an event" was righter than it
+knew.** The earlier reading — that dispersal is the one thing slowing the erosion
+of specialisation, so more of it is better up to a point — asked only about
+*specialisation* and missed what dispersal does to *which niche wins*. A spore is
+a copy of whatever is already succeeding, thrown across the planet, so a high rate
+is the current champion reseeding itself everywhere: it is a **homogenising**
+force. Taking the rate from 0.030 down to 0.006 moved niche evenness from 0.56 to
+0.86 and the largest lineage's share from 0.44 to 0.24. Both readings are true and
+they pull opposite ways; the low rate is much the better trade.
+
+**And the floor under fragment size was doing nothing at 5.** Wood rotting through
+chops plants up at a fixed rate the growth cannot outrun, so the world silts up
+with two- and three-node scraps that count as plants and drown every average.
+Raising the floor to 45 took the mean plant from 11 nodes to 53, the largest past
+1,300, and the share of plants carrying more than one kind of node from 0.39 to
+0.85. **There is a cliff**: at 90 no founder can reach the floor inside its grace
+period, so every new body is culled, and the planet goes extinct — the same
+one-way ratchet described under heartwood, in a new place. 75 is already unstable.
+The pair `minfrag`/`settle` must move together.
+
 **Horizontal transfer between touching lineages.** Occasionally copy an
 instruction block from a neighbouring plant's genome. Adjacency is already known
 from the collision tests, so it costs almost nothing. It is thematically right —
@@ -514,13 +534,30 @@ before believing it**, which is the same lesson the climate controller learned.
 
 ## Ideas not yet decided
 
-- **The ocean is two-thirds of the arena and currently inert.** Including sea in
+- ~~**The ocean is two-thirds of the arena and currently inert.** Including sea in
   the five affinities opens it up. The risk is that open ocean has no structure,
   so a marine specialist sweeps all of it — but the blurred distance-to-water
   field already used for continentality, *inverted*, gives coastal proximity. Use
   it as nutrient limitation and you get green fringes along every shore and blue
   deserts in the open gyres, which is why real ocean productivity looks the way it
-  does.
+  does.~~
+
+  **Built as `marine`, measured, and switched off — it does the opposite.** The
+  sea is indeed structureless and does hold the largest share of life. But
+  starving the deep does not release the planet from it: it makes the open ocean a
+  place only an extreme specialist can survive, and those are exactly the lineages
+  that then hold all of it. Niche evenness fell 0.74 to 0.30 and mean fit to 0.88,
+  with most of the world living on the hostile floor. The diagnosis was right and
+  the remedy was backwards. Kept behind a parameter because the idea keeps
+  recurring and now has a number attached.
+
+- **Frequency dependence still answers a question nobody is asking.** Tried a
+  second time, on niche balance rather than specialisation, and it fails there
+  too: evenness falls monotonically as `rare` rises, 0.82 to 0.72. It penalises a
+  common *strategy*, and a lineage can shift its specialisation without changing
+  which environment it favours, so it never pushes toward balance across the five.
+  Two hypotheses, two failures. It should probably be deleted rather than tried a
+  third time.
 - **Allelopathy** as a diffusing inhibitor field — halos and no-man's-lands.
   Cheap: one more grid with diffusion, which the water-proximity blur already does.
 - **Seasonal phenology genes** so lineages pulse out of phase across the year.

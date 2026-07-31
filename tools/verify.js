@@ -298,6 +298,41 @@ async function touch(browser) {
     return was === h.classList.contains('hidden');
   });
   check(dragged, 'a drag does not toggle the interface');
+
+  // A near miss on a control must not hide the interface. The buttons are small,
+  // and a thumb that lands just beside pause used to read as a tap on the world
+  // and take the whole readout away.
+  const nearMiss = await page.evaluate(() => {
+    const c = document.getElementById('gl'), h = document.getElementById('hud');
+    if (h.classList.contains('hidden')) h.classList.remove('hidden');
+    const r = document.getElementById('playpause').getBoundingClientRect();
+    const o = { pointerId: 99, pointerType: 'touch', bubbles: true, cancelable: true,
+                clientX: r.right + 6, clientY: r.top + r.height / 2 };
+    c.dispatchEvent(new PointerEvent('pointerdown', o));
+    window.dispatchEvent(new PointerEvent('pointerup', o));
+    return !h.classList.contains('hidden');
+  });
+  check(nearMiss, 'a near miss on a control does not hide the interface');
+
+  // The readout is not a document: dragging across it must not select the clock.
+  const noSelect = await page.evaluate(() => {
+    const s = getComputedStyle(document.getElementById('hud'));
+    return (s.userSelect || s.webkitUserSelect) === 'none';
+  });
+  check(noSelect, 'interface text is not selectable');
+
+  // The metrics overlay must open, stay inside the viewport and close again.
+  const charts = await page.evaluate(() => {
+    document.getElementById('chartlink').click();
+    const on = document.getElementById('charts').classList.contains('on');
+    const d = document.documentElement;
+    const fits = d.scrollWidth === d.clientWidth && d.scrollHeight === d.clientHeight;
+    document.getElementById('chartclose').click();
+    const off = !document.getElementById('charts').classList.contains('on');
+    return on && fits && off;
+  });
+  check(charts, 'metrics overlay opens, fits the viewport and closes');
+
   check(errs.length === 0, 'no errors during touch' + (errs.length ? `: ${errs[0]}` : ''));
 
   await ctx.close();
