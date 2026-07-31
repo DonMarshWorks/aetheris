@@ -376,8 +376,13 @@ const PARAMS = {
                     // already unstable. Do not raise this without re-measuring,
                     // and raise `settle` with it if you do.
   hostile: 150,     // ticks a node lasts on ground that does not suit it at all
-  topn:    100,     // draw a rim around the largest N plants. 0 turns it off.
-  rim:     0.55,    // how strongly that rim reads
+  topn:    50,      // draw a rim around the largest N plants. 0 turns it off.
+  rim:     0.62,    // how strongly that rim reads. Magenta, because every
+                    // colour this world makes is a mix of five environment
+                    // colours — greens, blues, sand, ice-white — and a pale rim
+                    // was indistinguishable from a plant standing on ice. The
+                    // one hue the palette cannot produce is the one that reads
+                    // unambiguously as an annotation rather than as biology.
   sweep:   40,      // ticks between one pass of connected-component labelling
   perbody: 0,       // 1 = at most one bud per body per turn, 0 = by frontier
   spore:   0.006,   // chance a bud is thrown clear instead, founding a body.
@@ -1431,31 +1436,46 @@ function cellAt(x,y,z){
    Everything the look depends on becomes a per-node attribute for free. */
 const GC = new Float32Array(3);
 const INST = 9;                                  // floats per node
-/* the rim below emits a second quad for a node, so the buffer has to carry
-   more than one instance per node */
-const RIMCAP = 40000;
+/* the markers below are extra instances beyond one per node, and this is also
+   the ceiling on how many plants `topn` can ring */
+const RIMCAP = 8192;
 const IBUF = new Float32Array((PMAX+RIMCAP)*INST);
 let instN = 0;
 
 function buildInstances(){
   let w=0;
-  /* The rim goes down first, so each plant's own nodes paint over the middle
-     of it and only the edge survives. One extra quad per node of a ringed
-     plant, drawn wider and brighter — no outline detection, no boundary walk,
-     and it costs one draw because it shares the instance buffer. */
+  /* One ring per plant, at its centroid, rather than an outline. Two things
+     were tried and abandoned: marking every node of a plant floods it, because
+     the nodes are translucent and do not tile solidly so the colour bleeds
+     through every gap; and marking the nodes that still have a free slot is not
+     the perimeter either, because on a crowded planet most nodes are blocked
+     rather than full. A real outline needs a neighbour count per node, and that
+     is a lot of machinery for an annotation. A ring cannot speckle, it scales
+     with the plant so the big ones are obviously big, and it can be counted.
+
+     Magenta because every colour this world makes is a blend of the five
+     environment colours, and the one hue the palette cannot produce is the one
+     that reads as an annotation instead of as biology. The negative alpha is
+     the flag that tells the fragment shader to draw a ring, not a disc. */
   const rimAmt=PARAMS.rim;
   if(PARAMS.topn>0 && rimAmt>0){
-    for(let i=0;i<nodeHigh && w<RIMCAP*INST;i++){
-      if(NLIVE[i]===0 || !BTOP[PROOT[i]]) continue;
-      const x=NPX[i], y=NPY[i], z=NPZ[i];
+    const stepR=PARAMS.step;
+    for(let r=0;r<nodeHigh && w<RIMCAP*INST;r++){
+      if(!BTOP[r] || PSIZE[r]<=0) continue;
+      const n=PSIZE[r];
+      let x=BX[r]/n, y=BY[r]/n, z=BZ[r]/n;
+      const l=Math.hypot(x,y,z);
+      if(!(l>1e-6)) continue;
+      x/=l; y/=l; z/=l;
       const lat=Math.asin(Math.max(-1,Math.min(1,y))), lon=Math.atan2(z,x);
-      const grow=NLIVE[i]===2 ? 1 : Math.min(1,(ptick-NBORN[i])/Math.max(1,NMAT[i]));
-      const wid=PARAMS.fat*NSTEP[i]*(0.30+0.70*grow)*1.85;
+      /* the radius a mat of n nodes would have if it were a disc, so the ring
+         sits about where the plant ends */
+      const rad=Math.max(5*stepR, Math.min(0.20, Math.sqrt(n/Math.PI)*1.35*stepR));
       IBUF[w  ]=(lon+Math.PI)/(Math.PI*2);
       IBUF[w+1]=(Math.PI*0.5-lat)/Math.PI;
-      IBUF[w+2]=wid; IBUF[w+3]=wid; IBUF[w+4]=0;
-      IBUF[w+5]=1.0; IBUF[w+6]=0.99; IBUF[w+7]=0.90;
-      IBUF[w+8]=rimAmt;
+      IBUF[w+2]=rad; IBUF[w+3]=rad; IBUF[w+4]=0;
+      IBUF[w+5]=1.0; IBUF[w+6]=0.14; IBUF[w+7]=0.80;
+      IBUF[w+8]=-rimAmt;
       w+=INST;
     }
   }
@@ -1718,6 +1738,7 @@ function spore(ni){
    fragment onto a stranger. */
 const PROOT=new Int32Array(PMAX), PSIZE=new Int32Array(PMAX), PSTK=new Int32Array(PMAX);
 const BTOP=new Uint8Array(PMAX); const SIZES=[];   // the largest plants, ringed
+const BX=new Float32Array(PMAX), BY=new Float32Array(PMAX), BZ=new Float32Array(PMAX);
 
 /* ---- history, so stasis can be seen rather than guessed at ----
    The question a run has to answer is whether anything is still improving, and
@@ -1825,14 +1846,18 @@ function pruneFragments(){
      counting genomes by their strongest affinity cannot tell you that. Summed
      over the memberships each node actually stands in. */
   HWHERE.fill(0); BCM.fill(0,0,nodeHigh);
+  BX.fill(0,0,nodeHigh); BY.fill(0,0,nodeHigh); BZ.fill(0,0,nodeHigh);
   let hn=0, hpace=0, hspec=0, hfit=0, hmixed=0, hbodies=0;
   for(let i=0;i<nodeHigh;i++){
     if(NLIVE[i]!==1) continue;
-    const e=i*5, o=i*G;
+    const e=i*5, o=i*G, r=PROOT[i];
     for(let g=0;g<5;g++) HWHERE[g]+=NENV[e+g];
     let mx=0; for(let g=0;g<5;g++) if(GENE[o+g]>mx) mx=GENE[o+g];
     hspec+=(mx-1)/4; hpace+=NPACE[i]; hfit+=NFIT[i]; hn++;
-    BCM[PROOT[i]] |= (1<<NCAP[i]);
+    BCM[r] |= (1<<NCAP[i]);
+    /* summed in 3D and normalised after, so a plant straddling the date line
+       has a centroid on the plant rather than on the far side of the world */
+    BX[r]+=NPX[i]; BY[r]+=NPY[i]; BZ[r]+=NPZ[i];
   }
   for(let r=0;r<nodeHigh;r++){
     if(PSIZE[r]<8 || PROOT[r]!==r) continue;
@@ -2312,15 +2337,22 @@ uniform float uSeam;
 out vec2 vC; out vec4 vCol;
 void main(){
   float lat = (0.5 - aUV.y)*3.14159265;
-  float cl  = max(cos(lat), 0.02);
+  /* The footprint is a circle of arc on the globe, so longitude has to be
+     widened by 1/cos(lat) to hold it. Unbounded, that factor runs away at the
+     pole: every node there paints a band across all longitudes, and the poles
+     pucker into a starburst — the single thing in the picture that shouts
+     "generated". Bound the widening, and fade the last few degrees rather than
+     let them thin into gaps. Under one percent of the globe is lost, and the
+     terrain underneath was never the problem. */
+  float cl  = max(cos(lat), 0.10);
   float ca=cos(aRot), sa=sin(aRot);
   vec2 e = aCorner*aSize;
-  /* the footprint is an ellipse lying along the heading, in radians of arc,
-     which longitude has to be widened by 1/cos(lat) to hold */
   vec2 arc = vec2(e.x*ca - e.y*sa, e.x*sa + e.y*ca);
   float u = aUV.x + arc.x/(6.2831853*cl) + uSeam;
   float v = aUV.y - arc.y/3.14159265;
-  vC = aCorner; vCol = aCol;
+  /* ascending, always — a descending smoothstep is undefined */
+  float polar = 1.0 - smoothstep(0.984, 0.9994, abs(sin(lat)));
+  vC = aCorner; vCol = vec4(aCol.rgb, aCol.a*polar);
   gl_Position = vec4(u*2.0-1.0, v*2.0-1.0, 0.0, 1.0);
 }`, `#version 300 es
 precision highp float;
@@ -2331,7 +2363,13 @@ void main(){
   float q = length(vC);
   /* ascending, always: a descending smoothstep is undefined and vanishes on
      some drivers */
-  float a = (1.0 - smoothstep(1.0-uSoft, 1.0, q))*vCol.a;
+  float a;
+  if(vCol.a < 0.0){
+    /* a marker ring: a band just inside the quad, soft on both sides */
+    a = smoothstep(0.74, 0.87, q)*(1.0 - smoothstep(0.90, 1.0, q))*(-vCol.a);
+  } else {
+    a = (1.0 - smoothstep(1.0-uSoft, 1.0, q))*vCol.a;
+  }
   if(a <= 0.004) discard;
   o = vec4(vCol.rgb, a);
 }`);
