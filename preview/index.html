@@ -383,16 +383,34 @@ const PARAMS = {
   alpha:   0.80,    // how much of the ground a mature node hides
   mature:  90,      // reference ticks from bud to maturity, scaled by pace
   life:    1500,    // ticks per unit of fit; a pure specialist at home gets 5x
-  marine:  0.00,    // how far open ocean is nutrient-poor, 0 = uniformly rich.
-                    // Built, measured, and off: it does the opposite of what it
-                    // was for. Starving the deep does not free the planet from
-                    // the sea, it just makes the sea a place only extreme
-                    // specialists survive — niche evenness fell 0.74 to 0.30
-                    // and mean fit to 0.88, most of the world living on the
-                    // hostile floor. Kept because the idea recurs: the sea is
-                    // two thirds of the arena and has no structure, and the
-                    // blurred water-proximity field the climate already keeps,
-                    // inverted, is coastal proximity for nothing.
+  seafit:  1.00,    // a flat multiplier on how habitable the sea is at all.
+                    // 0 empties the ocean entirely and leaves the ecology to
+                    // the land, which is one of the two honest answers to the
+                    // problem below. Between 0 and 1 is the other: a tax.
+                    // Careful — a tax leaves the sea *undivided*, so it can
+                    // simply filter for whoever can live on less and hand them
+                    // all of it. Measure, do not assume.
+  marine:  1.00,    // how far open ocean is nutrient-poor, 0 = uniformly rich.
+                    // Green fringes along every shore, empty blue gyres, and
+                    // the deep left to whoever can live on nothing — which is
+                    // how real ocean productivity works, using the blurred
+                    // water-proximity field the climate already keeps.
+                    //
+                    // Measured alone, twice, and judged harmful both times:
+                    // starving the deep filters the sea down to extreme
+                    // specialists who then own all of it. That verdict was
+                    // wrong because it was taken in isolation. With a ceiling
+                    // on what suitability buys (`fitcap`) and a penalty on
+                    // being common (`rare`), the same mechanism instead breaks
+                    // the sea's single undivided niche into a structured one,
+                    // and it is the best result measured: niche evenness 0.96
+                    // against 0.58, no lineage over a fifth of the planet, and
+                    // more life than emptying the ocean altogether.
+                    //
+                    // The lesson is about method, not oceans. Three mechanisms
+                    // that each did nothing or harm on their own are together
+                    // the whole cure. Testing one dial at a time finds none of
+                    // that.
   polelat: 78,      // degrees of latitude beyond which nothing grows, fading
   polefade: 7,      // out over this many more. Kept as tight as the smear
                     // allows, because the ice is the steadiest ground on the
@@ -407,6 +425,14 @@ const PARAMS = {
                     // "generated". Bounding the widening was not enough. So
                     // the poles are simply hostile ground, which is both the
                     // honest fix and true of real polar deserts.
+  fitcap:  2.00,    // fit above which extra suitability stops buying lifespan.
+                    // 0 = uncapped. The runaway the graphs show is a lineage
+                    // that is highly specialised *and* able to grow anywhere:
+                    // normally those trade off, and what removes the trade is
+                    // that fit pays without limit, so perfect adaptation is
+                    // worth having everywhere at once. A ceiling restores it —
+                    // a specialist at home stops gaining, and a generalist that
+                    // is merely adequate is no longer dominated.
   viable:  0.40,    // fit below which a node will not even be attempted.
                     // Raising this to make the world less crowded was tried
                     // and does not work: the node budget binds long before
@@ -420,7 +446,12 @@ const PARAMS = {
                     // anyone is) and each evaluation scans 343 spatial bins.
   kinr:    3.0,     // how far that crowd is counted, in steps
   kind:    1.30,    // affinity distance within which a neighbour counts as kin
-  rare:    0.00,    // how much being a COMMON strategy globally shortens a life
+  rare:    0.70,    // how much being a COMMON strategy globally shortens a life.
+                    // Recorded three times as doing nothing, and all three of
+                    // those measurements were taken through a harness that ran
+                    // the ecology fifteen times too slowly against the climate.
+                    // On the world the frame loop actually runs it is half of
+                    // the answer to the marine monoculture.
   nodemut: 0.07,    // chance a *first* child mutates anyway. Variation is
                     // otherwise minted only at bifurcations, so an unbranched
                     // lineage cannot evolve at all — it copies itself down a
@@ -471,6 +502,16 @@ const PARAMS = {
                     // was indistinguishable from a plant standing on ice. The
                     // one hue the palette cannot produce is the one that reads
                     // unambiguously as an annotation rather than as biology.
+  ecorate: 16,      // ecology steps owed per climate tick, and the single
+                    // number that decides how much the world moves under a
+                    // plant's feet in one generation. Measured: at the ratios
+                    // time-lapse used to produce, a *frozen* planet was the
+                    // most diverse one and x20 the least — the brief's central
+                    // claim, that a wandering climate is what keeps this world
+                    // from degenerating, is backwards at the speeds the piece
+                    // actually runs. See the frame loop for why this must be
+                    // paid in full before the climate is allowed to move.
+  ecobudget: 4.0,   // milliseconds per frame spent paying that debt
   sweep:   40,      // ticks between one pass of connected-component labelling
   perbody: 0,       // 1 = at most one bud per body per turn, 0 = by frontier
   spore:   0.006,   // chance a bud is thrown clear instead, founding a body.
@@ -865,6 +906,7 @@ const NPAR=new Int32Array(PMAX), NPGEN=new Int32Array(PMAX), NGEN=new Int32Array
 const PFRONT = new Int32Array(PMAX), PFREE = new Int32Array(PMAX);
 let nodeHigh = 0, liveN = 0, frontN = 0, freeN = 0;
 let plantDebt = 0;
+const ECORATE = Math.max(1, Math.min(256, PARAMS.ecorate|0));
 let ptick = 0, reapCursor = 0, plantsDirty = true, deaths = 0, woodN = 0, comps = 0, meanComp = 0, bigFrag = 0;
 const NLK=new Int32Array(PMAX);      // children still standing, alive or wood
 const CSTAMP=new Int32Array(PMAX);   // last turn a body was allowed to bud
@@ -1350,7 +1392,13 @@ function envAt(k){
      one here — that is the point, it says there is less of everything in the
      open sea, so fit and with it lifespan fall, and only a lineage specialised
      enough to live on a fraction can hold the deep at all. */
-  ENV[0]=water*rest*(1 - PARAMS.marine*F.prox[k]); ENV[1]=ice;
+  /* The sea is one undivided niche covering nearly two thirds of the world,
+     and the climate controller guarantees it never shrinks and never moves —
+     so the same invariant that keeps the planet balanced exempts one of its
+     five environments from the drift the other four live under. Measured: the
+     sea holds 76% of all life even with the climate frozen solid, and 85% at
+     x100. These two dials are the levers on that. */
+  ENV[0]=water*rest*PARAMS.seafit*(1 - PARAMS.marine*F.prox[k]); ENV[1]=ice;
   ENV[2]=dry*desert; ENV[3]=dry*grass; ENV[4]=dry*forest;
   /* the ground runs out toward the poles, so nothing establishes there */
   const cold = POLE1>POLE0 ? 1-sstep(Math.abs(Math.sin(LAT[(k/GW)|0])), POLE0, POLE1) : 1;
@@ -1375,6 +1423,13 @@ function fitAt(x,y,z,o){ return fitOf(o, cellAt(x,y,z)); }
    Cache them on the node instead and let `reap` refresh them on the same
    rolling cursor that revises lifespan — the staleness is the one the ground
    already has. */
+/* Suitability past the cap stops paying. Soft rather than a hard clip, so
+   selection still has a direction above it and does not sit on a flat. */
+function capFit(f){
+  const c=PARAMS.fitcap;
+  if(c<=0 || f<=c) return f;
+  return c + (f-c)*0.15;
+}
 function refreshEnv(i){
   const m=envAt(cellAt(NPX[i],NPY[i],NPZ[i])), e=i*5, o=i*G;
   let f=0;
@@ -1857,7 +1912,7 @@ function readBirthOutputs(i){
      investment. The old scalar pace had the cost and never the benefit, which
      is why selection could only ever delete it. */
   NMAT[i]  = Math.max(1, Math.min(MATB-1, (matBase*(1.60-1.20*pace))|0));
-  NLIFE[i] = Math.max(PARAMS.hostile|0, (PARAMS.life*NFIT[i]*(1.40-0.80*pace))|0);
+  NLIFE[i] = Math.max(PARAMS.hostile|0, (PARAMS.life*capFit(NFIT[i])*(1.40-0.80*pace))|0);
   recordBirth(cap, pace, Math.tanh(OUTV[O_VIG]*0.25));
 }
 
@@ -2016,7 +2071,7 @@ function reap(){
       const o=i*G, f=refreshEnv(i);
       const crowd = PARAMS.kin>0 ? kinPressure(i) : 0;
       const freq  = PARAMS.rare>0 ? commonness(o) : 0;
-      const raw = PARAMS.life*f*(1.40-0.80*NPACE[i])*(1-PARAMS.kin*crowd)*(1-PARAMS.rare*freq);
+      const raw = PARAMS.life*capFit(f)*(1.40-0.80*NPACE[i])*(1-PARAMS.kin*crowd)*(1-PARAMS.rare*freq);
       const nl = Math.max(PARAMS.hostile|0, raw|0);
       dbgHits++; dbgLife+=nl;
       if(!isFinite(f)) dbgNaN++; else { dbgFit+=f; dbgFitOk++; dbgRaw+=raw; if(raw < (PARAMS.hostile|0)) dbgFloor++; }
@@ -2136,8 +2191,11 @@ const HSER = [
   {k:"meanB", label:"mean plant size",     v:new Float32Array(HCAP)},
   {k:"maxB",  label:"largest plant",       v:new Float32Array(HCAP)},
   {k:"fit",   label:"mean fit",            v:new Float32Array(HCAP)},
-  {k:"even",  label:"niche evenness",      v:new Float32Array(HCAP), lo:0, hi:1},
-  {k:"top",   label:"biggest lineage share",v:new Float32Array(HCAP), lo:0, hi:1},
+  /* `want` is the side of a line the piece needs to stay on. Only these two
+     carry it, because only these two *are* the acceptance test: diversity must
+     not collapse. Everything else is description; these are the pass mark. */
+  {k:"even",  label:"niche evenness",      v:new Float32Array(HCAP), lo:0, hi:1, want:0.45, above:true},
+  {k:"top",   label:"biggest lineage share",v:new Float32Array(HCAP), lo:0, hi:1, want:0.50, above:false},
   {k:"mixed", label:"plants of two minds", v:new Float32Array(HCAP), lo:0, hi:1},
   {k:"pace",  label:"mean pace",           v:new Float32Array(HCAP), lo:0, hi:1},
   {k:"spec",  label:"specialisation",      v:new Float32Array(HCAP), lo:0, hi:1},
@@ -2405,12 +2463,15 @@ function plantsSeed(){
 const BN=new Int32Array(PMAX), BP=new Float32Array(PMAX), BP2=new Float32Array(PMAX);
 const BC=new Float32Array(PMAX), BC2=new Float32Array(PMAX), BCM=new Uint8Array(PMAX);
 const BFAN=new Float32Array(PMAX), BSTEP=new Float32Array(PMAX);
+const BNICHE=new Uint8Array(PMAX);   // which environments a body is built for
+const BAFF=new Float32Array(PMAX*5); // a body's average affinity, to test against
 const POPPACE=new Int32Array(NBIN_H), POPSPRD=new Int32Array(NBIN_H);
 const POPCAP=new Int32Array(10);
 function withinBody(){
   BN.fill(0,0,nodeHigh); BP.fill(0,0,nodeHigh); BP2.fill(0,0,nodeHigh);
   BC.fill(0,0,nodeHigh); BC2.fill(0,0,nodeHigh); BCM.fill(0,0,nodeHigh);
-  BFAN.fill(0,0,nodeHigh); BSTEP.fill(0,0,nodeHigh);
+  BFAN.fill(0,0,nodeHigh); BSTEP.fill(0,0,nodeHigh); BNICHE.fill(0,0,nodeHigh);
+  BAFF.fill(0,0,nodeHigh*5);
   POPPACE.fill(0); POPSPRD.fill(0); POPCAP.fill(0);
   const slo=PARAMS.splo, srange=Math.max(1e-6,PARAMS.sphi-PARAMS.splo);
   let n=0, sp=0, sp2=0, sc=0, sc2=0;
@@ -2419,6 +2480,14 @@ function withinBody(){
     const r=PROOT[i], p=NPACE[i], c=NCAP[i];
     BN[r]++; BP[r]+=p; BP2[r]+=p*p; BC[r]+=c; BC2[r]+=c*c; BCM[r]|=(1<<c);
     BFAN[r]+=Math.abs(NANG[i]); BSTEP[r]+=NSTEP[i];
+    /* which of the five *this node* leans toward, so that a body holding sea
+       nodes and forest nodes can be told from a body of one mind. This is the
+       whole point of letting a formula lean the affinities, and no population
+       statistic can see it: a planet of single-minded plants spread across
+       five environments scores identically to one where each plant spans two. */
+    { const o=i*G; let mx=-1, at=0;
+      for(let g=0;g<5;g++){ if(GENE[o+g]>mx){ mx=GENE[o+g]; at=g; } BAFF[r*5+g]+=GENE[o+g]; }
+      BNICHE[r] |= (1<<at); }
     n++; sp+=p; sp2+=p*p; sc+=c; sc2+=c*c;
     POPCAP[c<10?c:9]++;
     let t=p; t=t<0?0:(t>0.99999?0.99999:t); POPPACE[(t*NBIN_H)|0]++;
@@ -2443,14 +2512,33 @@ function withinBody(){
      about it — a planet of identically-shaped plants in five environments
      scores perfectly on evenness. Between-plant spread of the two things that
      decide form: how wide a node fans its children, and how far it puts them. */
-  let bn=0, fs=0, fs2=0, ds=0, ds2=0;
+  let bn=0, fs=0, fs2=0, ds=0, ds2=0, twoTerrain=0, nicheSpan=0;
   for(let r=0;r<nodeHigh;r++){
     if(BN[r]<8 || PROOT[r]!==r) continue;
     const mf=BFAN[r]/BN[r], md=BSTEP[r]/BN[r];
     bn++; fs+=mf; fs2+=mf*mf; ds+=md; ds2+=md*md;
+    let m=BNICHE[r], nb=0; while(m){ nb+=m&1; m>>=1; }
+    nicheSpan += nb; if(nb>=2) twoTerrain++;
   }
   const fanSD  = bn>1 ? Math.sqrt(Math.max(0, fs2/bn-(fs/bn)*(fs/bn))) : 0;
   const stepSD = bn>1 ? Math.sqrt(Math.max(0, ds2/bn-(ds/bn)*(ds/bn))) : 0;
+
+  /* Is a node's own leaning actually *about* the ground it stands on, or is it
+     just drift between sectors? A body of one mind would fit its ground exactly
+     as well using its own average affinity everywhere. Score each node twice —
+     once with its affinity, once with its body's mean — and the difference is
+     how much the leaning is worth. Positive means the plants are reading the
+     terrain, which is the claim; near zero would mean the spread across
+     terrains is mutation wandering and nothing more. */
+  let gain=0, gn=0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]!==1) continue;
+    const r=PROOT[i], nb=BN[r];
+    if(nb<8) continue;
+    const e=i*5, b=r*5; let fb=0;
+    for(let g=0;g<5;g++) fb += (BAFF[b+g]/nb)*NENV[e+g];
+    gain += NFIT[i]-fb; gn++;
+  }
 
   const pv = n>1 ? Math.max(0, sp2/n - (sp/n)*(sp/n)) : 0;
   const cv = n>1 ? Math.max(0, sc2/n - (sc/n)*(sc/n)) : 0;
@@ -2465,6 +2553,10 @@ function withinBody(){
     bodies8:bodies, mixedCapBodies:+(bodies? mixed/bodies : 0).toFixed(3),
     widestBodySD:+bestSD.toFixed(4), widestBodyN:bestN,
     /* shape variety between plants, and the mean shape */
+    /* the direct test of the thing affinity modulation exists for */
+    twoTerrainBodies:+(bn?twoTerrain/bn:0).toFixed(3),
+    leanGain:+(gn?gain/gn:0).toFixed(4), leanSampled:gn,
+    terrainsPerBody:+(bn?nicheSpan/bn:0).toFixed(2),
     fanSD:+fanSD.toFixed(3), stepSD:+stepSD.toFixed(4),
     meanFan:+(bn?fs/bn:0).toFixed(3), meanStep:+(bn?ds/bn:0).toFixed(4),
     meanPace:+(n?sp/n:0).toFixed(3), meanCap:+(n?sc/n:0).toFixed(3),
@@ -3874,9 +3966,23 @@ function frame(now){
   }
   if(!paused) simAccum += dt;
 
-  /* ---- world update at ~12 Hz, terrain rebuilt one band at a time ---- */
-  if(simAccum >= 0.084 && !paused){
-    const step = Math.min(simAccum*speed, 45);
+  /* ---- world update at ~12 Hz, terrain rebuilt one band at a time ----
+     The climate is not allowed to move until the ecology has caught up with
+     it. Before this the two ran on separate clocks — the climate on a fixed
+     one and the plants out of a per-frame time budget — so a slower machine
+     gave the plants *more* climate drift per generation than a fast one, and
+     no two viewers were watching the same world. Worse, drift at those ratios
+     is what was driving the planet to a single marine lineage. Coupling them
+     makes the ratio a number we choose rather than an accident of frame
+     timing; the cost is that time-lapse now runs as fast as the ecology can
+     be simulated, and no faster. */
+  if(simAccum >= 0.084 && !paused && plantDebt <= 0){
+    /* A *fixed* step, never the real time that elapsed. Scaling the climate by
+       how long the last frame took made the world a function of the machine
+       drawing it: a phone and a laptop advanced it by different amounts and the
+       same seed diverged within seconds. Everything the simulation does is now
+       a pure function of seed, parameters and tick count. */
+    const step = 0.084*speed;
     simAccum = 0;
     S.time += step;
     const rows = Math.ceil(GH/10);
@@ -3888,7 +3994,7 @@ function frame(now){
        piece breaks at exactly the settings people use to watch it change: run
        the plants once per tick and at x100 the coastlines race away from them,
        leaving an ecology permanently chasing a world it can never catch. */
-    plantDebt = Math.min(400, plantDebt + Math.max(1, Math.min(64, Math.round(speed))));
+    plantDebt += ECORATE;
     packTexture(); uploadData();
     hudAcc++; if(hudAcc>=4){ hudAcc=0; updateHUD(); }
   }
@@ -3901,7 +4007,7 @@ function frame(now){
      invisible, and on slow hardware the budget simply pays less. */
   if(plantsOn && plantDebt > 0 && !paused){
     const t0 = performance.now();
-    while(plantDebt > 0 && performance.now() - t0 < 3.0){ plantsStep(); plantDebt--; }
+    while(plantDebt > 0 && performance.now() - t0 < PARAMS.ecobudget){ plantsStep(); plantDebt--; }
   }
 
   updateSun();
@@ -4103,9 +4209,24 @@ function drawCharts(){
     }
     g.strokeStyle="rgba(150,205,255,.92)"; g.lineWidth=1.4; g.stroke();
 
+    /* the line the piece must not cross, drawn where there is one */
+    if(s.want!==undefined && s.want>lo && s.want<hi){
+      const wy=bot-(bot-top)*((s.want-lo)/(hi-lo));
+      g.strokeStyle="rgba(240,165,150,.34)";
+      g.setLineDash([3,3]); g.beginPath();
+      g.moveTo(left,wy); g.lineTo(right,wy); g.stroke(); g.setLineDash([]);
+    }
+
     const last=s.v[n-1], tr=trendOf(s.v,n);
-    const arrow = tr>0.06 ? "↑" : tr<-0.06 ? "↓" : "→";
-    const col   = tr>0.06 ? "rgba(150,235,175,.95)"
+    /* A slow monotone slide is the failure that hides best: every reading
+       looks fine and only the direction is wrong. Where a metric has a side it
+       must stay on, judge it against that rather than against its own trend. */
+    const bad = s.want!==undefined && (s.above ? last<s.want : last>s.want);
+    const drifting = s.want!==undefined && (s.above ? tr<-0.06 : tr>0.06);
+    const arrow = bad ? "!" : tr>0.06 ? "↑" : tr<-0.06 ? "↓" : "→";
+    const col   = bad ? "rgba(255,120,110,1)"
+                : drifting ? "rgba(240,190,120,.95)"
+                : tr>0.06 ? "rgba(150,235,175,.95)"
                 : tr<-0.06 ? "rgba(240,165,150,.95)" : "rgba(233,240,255,.45)";
     g.font="10px ui-monospace,Menlo,Consolas,monospace";
     g.fillStyle="rgba(233,240,255,.62)";
@@ -4181,8 +4302,18 @@ window.__world = {
      the same relative rate — because everything measured with growPlants above
      was measured on a planet that never moved, and this project's whole claim
      is that a moving climate is what stops adaptation completing. */
-  runWorld(ticks, mult){
+  /* `ticks` counts *climate* updates, and each one is paid the same number of
+     ecology steps the frame loop owes it. Getting this wrong invalidated every
+     measurement taken through this hook: it used to run one plant step per
+     climate update, where the frame loop accrues sixty-four of them at x100.
+     The ecology was therefore seeing fifteen times more climate drift per
+     generation than the thing anyone actually watches — and drift is exactly
+     what this design leans on to hold diversity up, so every sweep flattered
+     it. If you change the frame loop's accrual, change this with it. */
+  runWorld(ticks, mult, ecoPerTick){
     const spd = mult || 1;
+    const eco = ecoPerTick!==undefined ? (ecoPerTick|0)
+              : Math.max(1, Math.min(64, Math.round(spd)));
     for(let i=0;i<(ticks|0);i++){
       const step = Math.min(0.084*spd, 45);
       S.time += step;
@@ -4191,7 +4322,7 @@ window.__world = {
       bandCursor = (bandCursor+rows) % GH;
       if(bandCursor===0) computeProx();
       stepFields(step);
-      plantsStep();
+      for(let e=0;e<eco;e++) plantsStep();
     }
     packTexture(); uploadData(); updateHUD();
   },
