@@ -407,6 +407,14 @@ const PARAMS = {
                     // "generated". Bounding the widening was not enough. So
                     // the poles are simply hostile ground, which is both the
                     // honest fix and true of real polar deserts.
+  fitcap:  0.00,    // fit above which extra suitability stops buying lifespan.
+                    // 0 = uncapped. The runaway the graphs show is a lineage
+                    // that is highly specialised *and* able to grow anywhere:
+                    // normally those trade off, and what removes the trade is
+                    // that fit pays without limit, so perfect adaptation is
+                    // worth having everywhere at once. A ceiling restores it —
+                    // a specialist at home stops gaining, and a generalist that
+                    // is merely adequate is no longer dominated.
   viable:  0.40,    // fit below which a node will not even be attempted.
                     // Raising this to make the world less crowded was tried
                     // and does not work: the node budget binds long before
@@ -1375,6 +1383,13 @@ function fitAt(x,y,z,o){ return fitOf(o, cellAt(x,y,z)); }
    Cache them on the node instead and let `reap` refresh them on the same
    rolling cursor that revises lifespan — the staleness is the one the ground
    already has. */
+/* Suitability past the cap stops paying. Soft rather than a hard clip, so
+   selection still has a direction above it and does not sit on a flat. */
+function capFit(f){
+  const c=PARAMS.fitcap;
+  if(c<=0 || f<=c) return f;
+  return c + (f-c)*0.15;
+}
 function refreshEnv(i){
   const m=envAt(cellAt(NPX[i],NPY[i],NPZ[i])), e=i*5, o=i*G;
   let f=0;
@@ -1857,7 +1872,7 @@ function readBirthOutputs(i){
      investment. The old scalar pace had the cost and never the benefit, which
      is why selection could only ever delete it. */
   NMAT[i]  = Math.max(1, Math.min(MATB-1, (matBase*(1.60-1.20*pace))|0));
-  NLIFE[i] = Math.max(PARAMS.hostile|0, (PARAMS.life*NFIT[i]*(1.40-0.80*pace))|0);
+  NLIFE[i] = Math.max(PARAMS.hostile|0, (PARAMS.life*capFit(NFIT[i])*(1.40-0.80*pace))|0);
   recordBirth(cap, pace, Math.tanh(OUTV[O_VIG]*0.25));
 }
 
@@ -2016,7 +2031,7 @@ function reap(){
       const o=i*G, f=refreshEnv(i);
       const crowd = PARAMS.kin>0 ? kinPressure(i) : 0;
       const freq  = PARAMS.rare>0 ? commonness(o) : 0;
-      const raw = PARAMS.life*f*(1.40-0.80*NPACE[i])*(1-PARAMS.kin*crowd)*(1-PARAMS.rare*freq);
+      const raw = PARAMS.life*capFit(f)*(1.40-0.80*NPACE[i])*(1-PARAMS.kin*crowd)*(1-PARAMS.rare*freq);
       const nl = Math.max(PARAMS.hostile|0, raw|0);
       dbgHits++; dbgLife+=nl;
       if(!isFinite(f)) dbgNaN++; else { dbgFit+=f; dbgFitOk++; dbgRaw+=raw; if(raw < (PARAMS.hostile|0)) dbgFloor++; }
@@ -2136,8 +2151,11 @@ const HSER = [
   {k:"meanB", label:"mean plant size",     v:new Float32Array(HCAP)},
   {k:"maxB",  label:"largest plant",       v:new Float32Array(HCAP)},
   {k:"fit",   label:"mean fit",            v:new Float32Array(HCAP)},
-  {k:"even",  label:"niche evenness",      v:new Float32Array(HCAP), lo:0, hi:1},
-  {k:"top",   label:"biggest lineage share",v:new Float32Array(HCAP), lo:0, hi:1},
+  /* `want` is the side of a line the piece needs to stay on. Only these two
+     carry it, because only these two *are* the acceptance test: diversity must
+     not collapse. Everything else is description; these are the pass mark. */
+  {k:"even",  label:"niche evenness",      v:new Float32Array(HCAP), lo:0, hi:1, want:0.45, above:true},
+  {k:"top",   label:"biggest lineage share",v:new Float32Array(HCAP), lo:0, hi:1, want:0.50, above:false},
   {k:"mixed", label:"plants of two minds", v:new Float32Array(HCAP), lo:0, hi:1},
   {k:"pace",  label:"mean pace",           v:new Float32Array(HCAP), lo:0, hi:1},
   {k:"spec",  label:"specialisation",      v:new Float32Array(HCAP), lo:0, hi:1},
@@ -2406,12 +2424,14 @@ const BN=new Int32Array(PMAX), BP=new Float32Array(PMAX), BP2=new Float32Array(P
 const BC=new Float32Array(PMAX), BC2=new Float32Array(PMAX), BCM=new Uint8Array(PMAX);
 const BFAN=new Float32Array(PMAX), BSTEP=new Float32Array(PMAX);
 const BNICHE=new Uint8Array(PMAX);   // which environments a body is built for
+const BAFF=new Float32Array(PMAX*5); // a body's average affinity, to test against
 const POPPACE=new Int32Array(NBIN_H), POPSPRD=new Int32Array(NBIN_H);
 const POPCAP=new Int32Array(10);
 function withinBody(){
   BN.fill(0,0,nodeHigh); BP.fill(0,0,nodeHigh); BP2.fill(0,0,nodeHigh);
   BC.fill(0,0,nodeHigh); BC2.fill(0,0,nodeHigh); BCM.fill(0,0,nodeHigh);
   BFAN.fill(0,0,nodeHigh); BSTEP.fill(0,0,nodeHigh); BNICHE.fill(0,0,nodeHigh);
+  BAFF.fill(0,0,nodeHigh*5);
   POPPACE.fill(0); POPSPRD.fill(0); POPCAP.fill(0);
   const slo=PARAMS.splo, srange=Math.max(1e-6,PARAMS.sphi-PARAMS.splo);
   let n=0, sp=0, sp2=0, sc=0, sc2=0;
@@ -2426,7 +2446,7 @@ function withinBody(){
        statistic can see it: a planet of single-minded plants spread across
        five environments scores identically to one where each plant spans two. */
     { const o=i*G; let mx=-1, at=0;
-      for(let g=0;g<5;g++) if(GENE[o+g]>mx){ mx=GENE[o+g]; at=g; }
+      for(let g=0;g<5;g++){ if(GENE[o+g]>mx){ mx=GENE[o+g]; at=g; } BAFF[r*5+g]+=GENE[o+g]; }
       BNICHE[r] |= (1<<at); }
     n++; sp+=p; sp2+=p*p; sc+=c; sc2+=c*c;
     POPCAP[c<10?c:9]++;
@@ -2463,6 +2483,23 @@ function withinBody(){
   const fanSD  = bn>1 ? Math.sqrt(Math.max(0, fs2/bn-(fs/bn)*(fs/bn))) : 0;
   const stepSD = bn>1 ? Math.sqrt(Math.max(0, ds2/bn-(ds/bn)*(ds/bn))) : 0;
 
+  /* Is a node's own leaning actually *about* the ground it stands on, or is it
+     just drift between sectors? A body of one mind would fit its ground exactly
+     as well using its own average affinity everywhere. Score each node twice —
+     once with its affinity, once with its body's mean — and the difference is
+     how much the leaning is worth. Positive means the plants are reading the
+     terrain, which is the claim; near zero would mean the spread across
+     terrains is mutation wandering and nothing more. */
+  let gain=0, gn=0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]!==1) continue;
+    const r=PROOT[i], nb=BN[r];
+    if(nb<8) continue;
+    const e=i*5, b=r*5; let fb=0;
+    for(let g=0;g<5;g++) fb += (BAFF[b+g]/nb)*NENV[e+g];
+    gain += NFIT[i]-fb; gn++;
+  }
+
   const pv = n>1 ? Math.max(0, sp2/n - (sp/n)*(sp/n)) : 0;
   const cv = n>1 ? Math.max(0, sc2/n - (sc/n)*(sc/n)) : 0;
   const wp = wdf>0 ? wss/wdf : 0, wc = wdf>0 ? css/wdf : 0;
@@ -2478,6 +2515,7 @@ function withinBody(){
     /* shape variety between plants, and the mean shape */
     /* the direct test of the thing affinity modulation exists for */
     twoTerrainBodies:+(bn?twoTerrain/bn:0).toFixed(3),
+    leanGain:+(gn?gain/gn:0).toFixed(4), leanSampled:gn,
     terrainsPerBody:+(bn?nicheSpan/bn:0).toFixed(2),
     fanSD:+fanSD.toFixed(3), stepSD:+stepSD.toFixed(4),
     meanFan:+(bn?fs/bn:0).toFixed(3), meanStep:+(bn?ds/bn:0).toFixed(4),
@@ -4117,9 +4155,24 @@ function drawCharts(){
     }
     g.strokeStyle="rgba(150,205,255,.92)"; g.lineWidth=1.4; g.stroke();
 
+    /* the line the piece must not cross, drawn where there is one */
+    if(s.want!==undefined && s.want>lo && s.want<hi){
+      const wy=bot-(bot-top)*((s.want-lo)/(hi-lo));
+      g.strokeStyle="rgba(240,165,150,.34)";
+      g.setLineDash([3,3]); g.beginPath();
+      g.moveTo(left,wy); g.lineTo(right,wy); g.stroke(); g.setLineDash([]);
+    }
+
     const last=s.v[n-1], tr=trendOf(s.v,n);
-    const arrow = tr>0.06 ? "↑" : tr<-0.06 ? "↓" : "→";
-    const col   = tr>0.06 ? "rgba(150,235,175,.95)"
+    /* A slow monotone slide is the failure that hides best: every reading
+       looks fine and only the direction is wrong. Where a metric has a side it
+       must stay on, judge it against that rather than against its own trend. */
+    const bad = s.want!==undefined && (s.above ? last<s.want : last>s.want);
+    const drifting = s.want!==undefined && (s.above ? tr<-0.06 : tr>0.06);
+    const arrow = bad ? "!" : tr>0.06 ? "↑" : tr<-0.06 ? "↓" : "→";
+    const col   = bad ? "rgba(255,120,110,1)"
+                : drifting ? "rgba(240,190,120,.95)"
+                : tr>0.06 ? "rgba(150,235,175,.95)"
                 : tr<-0.06 ? "rgba(240,165,150,.95)" : "rgba(233,240,255,.45)";
     g.font="10px ui-monospace,Menlo,Consolas,monospace";
     g.fillStyle="rgba(233,240,255,.62)";

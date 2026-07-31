@@ -309,6 +309,80 @@ Cartesian-GP regime the brief asked for. A printed genome reads, for instance,
 `vigour <- MUL(age, MAX(age, forest))`: a node that wants children more as it
 matures, which is precisely what re-evaluating vigour was for.
 
+## What the angles became, in three attempts
+
+The slot table is gone. Capacity picked a row out of a fixed list of angles, so
+there were five possible plant shapes and most nodes took the same one — which is
+why the planet read as one organism repeated at different sizes. Don asked for the
+angle to be evolved instead, and getting there took three goes:
+
+1. **The genome names each child's heading outright.** The model we want, and it
+   does not work. It is a **plateau, not a slope**: siblings must be about 45°
+   apart to miss each other, so a genome that has half-discovered the trick —
+   headings 10° apart — collides exactly as often as one that has not, and gains
+   nothing. Measured: the mean turn between one child and the next sat at 0.17
+   radians after nine thousand ticks and would not move. Neither a hotter mutation
+   rate nor horizontal transfer rescued it. **No mutation rate fixes an absent
+   gradient.**
+2. **The index fans and the genome evolves the width.** Works, and looks
+   geometric, because it forces equal spacing and perfect symmetry.
+3. **A `slot` input.** The child's index, centred on the node's capacity and
+   already scaled into the units the angle output is read in. Now `angle <- slot`
+   is a *single output-address mutation* and yields a usable fan on its own, and
+   everything past that is the genome's own business. The structural fan was
+   deleted. Mean turn between siblings went 0.17 → 0.72 radians.
+
+The lesson generalises past angles: when a behaviour will not evolve, ask whether
+it is unreachable before assuming it is unwanted. The fix was not more search
+pressure, it was putting the first working version one mutation away.
+
+## Constants that quietly stopped being true
+
+Both of these were measured optima when set, and both became wrong when something
+else changed underneath them. Neither announced it.
+
+- **`tries`, the retry allowance.** 1 was optimal when a fixed table decided
+  angles — a retry then meant the same few directions and really was wasted. Once
+  the genome chooses, a retry is a *different* angle, so cutting a node off after
+  one refusal punishes precisely the experiment worth making. At 8: evenness
+  0.56 → 0.78, plants of two minds 0.59 → 0.84.
+- **`settle`, the grace before the fragment cull.** 400 was set when growth was
+  efficient. Free angles waste far more buds, no founder could reach the threshold
+  in time, and the planet went sterile. It took two isolation runs to find,
+  because three changes had landed together. At 2000 every one of the twenty
+  strategies stays occupied and mean fit nearly doubles. **One change at a time.**
+
+## Affinity: modulated, not replaced — and what it actually does
+
+Don's argument was that adjusting affinity is the only way a plant survives a
+terrain change, and that one body ought to be able to specialise for more than one
+terrain. Letting the formula *set* affinity outright is a trap: a node that can
+read the ground and name its own affinity copies whatever it stands on, scores
+maximum fit everywhere, and the niche structure dissolves into one immortal
+generalist wearing local colours — the failure the fixed budget exists to prevent,
+by a new road. So the program *modulates* a heritable vector, within a bounded
+multiplier.
+
+Measured at nine thousand ticks it looked like a triumph — evenness 0.42 → 0.71,
+all twenty strategies occupied, specialisation *up*. But two later measurements
+qualify it badly, and both matter:
+
+- **It is not sensing.** A node's own affinity fits its local ground better than
+  its body's average affinity would by **0.01 against a mean fit of 2.4** — under
+  one per cent. The within-plant colour variation is real and two in five bodies
+  do span two terrains, but that is **drift between mutated sectors, not terrain
+  tracking**. Modulation is working as a source of affinity *variation*. The
+  plants have the terrain inputs and are barely using them for this.
+- **It may be feeding a monoculture.** Over 44,600 ticks niche evenness fell
+  monotonically 0.75 → 0.30 while the largest lineage rose 0.15 → 0.63, with mean
+  fit saturating near its ceiling and specialisation climbing to 0.77. Being
+  highly specialised *and* able to grow anywhere should be impossible — that
+  trade-off is what held specialists and generalists in balance. This is the
+  suspect, and it is under test.
+
+**Nine thousand ticks is not long enough to judge an ecology.** It said modulation
+was a triumph; forty thousand may say it is the disease.
+
 ## Open questions
 
 - **Program length**, still. 24 instructions is what it was built with and has not

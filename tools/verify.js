@@ -165,6 +165,66 @@ async function homeostasis(browser) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────
+   3b. Diversity — the acceptance test the ecology is built around
+   ────────────────────────────────────────────────────────────────────────
+   "Genetic diversity must not collapse over a simulated hour." That has been
+   the stated acceptance test since the design was written and it has never
+   been enforced, which is exactly how a run reached 44,600 ticks with one
+   lineage holding 63% of the planet before anyone noticed. Watching is not
+   enough; that is how you ship something that looks alive for five minutes.
+
+   Measured genomically, per the brief — the spread of the colour projection
+   and the share held by the largest strategy — never by counting plant
+   objects, which churn every few seconds and would be pure noise.
+   ──────────────────────────────────────────────────────────────────────── */
+const DIVERSITY = {
+  ticks:   26000,   // a simulated hour of ecology at the rate the frame loop
+                    // owes it, which is where erosion becomes visible
+  evenness: 0.45,   // niche evenness floor, 0 = one environment holds all life
+  largest:  0.50,   // ceiling on the biggest single strategy's share
+  strategies:  10,  // of 32 cells, how many must still be occupied
+  bodies:     200,  // and the world must not have shattered or emptied
+};
+function evennessOf(niche) {
+  const v = Object.values(niche), t = v.reduce((a, b) => a + b, 0);
+  if (!t) return 0;
+  let h = 0;
+  for (const x of v) if (x > 0) { const p = x / t; h -= p * Math.log(p); }
+  return h / Math.log(5);
+}
+
+async function diversity(browser) {
+  section('Diversity over a simulated hour of ecology');
+  for (const seed of ['#seed=31337', '#seed=7']) {
+    const page = await browser.newPage({ viewport: { width: 300, height: 300 } });
+    const errs = [];
+    page.on('pageerror', e => errs.push(e.message));
+    page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+    await page.goto('file://' + PAGE + seed);
+    await page.waitForFunction(() => window.__world && window.__world.S.epoch0 > 0, { timeout: 180000 });
+    await page.evaluate(n => window.__world.runWorld(n, 100), DIVERSITY.ticks);
+    const p = await page.evaluate(() => window.__world.plants());
+
+    const even = evennessOf(p.niche);
+    const ok = even >= DIVERSITY.evenness
+            && p.topStrategy <= DIVERSITY.largest
+            && p.strategies >= DIVERSITY.strategies
+            && p.bodies >= DIVERSITY.bodies
+            && p.live > 0;
+    check(ok, `${seed} — evenness ${even.toFixed(2)} (>=${DIVERSITY.evenness}) ` +
+              `largest ${p.topStrategy} (<=${DIVERSITY.largest}) ` +
+              `strategies ${p.strategies} bodies ${p.bodies} live ${p.live}`);
+    /* not a pass/fail, but the numbers that say *why* if it ever goes */
+    console.log(`       fit ${p.meanFit} specialisation ${p.specialisation} ` +
+                `two-terrain ${p.body.twoTerrainBodies} lean ${p.body.leanGain} ` +
+                `mean plant ${p.meanBody} largest ${p.largestBody}`);
+    check(p.nonFinite === 0, `${seed} — no non-finite formula results (${p.nonFinite})`);
+    check(errs.length === 0, `${seed} — no errors` + (errs.length ? `: ${errs[0]}` : ''));
+    await page.close();
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────
    4. Served over HTTP — how it actually ships
    ──────────────────────────────────────────────────────────────────────── */
 function serve() {
@@ -346,6 +406,7 @@ async function touch(browser) {
   try {
     await bootSeeds(browser);
     await homeostasis(browser);
+    if (!process.argv.includes('--quick')) await diversity(browser);
     await served(browser);
     await touch(browser);
   } finally {
