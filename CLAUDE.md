@@ -77,6 +77,18 @@ the band lands with cut edges.
 Every one of these was a real bug that shipped and had to be diagnosed. They are
 easy to reintroduce.
 
+**JavaScript**
+
+- **A leftover function declaration silently wins.** Replacing a function but
+  leaving the old definition further down the file means the *old* one is what
+  runs, everywhere, because declarations hoist and the last wins. A stale
+  `fitAt` shadowed its replacement for four commits. What hid it: the dead
+  version read properties off a number, returned `NaN`, and `NaN|0` is `0` — so
+  a `Math.max(floor, ...)` downstream turned a total failure into a plausible
+  constant. Nothing threw, nothing logged, and several parameters simply had no
+  effect. When a parameter provably does nothing, instrument the line that uses
+  it before theorising about why; and grep for duplicate definitions first.
+
 **GLSL**
 
 - **Never write a backtick inside shader source**, including in comments. The

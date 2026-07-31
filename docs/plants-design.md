@@ -29,34 +29,47 @@ The two ways this genre of simulation dies are **monoculture** (one lineage wins
 diversity goes to zero) and **frozen mosaic** (borders equilibrate and stop
 moving). The usual remedies are artificial.
 
-We assumed we had a better one. The climate genuinely wanders while the
-controller keeps every environment *present* and merely relocates it, so a
-specialist tuned to today should be maladapted in twenty minutes and adaptation
-should never complete. The document leaned on this throughout and told itself not
-to add artificial diversity pressure.
+The climate genuinely wanders while the controller keeps every environment
+*present* and merely relocates it, so a specialist tuned to today should be
+maladapted before long and adaptation should never complete.
 
-**Measured, and it is false.** Specialisation over fifteen thousand ticks:
+**Measured, and it is half right — in a way that took two attempts to see.**
+
+The first attempt found no difference at all between a frozen planet and one run
+at ×100, and this document briefly recorded the claim as false. That measurement
+was worthless: a stale `fitAt` from the pre-genome code was still in the file and,
+being the later function declaration, shadowed the genome one at every call site.
+It read `sp.tlo` off a numeric offset, returned NaN, and `NaN|0` is `0`, so every
+lifespan fell back on the `hostile` floor. **Fit-based selection was switched off
+entirely**, and 99.7% of lifespan updates were NaN. Specialists never received the
+longer life their specialism was supposed to buy, so of course specialisation
+drifted down whatever the climate did.
+
+With selection actually working, specialisation over fifteen thousand ticks:
 
 | | start | mid | end |
 |---|---|---|---|
-| frozen planet | 0.385 | 0.332 | 0.303 |
-| ×1 climate | 0.366 | 0.315 | 0.302 |
-| ×100 climate | 0.347 | 0.310 | 0.299 |
+| frozen planet | 0.470 | 0.486 | **0.507** |
+| ×1 climate | 0.483 | 0.475 | **0.482** |
+| ×100 climate | 0.396 | 0.363 | **0.350** |
 
-Forty-two continental cycles and a planet that never moved produce the same drift
-toward generalism. The reason is visible once stated: the controller relocates
-each environment but keeps it present, so a specialist's ground *moves without
-shrinking* — and following ground that has moved means growing through country
-only a generalist can cross. Drift is therefore not neutral between the two
-strategies, it is **worse for specialists than for generalists**.
+And mean fit over the same runs: frozen 2.03 → 2.47, ×100 1.43 → 1.62.
 
-So diversity has to be maintained by something else, and the item this document
-filed under "ideas not yet decided" is load-bearing rather than optional.
+So the thesis holds in its mechanism and fails in its conclusion. **Adaptation
+genuinely never completes** — under drift, mean fit never catches up with a
+population that is always chasing ground that has moved, which is exactly what
+was claimed. But drift does **not** maintain specialisation, it *suppresses* it:
+a static world lets specialisation climb, and ×100 grinds it down. Following a
+niche that has moved means growing through country only a generalist can cross,
+so drift is not neutral between the strategies — it favours breadth.
 
-This is also the reason mutation must be *incremental*. A lineage tracking a
-niche that is walking away at a steady rate needs small changes that accumulate.
-Anything that makes offspring jump rather than drift breaks the central premise —
-see the genome section.
+The instruction to lean on this "rather than adding artificial diversity
+pressure" is therefore wrong, and backwards. Drift keeps the world *turning over*
+but it does not keep it *various*. Something else has to do that.
+
+Twenty distinct strategies stay occupied in every configuration, with the largest
+holding a quarter of the population, so what varies is the depth of commitment
+rather than the number of niches in use.
 
 ## The model
 

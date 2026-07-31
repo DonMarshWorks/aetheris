@@ -841,6 +841,7 @@ function kinPressure(i){
    unique, everyone is rare, and frequency dependence has nothing to bite on. */
 const CENSUS = new Int32Array(32);
 let censusN = 0, kinMean = 0, kinSpread = 0;
+let dbgHits=0, dbgCrowd=0, dbgLife=0, dbgAgeDeaths=0, dbgFit=0, dbgRaw=0, dbgNaN=0, dbgFloor=0, dbgFitOk=0;
 function strategyOf(o){
   let mx=0, at=0;
   for(let g=0;g<5;g++) if(GENE[o+g]>mx){ mx=GENE[o+g]; at=g; }
@@ -871,36 +872,6 @@ function cellAt(x,y,z){
 /* Stage 0 stands in for the affinity formulas: a flat yes/no on where a node
    may sit. Crude, but it is what makes the form read as vegetation rather
    than as a pattern laid over a planet. */
-/* How well a place suits a form, 0 to 1: zero anywhere it cannot live, and
-   rising toward the middle of its window. Lifespan is read straight off this,
-   never carried as a gene — a gene under selection would only ratchet toward
-   immortality, whereas fit means the body's persistence is sculpted by the
-   ground with no code that says so, and a niche that walks away kills what it
-   leaves behind. */
-function fitAt(x,y,z,sp){
-  const k = cellAt(x,y,z);
-  const land = F.h[k] - S.seaLevel, t = F.temp[k];
-  const tc=(sp.tlo+sp.thi)*0.5, th=(sp.thi-sp.tlo)*0.5;
-  if(t<sp.tlo || t>sp.thi) return 0;
-  const ft = 1 - Math.abs(t-tc)/th;
-  if(sp.sea){
-    if(land >= 0 || F.snow[k] > 0.45) return 0;
-    const depth = -land;
-    if(depth > sp.dmax) return 0;
-    return Math.max(0.12, Math.min(ft, 1-depth/sp.dmax));
-  }
-  if(land <= 0.004 || F.snow[k] > 0.55) return 0;
-  const m=F.moist[k];
-  if(m<sp.mlo || m>sp.mhi) return 0;
-  const mc=(sp.mlo+sp.mhi)*0.5, mh=(sp.mhi-sp.mlo)*0.5;
-  /* The floor has to sit clear of the cull threshold below. Floored at 0.02
-     against a cull at 0.03, every node at the edge of its own niche was killed
-     the moment its fit was re-read — eleven deaths per standing node per ten
-     thousand ticks, and a shower of fragments that looked like the design
-     misbehaving rather than a one-character mistake. */
-  return Math.max(0.12, Math.min(ft, 1 - Math.abs(m-mc)/mh));
-}
-
 /* ---- what the renderer is handed ----
    Nodes are not painted into a buffer any more. A node that dies has to stop
    being drawn, and there is no way to un-paint a footprint that has already
@@ -1047,7 +1018,7 @@ function reap(){
       if(ptick-NBORN[i] > NLIFE[i]) freeNode(i);   /* rotted through */
       continue;
     }
-    if(ptick-NBORN[i] > NLIFE[i]){ killNode(i); continue; }
+    if(ptick-NBORN[i] > NLIFE[i]){ dbgAgeDeaths++; killNode(i); continue; }
     /* The climate moves under them, so the ground is re-read and the allowance
        revised. Hostile ground shortens a life, it does not end one: a node that
        the sea has just closed over goes on for a while and then expires early,
@@ -1059,9 +1030,13 @@ function reap(){
       const o=i*G, f=fitAt(NPX[i],NPY[i],NPZ[i],o);
       const crowd = PARAMS.kin>0 ? kinPressure(i) : 0;
       const freq  = PARAMS.rare>0 ? commonness(o) : 0;
-      NLIFE[i]=Math.max(PARAMS.hostile|0,
+      const nl = Math.max(PARAMS.hostile|0,
         (PARAMS.life*f*(1.40-0.80*GENE[o+G_PACE])
           *(1-PARAMS.kin*crowd)*(1-PARAMS.rare*freq))|0);
+      const raw = PARAMS.life*f*(1.40-0.80*GENE[o+G_PACE])*(1-PARAMS.kin*crowd)*(1-PARAMS.rare*freq);
+      dbgHits++; dbgCrowd+=crowd; dbgLife+=nl;
+      if(!isFinite(f)) dbgNaN++; else { dbgFit+=f; dbgFitOk++; dbgRaw+=raw; if(raw < (PARAMS.hostile|0)) dbgFloor++; }
+      NLIFE[i]=nl;
     }
   }
 }
@@ -2715,6 +2690,28 @@ window.__world = {
     return { live:liveN, wood:woodN, slots:nodeHigh, deaths, bodies:comps,
              meanBody:+meanComp.toFixed(1), largestBody:bigFrag,
              frontier:frontN, tick:ptick,
+             probe:(()=>{
+               let badGene=0, badEnv=0, badFit=0, seen=0, sample=null;
+               for(let i=0;i<nodeHigh;i++){
+                 if(NLIVE[i]!==1) continue; seen++;
+                 const o=i*G; let bg=false;
+                 for(let g=0;g<G;g++) if(!isFinite(GENE[o+g])) bg=true;
+                 if(bg){ badGene++; continue; }
+                 const k=cellAt(NPX[i],NPY[i],NPZ[i]);
+                 const m=envAt(k); let be=false;
+                 for(let g=0;g<5;g++) if(!isFinite(m[g])) be=true;
+                 if(be){ badEnv++; continue; }
+                 const f=fitOf(o,k);
+                 if(!isFinite(f)) badFit++;
+                 else if(!sample) sample={fit:+f.toFixed(3), env:Array.from(m).map(v=>+v.toFixed(2)),
+                                          gene:Array.from(GENE.subarray(o,o+5)).map(v=>+v.toFixed(2))};
+               }
+               return {seen, badGene, badEnv, badFit, sample};
+             })(),
+             nanFits:dbgNaN, finiteFits:dbgFitOk, hitFloor:dbgFloor,
+             meanFit:+(dbgFit/Math.max(1,dbgFitOk)).toFixed(3), meanRawLife:+(dbgRaw/Math.max(1,dbgFitOk)).toFixed(0),
+             reapUpdates:dbgHits, meanCrowdSeen:+(dbgCrowd/Math.max(1,dbgHits)).toFixed(3),
+             meanLifeSet:+(dbgLife/Math.max(1,dbgHits)).toFixed(0), ageDeaths:dbgAgeDeaths,
              kinMean:+kinMean.toFixed(3), kinSpread:+kinSpread.toFixed(3),
              strategies:Array.from(CENSUS).filter(v=>v>0).length,
              topStrategy:+(Math.max(...CENSUS)/Math.max(1,censusN)).toFixed(3),
