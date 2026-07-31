@@ -383,6 +383,13 @@ const PARAMS = {
   alpha:   0.80,    // how much of the ground a mature node hides
   mature:  90,      // reference ticks from bud to maturity, scaled by pace
   life:    1500,    // ticks per unit of fit; a pure specialist at home gets 5x
+  seafit:  1.00,    // a flat multiplier on how habitable the sea is at all.
+                    // 0 empties the ocean entirely and leaves the ecology to
+                    // the land, which is one of the two honest answers to the
+                    // problem below. Between 0 and 1 is the other: a tax.
+                    // Careful — a tax leaves the sea *undivided*, so it can
+                    // simply filter for whoever can live on less and hand them
+                    // all of it. Measure, do not assume.
   marine:  0.00,    // how far open ocean is nutrient-poor, 0 = uniformly rich.
                     // Built, measured, and off: it does the opposite of what it
                     // was for. Starving the deep does not free the planet from
@@ -407,7 +414,7 @@ const PARAMS = {
                     // "generated". Bounding the widening was not enough. So
                     // the poles are simply hostile ground, which is both the
                     // honest fix and true of real polar deserts.
-  fitcap:  0.00,    // fit above which extra suitability stops buying lifespan.
+  fitcap:  2.00,    // fit above which extra suitability stops buying lifespan.
                     // 0 = uncapped. The runaway the graphs show is a lineage
                     // that is highly specialised *and* able to grow anywhere:
                     // normally those trade off, and what removes the trade is
@@ -428,7 +435,12 @@ const PARAMS = {
                     // anyone is) and each evaluation scans 343 spatial bins.
   kinr:    3.0,     // how far that crowd is counted, in steps
   kind:    1.30,    // affinity distance within which a neighbour counts as kin
-  rare:    0.00,    // how much being a COMMON strategy globally shortens a life
+  rare:    0.70,    // how much being a COMMON strategy globally shortens a life.
+                    // Recorded three times as doing nothing, and all three of
+                    // those measurements were taken through a harness that ran
+                    // the ecology fifteen times too slowly against the climate.
+                    // On the world the frame loop actually runs it is half of
+                    // the answer to the marine monoculture.
   nodemut: 0.07,    // chance a *first* child mutates anyway. Variation is
                     // otherwise minted only at bifurcations, so an unbranched
                     // lineage cannot evolve at all — it copies itself down a
@@ -479,6 +491,16 @@ const PARAMS = {
                     // was indistinguishable from a plant standing on ice. The
                     // one hue the palette cannot produce is the one that reads
                     // unambiguously as an annotation rather than as biology.
+  ecorate: 16,      // ecology steps owed per climate tick, and the single
+                    // number that decides how much the world moves under a
+                    // plant's feet in one generation. Measured: at the ratios
+                    // time-lapse used to produce, a *frozen* planet was the
+                    // most diverse one and x20 the least — the brief's central
+                    // claim, that a wandering climate is what keeps this world
+                    // from degenerating, is backwards at the speeds the piece
+                    // actually runs. See the frame loop for why this must be
+                    // paid in full before the climate is allowed to move.
+  ecobudget: 4.0,   // milliseconds per frame spent paying that debt
   sweep:   40,      // ticks between one pass of connected-component labelling
   perbody: 0,       // 1 = at most one bud per body per turn, 0 = by frontier
   spore:   0.006,   // chance a bud is thrown clear instead, founding a body.
@@ -873,6 +895,7 @@ const NPAR=new Int32Array(PMAX), NPGEN=new Int32Array(PMAX), NGEN=new Int32Array
 const PFRONT = new Int32Array(PMAX), PFREE = new Int32Array(PMAX);
 let nodeHigh = 0, liveN = 0, frontN = 0, freeN = 0;
 let plantDebt = 0;
+const ECORATE = Math.max(1, Math.min(256, PARAMS.ecorate|0));
 let ptick = 0, reapCursor = 0, plantsDirty = true, deaths = 0, woodN = 0, comps = 0, meanComp = 0, bigFrag = 0;
 const NLK=new Int32Array(PMAX);      // children still standing, alive or wood
 const CSTAMP=new Int32Array(PMAX);   // last turn a body was allowed to bud
@@ -1358,7 +1381,13 @@ function envAt(k){
      one here — that is the point, it says there is less of everything in the
      open sea, so fit and with it lifespan fall, and only a lineage specialised
      enough to live on a fraction can hold the deep at all. */
-  ENV[0]=water*rest*(1 - PARAMS.marine*F.prox[k]); ENV[1]=ice;
+  /* The sea is one undivided niche covering nearly two thirds of the world,
+     and the climate controller guarantees it never shrinks and never moves —
+     so the same invariant that keeps the planet balanced exempts one of its
+     five environments from the drift the other four live under. Measured: the
+     sea holds 76% of all life even with the climate frozen solid, and 85% at
+     x100. These two dials are the levers on that. */
+  ENV[0]=water*rest*PARAMS.seafit*(1 - PARAMS.marine*F.prox[k]); ENV[1]=ice;
   ENV[2]=dry*desert; ENV[3]=dry*grass; ENV[4]=dry*forest;
   /* the ground runs out toward the poles, so nothing establishes there */
   const cold = POLE1>POLE0 ? 1-sstep(Math.abs(Math.sin(LAT[(k/GW)|0])), POLE0, POLE1) : 1;
@@ -3926,8 +3955,17 @@ function frame(now){
   }
   if(!paused) simAccum += dt;
 
-  /* ---- world update at ~12 Hz, terrain rebuilt one band at a time ---- */
-  if(simAccum >= 0.084 && !paused){
+  /* ---- world update at ~12 Hz, terrain rebuilt one band at a time ----
+     The climate is not allowed to move until the ecology has caught up with
+     it. Before this the two ran on separate clocks — the climate on a fixed
+     one and the plants out of a per-frame time budget — so a slower machine
+     gave the plants *more* climate drift per generation than a fast one, and
+     no two viewers were watching the same world. Worse, drift at those ratios
+     is what was driving the planet to a single marine lineage. Coupling them
+     makes the ratio a number we choose rather than an accident of frame
+     timing; the cost is that time-lapse now runs as fast as the ecology can
+     be simulated, and no faster. */
+  if(simAccum >= 0.084 && !paused && plantDebt <= 0){
     const step = Math.min(simAccum*speed, 45);
     simAccum = 0;
     S.time += step;
@@ -3940,7 +3978,7 @@ function frame(now){
        piece breaks at exactly the settings people use to watch it change: run
        the plants once per tick and at x100 the coastlines race away from them,
        leaving an ecology permanently chasing a world it can never catch. */
-    plantDebt = Math.min(400, plantDebt + Math.max(1, Math.min(64, Math.round(speed))));
+    plantDebt += ECORATE;
     packTexture(); uploadData();
     hudAcc++; if(hudAcc>=4){ hudAcc=0; updateHUD(); }
   }
@@ -3953,7 +3991,7 @@ function frame(now){
      invisible, and on slow hardware the budget simply pays less. */
   if(plantsOn && plantDebt > 0 && !paused){
     const t0 = performance.now();
-    while(plantDebt > 0 && performance.now() - t0 < 3.0){ plantsStep(); plantDebt--; }
+    while(plantDebt > 0 && performance.now() - t0 < PARAMS.ecobudget){ plantsStep(); plantDebt--; }
   }
 
   updateSun();
@@ -4248,8 +4286,18 @@ window.__world = {
      the same relative rate — because everything measured with growPlants above
      was measured on a planet that never moved, and this project's whole claim
      is that a moving climate is what stops adaptation completing. */
-  runWorld(ticks, mult){
+  /* `ticks` counts *climate* updates, and each one is paid the same number of
+     ecology steps the frame loop owes it. Getting this wrong invalidated every
+     measurement taken through this hook: it used to run one plant step per
+     climate update, where the frame loop accrues sixty-four of them at x100.
+     The ecology was therefore seeing fifteen times more climate drift per
+     generation than the thing anyone actually watches — and drift is exactly
+     what this design leans on to hold diversity up, so every sweep flattered
+     it. If you change the frame loop's accrual, change this with it. */
+  runWorld(ticks, mult, ecoPerTick){
     const spd = mult || 1;
+    const eco = ecoPerTick!==undefined ? (ecoPerTick|0)
+              : Math.max(1, Math.min(64, Math.round(spd)));
     for(let i=0;i<(ticks|0);i++){
       const step = Math.min(0.084*spd, 45);
       S.time += step;
@@ -4258,7 +4306,7 @@ window.__world = {
       bandCursor = (bandCursor+rows) % GH;
       if(bandCursor===0) computeProx();
       stepFields(step);
-      plantsStep();
+      for(let e=0;e<eco;e++) plantsStep();
     }
     packTexture(); uploadData(); updateHUD();
   },

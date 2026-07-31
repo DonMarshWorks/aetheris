@@ -178,8 +178,12 @@ async function homeostasis(browser) {
    objects, which churn every few seconds and would be pure noise.
    ──────────────────────────────────────────────────────────────────────── */
 const DIVERSITY = {
-  ticks:   26000,   // a simulated hour of ecology at the rate the frame loop
-                    // owes it, which is where erosion becomes visible
+  ticks:     700,   // climate updates at x100, each paid the 64 ecology steps
+                    // the frame loop owes it — about 45,000 ecology ticks, or
+                    // where erosion became visible in a real session. Counting
+                    // climate updates and running one plant step each, as this
+                    // harness used to, measures a world with fifteen times more
+                    // drift per generation than anyone ever watches.
   evenness: 0.45,   // niche evenness floor, 0 = one environment holds all life
   largest:  0.50,   // ceiling on the biggest single strategy's share
   strategies:  10,  // of 32 cells, how many must still be occupied
