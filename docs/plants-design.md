@@ -261,9 +261,14 @@ sixty instructions either — it will only be far harder to see why.
   argument for this planet as an arena — the controller guarantees each of the
   five continues to exist and merely moves it, so a specialist for any one of
   them always has somewhere to live, and never has it for long.
-- **pace**, growth bought with lifespan
+- **pace**, which was supposed to buy growth with lifespan and in fact only ever
+  charged the lifespan — see `formula-design.md`
 - **branch, turn, wander** — behaviour
-- **spread, elongation** — morphology
+- **spread, elongation** — morphology, and both purely cosmetic: neither ever
+  touched the collision radius, so a broad lineage looked broad and claimed
+  nothing
+
+All six of those are superseded by `formula-design.md`. The five affinities stay.
 
 Fit is the affinities against a soft membership of where a node stands, summing
 to one so there are no hard biome edges for a genome to snap against. Lifespan
