@@ -324,12 +324,18 @@ const PARAMS = {
                     // held for ever would then stop any lineage keeping what it
                     // found. Search hot, settle cool.
   anneal:  0,       // ticks over which `hot` decays away. 0 turns it off.
-  tries:   1,       // refusals before a node is judged boxed in and leaves the
+  tries:   8,       // refusals before a node is judged boxed in and leaves the
                     // frontier. 0 keeps every unfilled node on it for ever,
                     // which is what the formula design called for and what
                     // measurement overturned: see the comment on `admit`.
-                    // One is not a token value, it is the measured optimum —
-                    // niche evenness falls monotonically as it rises.
+                    // It was 1, measured as the optimum when the slot table
+                    // decided angles — a retry then meant the same few
+                    // directions and was genuinely wasted. Once the genome
+                    // chooses the angle, a retry is a *different* angle, so
+                    // cutting a node off after one refusal punishes precisely
+                    // the experiment worth making. Re-measured at 8: evenness
+                    // 0.56 -> 0.78, plants holding two kinds of node
+                    // 0.59 -> 0.84, and 50 per cent more of them alive.
   readmit: 1,       // 1 = a death offers its neighbours their place back. Worth
                     // it: evenness 0.82 against 0.72, for a fifth more wasted
                     // draws. Gap dynamics, and the best diversity measured.
@@ -363,6 +369,8 @@ const PARAMS = {
   vote:    3,       // frontier draws per bud; the highest vigour takes it
   vmem:    0.05,    // how fast a body's vigour level is tracked, so that vigour
                     // ranks nodes inside a body and not bodies against each other
+  stemdark: 0.70,   // how much darker a branch is than the nodes it joins. The
+                    // structure reads far better when the two separate.
   stem:    0.20,    // thickness of the branch drawn between a node and its
                     // parent, per step. 0 draws none. Without it a plant is a
                     // scatter of disconnected blobs and the branching — the
@@ -816,6 +824,9 @@ let plantsOn = PARAMS.plants > 0;
    nothing that fine can be seen. Colour still does, and that reads. */
 const PW = 2048, PH = 1024;
 const FADE = 52;                            // ticks a dead node takes to go
+/* a few discrete node forms, so lineages are distinguishable at a glance */
+const FORMSZ  = [0.72, 0.92, 1.15, 1.45];
+const FORMASP = [1.0, 1.0, 1.55, 0.72];
 
 const PMAX  = PARAMS.budget|0;
 const NPX=new Float32Array(PMAX), NPY=new Float32Array(PMAX), NPZ=new Float32Array(PMAX);
@@ -838,7 +849,8 @@ const NPCAP=new Uint8Array(PMAX);    // its parent's, so an architecture can
                                      // inherit a rule rather than a value
 const NDEP=new Uint16Array(PMAX);    // depth below the body's own root
 const NPACE=new Float32Array(PMAX);  // maturation rate, paid for in lifespan
-const NFAN=new Float32Array(PMAX);   // half-width of the fan its children spread into
+const NANG=new Float32Array(PMAX);   // the turn that placed it, for shape stats
+const NFORM=new Uint8Array(PMAX);    // which of a few node forms this lineage draws
 const NSTEP=new Float32Array(PMAX);  // the step that actually placed it
 const NMAT=new Int32Array(PMAX);     // ticks from bud to first possible child
 const NFIT=new Float32Array(PMAX);   // fit where it stands, kept fresh by reap
@@ -925,10 +937,10 @@ const ARITY  = [2,2,2,2,2,2,1,1,1,1,2,3];
    genome need not discover units. `one` is the constant every linear-GP needs
    to build an offset from. */
 const IN_ONE=0, IN_AGE=1, IN_DEPTH=2, IN_FIT=3, IN_ENV=4, IN_LAT=9,
-      IN_USED=10, IN_PCAP=11, IN_CROWD=12;
-const NIN = 13;
+      IN_USED=10, IN_PCAP=11, IN_CROWD=12, IN_SLOT=13;
+const NIN = 14;
 const INNAME = ["one","age","depth","fit","sea","ice","desert","grass","forest",
-                "lat","used","pcap","crowd"];
+                "lat","used","pcap","crowd","slot"];
 
 const matBase = Math.max(1, PARAMS.mature);                // reference maturity
 const KIDMAX  = Math.max(1, Math.min(8, PARAMS.kids|0));   // children a node may hold
@@ -958,9 +970,9 @@ const NADDR = NIN + NK + PLEN;                             // the read space
 
    Between them: fan 0 drift 0 is a spike, fan 0 drift small is an arc, fan wide
    is a bush, and each is one number away from the others. */
-const NOUT  = 6;
-const O_CAP=0, O_SPREAD=1, O_PACE=2, O_VIG=3, O_ANGLE=4, O_DRIFT=5;
-const OUTNAME = ["capacity","spread","pace","vigour","fan","drift"];
+const NOUT  = 5;
+const O_CAP=0, O_SPREAD=1, O_PACE=2, O_VIG=3, O_ANGLE=4;
+const OUTNAME = ["capacity","spread","pace","vigour","angle"];
 
 /* One instruction is (op, a, b, c). Writing to slot *i* rather than to a named
    register is what makes the active path walkable backwards from the outputs,
@@ -993,6 +1005,18 @@ function fillInputs(i){
   V[IN_LAT  ] = NPY[i];                         // sin(latitude), pole to pole
   V[IN_USED ] = NKID[i]*0.5 - 1;
   V[IN_PCAP ] = (NPCAP[i]-3)*0.5;               // -1.5 marks a founder
+  /* Which child this is, centred on the node's own capacity, and already in
+     the units the angle output is read in. This input is the whole answer to
+     a problem that defeated two earlier designs. Letting the genome name each
+     child's heading is the model we want, and it failed because the solution
+     was unreachable, not because it was wrong: separating siblings needs a
+     multi-instruction structure — route the child index somewhere, multiply it
+     up enough to clear 45 degrees — and every partial version of that scores
+     exactly the same as not having it, so there is no gradient to climb.
+     Scaled like this, `angle <- slot` is a single output-address mutation and
+     produces a usable fan on its own. The genome is then free to bend it,
+     bias it, or ignore it, and nothing is imposed. */
+  V[IN_SLOT ] = NKID[i] - (NCAP[i]-1)*0.5;
   V[IN_CROWD] = CCOUNT[NCC[i]]*(1/CROWD_REF) - 1;
 }
 
@@ -1373,8 +1397,8 @@ const OUTHIST = new Int32Array(NOUT*NBIN_H);
 const OUTMIN = new Float32Array(NOUT), OUTMAX = new Float32Array(NOUT);
 const OUTRAW = new Float64Array(NOUT);              // mean |raw|, before squashing
 let outN = 0, angN = 0;
-const OUTLO = new Float32Array([1, PARAMS.splo, 0, -1, 0, -PARAMS.angmax]);
-const OUTHI = new Float32Array([KIDMAX+1, PARAMS.sphi, 1,  1, PARAMS.angmax, PARAMS.angmax]);
+const OUTLO = new Float32Array([1, PARAMS.splo, 0, -1, -PARAMS.angmax]);
+const OUTHI = new Float32Array([KIDMAX+1, PARAMS.sphi, 1,  1, PARAMS.angmax]);
 /* Does a node give its children *different* headings? That is the question the
    evolved angle exists to make interesting, and no population statistic answers
    it — a lineage emitting one constant angle and one emitting a spread of them
@@ -1414,14 +1438,13 @@ function recordOut(j,v){
   t = t<0?0:(t>0.99999?0.99999:t);
   OUTHIST[j*NBIN_H+((t*NBIN_H)|0)]++;
 }
-function recordBirth(cap,pace,vig,fan){
+function recordBirth(cap,pace,vig){
   outN++; CAPHIST[cap]++;
-  recordOut(O_CAP,cap); recordOut(O_PACE,pace);
-  recordOut(O_VIG,vig); recordOut(O_ANGLE,fan);
+  recordOut(O_CAP,cap); recordOut(O_PACE,pace); recordOut(O_VIG,vig);
 }
-function recordChild(spr,drift){
+function recordChild(spr,ang){
   angN++;
-  recordOut(O_SPREAD,spr); recordOut(O_DRIFT,drift);
+  recordOut(O_SPREAD,spr); recordOut(O_ANGLE,ang);
 }
 /* median and quartiles straight off the histogram, which is all that is wanted:
    a flat spread means the formula is ignoring its inputs, and a single spike
@@ -1600,17 +1623,25 @@ function cellAt(x,y,z){
    been blended with its neighbours — so the sheet is rebuilt from the live set
    each tick instead, on the GPU, where fifty thousand quads cost nothing.
    Everything the look depends on becomes a per-node attribute for free. */
+const GHOSTN = 24576, GH_F = 13;     // the fading dead, drawn but not simulated
 const GC = new Float32Array(3);
 const INST = 9;                                  // floats per node
 /* the markers below are extra instances beyond one per node, and this is also
    the ceiling on how many plants `topn` can ring */
 const RIMCAP = 8192;
-/* one instance for a node, one for the branch reaching back to its parent */
-const IBUF = new Float32Array((PMAX*2+RIMCAP)*INST);
+/* Everything that can be drawn in one pass, counted honestly: a node, the
+   branch reaching back to its parent, a ring for each of the largest plants,
+   and every ghost still fading. Sizing this for only some of them meant that a
+   tick with many deaths overran the buffer, bufferSubData was handed more than
+   it could hold, and the entire draw failed — so the whole planet's vegetation
+   blinked out for exactly one frame. Every loop below is bounded against it. */
+const MAXINST = PMAX*2 + RIMCAP + GHOSTN;
+const IBUF = new Float32Array(MAXINST*INST);
 let instN = 0;
 
 function buildInstances(){
   let w=0;
+  const WLIM=(MAXINST-2)*INST;
   /* One ring per plant, at its centroid, rather than an outline. Two things
      were tried and abandoned: marking every node of a plant floods it, because
      the nodes are translucent and do not tile solidly so the colour bleeds
@@ -1627,7 +1658,7 @@ function buildInstances(){
   const rimAmt=PARAMS.rim;
   if(PARAMS.topn>0 && rimAmt>0){
     const stepR=PARAMS.step;
-    for(let r=0;r<nodeHigh && w<RIMCAP*INST;r++){
+    for(let r=0;r<nodeHigh && w<WLIM;r++){
       if(!BTOP[r] || PSIZE[r]<=0) continue;
       const n=PSIZE[r];
       let x=BX[r]/n, y=BY[r]/n, z=BZ[r]/n;
@@ -1647,23 +1678,37 @@ function buildInstances(){
     }
   }
   /* the dying, drawn first so the living paint over them */
-  for(let n=0;n<GHOSTN && w<(PMAX*2+RIMCAP-1)*INST;n++){
+  for(let n=0;n<GHOSTN && w<WLIM;n++){
     const g=n*GH_F, t=(ptick-GHOST[g+6])/FADE;
     if(!(t>=0 && t<1) || GHOST[g+2]<=0) continue;
-    IBUF[w  ]=GHOST[g]; IBUF[w+1]=GHOST[g+1];
-    IBUF[w+2]=GHOST[g+2]*(1.0-0.25*t); IBUF[w+3]=GHOST[g+2]*(1.0-0.25*t);
-    IBUF[w+4]=0;
     /* the colour drains as well as the cover: down in value and most of the
        way to grey, so it reads as life leaving rather than as a dissolve */
     const k=(1.0-t)*(1.0-0.55*t);
     const lum=0.30*GHOST[g+3]+0.59*GHOST[g+4]+0.11*GHOST[g+5];
-    IBUF[w+5]=Math.min(255,(GHOST[g+3]+(lum-GHOST[g+3])*t*0.7)*k)/255;
-    IBUF[w+6]=Math.min(255,(GHOST[g+4]+(lum-GHOST[g+4])*t*0.7)*k)/255;
-    IBUF[w+7]=Math.min(255,(GHOST[g+5]+(lum-GHOST[g+5])*t*0.7)*k)/255;
-    IBUF[w+8]=PARAMS.alpha*0.62*(1.0-t)*(1.0-t);
+    const gr=Math.min(255,(GHOST[g+3]+(lum-GHOST[g+3])*t*0.7)*k)/255;
+    const gg=Math.min(255,(GHOST[g+4]+(lum-GHOST[g+4])*t*0.7)*k)/255;
+    const gb=Math.min(255,(GHOST[g+5]+(lum-GHOST[g+5])*t*0.7)*k)/255;
+    const ga=PARAMS.alpha*0.62*(1.0-t)*(1.0-t);
+    const gw=GHOST[g+2]*(1.0-0.25*t);
+    /* the branch goes at the same moment and at the same rate: fading the node
+       while its branch had already vanished dissolved a plant in two stages */
+    if(GHOST[g+11]>0 && w<WLIM-INST){
+      const d=PARAMS.stemdark;
+      IBUF[w  ]=GHOST[g+9]; IBUF[w+1]=GHOST[g+10];
+      IBUF[w+2]=GHOST[g+11]*0.56; IBUF[w+3]=PARAMS.stem*GHOST[g+11];
+      IBUF[w+4]=GHOST[g+8];
+      IBUF[w+5]=gr*d; IBUF[w+6]=gg*d; IBUF[w+7]=gb*d;
+      IBUF[w+8]=ga;
+      w+=INST;
+    }
+    IBUF[w  ]=GHOST[g]; IBUF[w+1]=GHOST[g+1];
+    IBUF[w+2]=gw*GHOST[g+7]; IBUF[w+3]=gw;
+    IBUF[w+4]=GHOST[g+8];
+    IBUF[w+5]=gr; IBUF[w+6]=gg; IBUF[w+7]=gb;
+    IBUF[w+8]=ga;
     w+=INST;
   }
-  for(let i=0;i<nodeHigh;i++){
+  for(let i=0;i<nodeHigh && w<WLIM;i++){
     if(NLIVE[i]===0) continue;
     const wood = NLIVE[i]===2;
     const x=NPX[i], y=NPY[i], z=NPZ[i];
@@ -1685,7 +1730,9 @@ function buildInstances(){
        the picture stops lying about what is claimed: a long-stepping lineage
        draws further apart because it *is* further apart, and the loose body it
        leaves is ground somebody else can still grow into. */
-    const wid=PARAMS.fat*NSTEP[i];
+    const form=NFORM[i];
+    const wid=PARAMS.fat*NSTEP[i]*FORMSZ[form&3];
+    const asp=FORMASP[(form>>2)&3];
 
     /* colour: the form's own, drifted by the sector's inherited tint and
        lifted at the young tips, so expansion reads as motion */
@@ -1720,16 +1767,16 @@ function buildInstances(){
       IBUF[w+2]=NSTEP[i]*0.56;
       IBUF[w+3]=PARAMS.stem*NSTEP[i];
       IBUF[w+4]=rot;
-      IBUF[w+5]=Math.min(255,r*0.88)/255;
-      IBUF[w+6]=Math.min(255,g*0.88)/255;
-      IBUF[w+7]=Math.min(255,b*0.88)/255;
+      IBUF[w+5]=Math.min(255,r*PARAMS.stemdark)/255;
+      IBUF[w+6]=Math.min(255,g*PARAMS.stemdark)/255;
+      IBUF[w+7]=Math.min(255,b*PARAMS.stemdark)/255;
       IBUF[w+8]=al;
       w+=INST;
     }
 
     IBUF[w  ]=(lon+Math.PI)/(Math.PI*2);
     IBUF[w+1]=(Math.PI*0.5-lat)/Math.PI;
-    IBUF[w+2]=wid;
+    IBUF[w+2]=wid*asp;
     IBUF[w+3]=wid;
     IBUF[w+4]=rot;
     IBUF[w+5]=Math.min(255,r)/255;
@@ -1747,9 +1794,17 @@ function readBirthOutputs(i){
   runProgram(i);
   const cap = 1 + (((KIDMAX-0.001)*squash(OUTV[O_CAP]))|0);
   const pace = squash(OUTV[O_PACE]);
-  /* the fan is a width, so it is unsigned: a mirrored fan is the same plant */
-  const fan = PARAMS.angmax*squash(OUTV[O_ANGLE]);
-  NCAP[i]=cap; NPACE[i]=pace; NFAN[i]=fan;
+  NCAP[i]=cap; NPACE[i]=pace;
+  /* Two plants of similar colour standing side by side were impossible to tell
+     apart. Size and aspect are quantised into a few classes off the genome
+     itself, so they are inherited exactly as colour is: a sector keeps its form,
+     related plants look related, and a neighbour that is genuinely a different
+     lineage looks different. Not decoration — the same projection principle,
+     on two more channels. */
+  let h=(NCAP[i]*2654435761)>>>0;
+  for(let n=0;n<NOUT;n++) h=(h*16777619 ^ POUT[i*NOUT+n])>>>0;
+  for(let n=0;n<NK;n++)   h=(h*16777619 ^ ((KONST[i*NK+n]*7)|0))>>>0;
+  NFORM[i]=h%12;
   /* Pace buys growth with life, and this time it buys something: a node cannot
      bud at all until it has matured, so a high-pace node is productive almost
      at once and short-lived, and a low-pace node spends a long time as
@@ -1759,7 +1814,7 @@ function readBirthOutputs(i){
      is why selection could only ever delete it. */
   NMAT[i]  = Math.max(1, Math.min(MATB-1, (matBase*(1.60-1.20*pace))|0));
   NLIFE[i] = Math.max(PARAMS.hostile|0, (PARAMS.life*NFIT[i]*(1.40-0.80*pace))|0);
-  recordBirth(cap, pace, Math.tanh(OUTV[O_VIG]*0.25), fan);
+  recordBirth(cap, pace, Math.tanh(OUTV[O_VIG]*0.25));
 }
 
 /* ---- dying ----
@@ -1769,26 +1824,43 @@ function readBirthOutputs(i){
    out over FADE ticks and then overwritten. They hold no ground — they are not
    in the collision bins and nothing can see them — so nothing in the simulation
    knows they exist, which is what keeps this free. */
-const GHOSTN = 24576, GH_F = 7;
 const GHOST = new Float32Array(GHOSTN*GH_F);
 let ghostAt = 0;
 function ghost(i){
   const g=(ghostAt%GHOSTN)*GH_F; ghostAt++;
   const x=NPX[i], y=NPY[i], z=NPZ[i];
   const lat=Math.asin(Math.max(-1,Math.min(1,y))), lon=Math.atan2(z,x);
+  const cl=Math.max(Math.cos(lat),1e-3), sl=Math.sin(lat);
+  const sn=Math.sin(lon), cs=Math.cos(lon);
+  const he=-NHX[i]*sn + NHZ[i]*cs;
+  const hn=-NHX[i]*sl*cs + NHY[i]*cl - NHZ[i]*sl*sn;
   geneColour(i*G, NPACE[i], GC);
+  const form=NFORM[i];
   GHOST[g  ]=(lon+Math.PI)/(Math.PI*2);
   GHOST[g+1]=(Math.PI*0.5-lat)/Math.PI;
-  GHOST[g+2]=PARAMS.fat*NSTEP[i];
+  GHOST[g+2]=PARAMS.fat*NSTEP[i]*FORMSZ[form&3];
   GHOST[g+3]=GC[0]; GHOST[g+4]=GC[1]; GHOST[g+5]=GC[2];
   GHOST[g+6]=ptick;
+  GHOST[g+7]=FORMASP[(form>>2)&3];
+  GHOST[g+8]=Math.atan2(hn,he);
+  /* the branch goes with it: fading the node while its branch had already
+     vanished left a plant dissolving in two stages */
+  const par=NPAR[i];
+  if(par>=0 && NLIVE[par]!==0 && NGEN[par]===NPGEN[i]){
+    let mx=(x+NPX[par])*0.5, my=(y+NPY[par])*0.5, mz=(z+NPZ[par])*0.5;
+    const ml=1/Math.hypot(mx,my,mz); mx*=ml; my*=ml; mz*=ml;
+    GHOST[g+9]=(Math.atan2(mz,mx)+Math.PI)/(Math.PI*2);
+    GHOST[g+10]=(Math.PI*0.5-Math.asin(Math.max(-1,Math.min(1,my))))/Math.PI;
+    GHOST[g+11]=NSTEP[i];
+  } else GHOST[g+11]=0;
+  GHOST[g+12]=0;
 }
 
 function addNode(x,y,z,hx,hy,hz,src,par,amt,stepUsed){
   const i = freeN>0 ? PFREE[--freeN] : nodeHigh++;
   NPX[i]=x; NPY[i]=y; NPZ[i]=z;
   NHX[i]=hx; NHY[i]=hy; NHZ[i]=hz;
-  NKID[i]=0; NSLOT[i]=0; NLIVE[i]=1; NSTEP[i]=stepUsed;
+  NKID[i]=0; NSLOT[i]=0; NLIVE[i]=1; NSTEP[i]=stepUsed; NCAP[i]=1;
   if(src<0) randomGenome(i);
   else if(amt>0){
     inheritMutated(src,i,amt);
@@ -1913,8 +1985,8 @@ function bud(ni){
      lineage that is uniformly compact or uniformly stringy. */
   runProgram(ni);
   const spr = PARAMS.splo + (PARAMS.sphi-PARAMS.splo)*squash(OUTV[O_SPREAD]);
-  const drift = PARAMS.angmax*Math.tanh(OUTV[O_DRIFT]*0.25);
-  recordChild(spr, drift);
+  const ang = PARAMS.angmax*Math.tanh(OUTV[O_ANGLE]*0.25);
+  recordChild(spr, ang);
   let th, slot=-1;
   if(PARAMS.slots>0){
     /* One of the slots still open, chosen at random from those remaining. A
@@ -1927,12 +1999,9 @@ function bud(ni){
     slot = FREESLOT[(prnd()*nfree)|0];
     th = SLOTS[sc][slot] + (prnd()*2-1)*PARAMS.jitter;
   } else {
-    /* The index fans, the genome sets the width. Child k of c goes to
-       fan·(k − (c−1)/2), so one child runs straight on, two split to ±fan/2 and
-       three take 0 and ±fan — and the drift bends the whole family together. */
-    const k = NKID[ni];
-    th = drift + NFAN[ni]*(k - (cap-1)*0.5);
-    if(k>0){ angDiffSum += Math.abs(th-NLASTANG[ni]); angDiffN++; }
+    /* Whatever the genome says, with nothing added and nothing enforced. */
+    th = ang;
+    if(NKID[ni]>0){ angDiffSum += Math.abs(th-NLASTANG[ni]); angDiffN++; }
     NLASTANG[ni] = th;
   }
 
@@ -1960,7 +2029,8 @@ function bud(ni){
      between bodies — lineages would blur and selection could not accumulate.
      This way a sector is a coherent unit for selection to act on, and a piece
      that breaks off carries a real identity rather than a smear. */
-  addNode(nx,ny,nz,ex,ey,ez,ni,ni, NKID[ni] > 0 ? PARAMS.mut : 0, d);
+  const kid = addNode(nx,ny,nz,ex,ey,ez,ni,ni, NKID[ni] > 0 ? PARAMS.mut : 0, d);
+  NANG[kid]=th;
   if(slot>=0) NSLOT[ni] |= (1<<slot);
   NKID[ni]++;
   return true;
@@ -2177,6 +2247,10 @@ function plantsStep(){
        and allocation stays where the frontier put it: proportional to tips. */
     let best=-1, bestFi=-1, bestTag=0, bestScore=-Infinity;
     for(let v=0;v<vote;v++){
+      /* the draws below retire stale entries, and enough of them in one round
+         empties the frontier — drawing from it then indexes nothing and
+         retiring takes the count negative */
+      if(frontN<=0) break;
       const fi = (prnd()*frontN)|0;
       const fv = PFRONT[fi], ni = fv%PMAX;
       /* eligibility, and the only place the frontier is cleaned: a node is
@@ -2274,7 +2348,7 @@ function withinBody(){
     if(NLIVE[i]!==1) continue;
     const r=PROOT[i], p=NPACE[i], c=NCAP[i];
     BN[r]++; BP[r]+=p; BP2[r]+=p*p; BC[r]+=c; BC2[r]+=c*c; BCM[r]|=(1<<c);
-    BFAN[r]+=NFAN[i]; BSTEP[r]+=NSTEP[i];
+    BFAN[r]+=Math.abs(NANG[i]); BSTEP[r]+=NSTEP[i];
     n++; sp+=p; sp2+=p*p; sc+=c; sc2+=c*c;
     POPCAP[c<10?c:9]++;
     let t=p; t=t<0?0:(t>0.99999?0.99999:t); POPPACE[(t*NBIN_H)|0]++;
@@ -2358,9 +2432,9 @@ function plantStats(reset){
   /* The branching test. A node that gives every child the same heading makes a
      spike; one that differentiates them makes a tree. Nothing in the output
      distributions can tell those apart. */
-  outs.fan.spreadWithinNode = +(angDiffSum/Math.max(1,angDiffN)).toFixed(3);
-  outs.fan.siblingsCompared = angDiffN;
-  outs.fan.reads = angN;
+  outs.angle.spreadWithinNode = +(angDiffSum/Math.max(1,angDiffN)).toFixed(3);
+  outs.angle.siblingsCompared = angDiffN;
+  outs.angle.reads = angN;
   const hgtStat = { tried:hgtTried, done:hgtDone,
                     tookShare:+(hgtDone/Math.max(1,hgtTried)).toFixed(3) };
   const ins={};
@@ -2423,7 +2497,7 @@ function genomeText(i){
   }
   for(let j=0;j<NOUT;j++) L.push("  "+OUTNAME[j]+" <- "+nm(POUT[i*NOUT+j]));
   L.push("  affinity ["+Array.from(GENE.subarray(i*G,i*G+5)).map(v=>v.toFixed(2)).join(" ")+"]");
-  L.push("  built: capacity "+NCAP[i]+"  fan "+NFAN[i].toFixed(2)+
+  L.push("  built: capacity "+NCAP[i]+"  turn "+NANG[i].toFixed(2)+
          "  pace "+NPACE[i].toFixed(2)+"  depth "+NDEP[i]);
   return L.join("\n");
 }
@@ -2667,7 +2741,7 @@ gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1, 1,-1, -1,1, 1,1]),gl.STAT
 gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
 const instVBO=gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER,instVBO);
-gl.bufferData(gl.ARRAY_BUFFER,(PMAX*2+RIMCAP)*INST*4,gl.DYNAMIC_DRAW);
+gl.bufferData(gl.ARRAY_BUFFER,MAXINST*INST*4,gl.DYNAMIC_DRAW);
 const STRIDE=INST*4;
 [[1,2,0],[2,2,8],[3,1,16],[4,4,20]].forEach(a=>{
   gl.enableVertexAttribArray(a[0]);
