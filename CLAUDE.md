@@ -169,6 +169,7 @@ modelled — don't claim otherwise in the README.
 
 Evolving plants competing for exclusive area — branching growth in continuous
 position, not a grid mosaic. See `docs/plants-design.md` for the agreed model and
-open questions, and read it before starting that work. **Start at stage 0**: one
+open questions, and read it before starting that work. The formula genome that
+supersedes its scalar one is designed in `docs/formula-design.md`. **Start at stage 0**: one
 plant, hand-written formulas, static planet, rendered. It is the only stage that
 can invalidate all the others, and it is the cheapest.

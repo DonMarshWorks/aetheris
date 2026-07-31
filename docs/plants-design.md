@@ -281,7 +281,8 @@ on frequency dependence.
 
 The instruction genome comes when there is something to condition on — turn
 harder when old, lean toward moisture, branch more when crowded. That is when
-length starts to mean anything.
+length starts to mean anything, and it is designed in
+**`formula-design.md`**, which supersedes this section once it is built.
 
 ### Why the instruction list, when it comes, should not be an expression tree
 
