@@ -390,16 +390,27 @@ const PARAMS = {
                     // Careful — a tax leaves the sea *undivided*, so it can
                     // simply filter for whoever can live on less and hand them
                     // all of it. Measure, do not assume.
-  marine:  0.00,    // how far open ocean is nutrient-poor, 0 = uniformly rich.
-                    // Built, measured, and off: it does the opposite of what it
-                    // was for. Starving the deep does not free the planet from
-                    // the sea, it just makes the sea a place only extreme
-                    // specialists survive — niche evenness fell 0.74 to 0.30
-                    // and mean fit to 0.88, most of the world living on the
-                    // hostile floor. Kept because the idea recurs: the sea is
-                    // two thirds of the arena and has no structure, and the
-                    // blurred water-proximity field the climate already keeps,
-                    // inverted, is coastal proximity for nothing.
+  marine:  1.00,    // how far open ocean is nutrient-poor, 0 = uniformly rich.
+                    // Green fringes along every shore, empty blue gyres, and
+                    // the deep left to whoever can live on nothing — which is
+                    // how real ocean productivity works, using the blurred
+                    // water-proximity field the climate already keeps.
+                    //
+                    // Measured alone, twice, and judged harmful both times:
+                    // starving the deep filters the sea down to extreme
+                    // specialists who then own all of it. That verdict was
+                    // wrong because it was taken in isolation. With a ceiling
+                    // on what suitability buys (`fitcap`) and a penalty on
+                    // being common (`rare`), the same mechanism instead breaks
+                    // the sea's single undivided niche into a structured one,
+                    // and it is the best result measured: niche evenness 0.96
+                    // against 0.58, no lineage over a fifth of the planet, and
+                    // more life than emptying the ocean altogether.
+                    //
+                    // The lesson is about method, not oceans. Three mechanisms
+                    // that each did nothing or harm on their own are together
+                    // the whole cure. Testing one dial at a time finds none of
+                    // that.
   polelat: 78,      // degrees of latitude beyond which nothing grows, fading
   polefade: 7,      // out over this many more. Kept as tight as the smear
                     // allows, because the ice is the steadiest ground on the
@@ -3966,7 +3977,12 @@ function frame(now){
      timing; the cost is that time-lapse now runs as fast as the ecology can
      be simulated, and no faster. */
   if(simAccum >= 0.084 && !paused && plantDebt <= 0){
-    const step = Math.min(simAccum*speed, 45);
+    /* A *fixed* step, never the real time that elapsed. Scaling the climate by
+       how long the last frame took made the world a function of the machine
+       drawing it: a phone and a laptop advanced it by different amounts and the
+       same seed diverged within seconds. Everything the simulation does is now
+       a pure function of seed, parameters and tick count. */
+    const step = 0.084*speed;
     simAccum = 0;
     S.time += step;
     const rows = Math.ceil(GH/10);
