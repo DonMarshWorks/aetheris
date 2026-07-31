@@ -274,7 +274,11 @@ const PARAMS = {
   hostile: 150,     // ticks a node lasts on ground that does not suit it at all
   sweep:   40,      // ticks between one pass of connected-component labelling
   perbody: 0,       // 1 = at most one bud per body per turn, 0 = by frontier
-  spore:   0.004,   // chance a bud is thrown clear instead, founding a body
+  spore:   0.030,   // chance a bud is thrown clear instead, founding a body.
+                    // Measured: the only thing that slows specialisation eroding
+                    // under a moving climate, because a specialist cannot walk
+                    // to ground that relocated but can be thrown to it. Higher
+                    // is worse -- at 0.12 spores land faster than they settle.
   settle:  400,     // ticks a young body is spared the fragment cull
   rot:     900,     // ticks dead wood holds before the connection rots through
 };

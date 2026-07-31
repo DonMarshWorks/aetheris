@@ -64,12 +64,42 @@ niche that has moved means growing through country only a generalist can cross,
 so drift is not neutral between the strategies — it favours breadth.
 
 The instruction to lean on this "rather than adding artificial diversity
-pressure" is therefore wrong, and backwards. Drift keeps the world *turning over*
-but it does not keep it *various*. Something else has to do that.
+pressure" is therefore wrong about specialisation. But see the next section
+before concluding that anything needs fixing.
 
-Twenty distinct strategies stay occupied in every configuration, with the largest
-holding a quarter of the population, so what varies is the depth of commitment
-rather than the number of niches in use.
+### Measured: what actually holds specialisation up, and whether it matters
+
+At ×100, over fifteen thousand ticks, against a baseline that falls 0.396 → 0.345:
+
+| | end | change | mean fit | largest strategy |
+|---|---|---|---|---|
+| nothing | 0.345 | −0.051 | 1.62 | 0.255 |
+| local kin, 0.5 | 0.344 | −0.048 | 1.71 | 0.258 |
+| global rarity, 0.7 | 0.352 | −0.047 | 1.63 | **0.246** |
+| dispersal ×7.5 | **0.360** | **−0.022** | **1.74** | 0.313 |
+| dispersal ×30 | 0.351 | −0.025 | 1.34 | 0.253 |
+
+**Frequency dependence does not touch specialisation, and could not have.** It
+acts on *which* strategy is common — global rarity is the only thing that pulls
+the largest strategy's share down, 0.246 against 0.255 — and specialisation is a
+different axis entirely, being how committed a lineage is rather than which niche
+it commits to. Both mechanisms work; neither answers this question.
+
+**Dispersal halves the erosion**, and it is the only thing that does, because it
+is the only one addressing the mechanism: a specialist cannot *walk* to ground
+that has relocated, since the country in between suits only a generalist — but it
+can be *thrown* there. It also gives the best mean fit of any run. More is not
+better: at thirty times the baseline rate, fit collapses to 1.34 as spores land
+faster than they can establish, and the body count doubles into debris.
+
+**And the failure this was all guarding against is not happening.** The stated
+failure mode is monoculture — one lineage wins and diversity goes to zero.
+Nineteen to twenty distinct strategies stay occupied in every configuration
+tested, and the largest never holds more than about a quarter of the population.
+What declines under drift is the average *depth* of commitment, settling around
+0.35, and on a world whose niches are permanently in motion that is arguably the
+correct answer rather than a defect. Do not spend more effort forcing it up
+without first deciding that a planet of moderate specialists is actually wrong.
 
 ## The model
 
