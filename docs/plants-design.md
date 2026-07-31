@@ -1,6 +1,6 @@
 # Evolving plants — design brief
 
-Status: **stages 0, 1 and 3 built and running on the `plants` branch.** This is
+Status: **stages 0, 1, 3 and 7 built and running on the `plants` branch.** This is
 the record of a design discussion between Don and Claude, kept current as the
 thing gets made. Read it before writing any more of it.
 
@@ -553,7 +553,9 @@ Each stage should be watchable before moving on.
    the answer decides whether the next item is needed at all.
 5. Frequency dependence, if and only if step 4 says climate drift is not enough.
 6. Dispersal refinement, horizontal transfer and species barriers.
-7. The instruction genome, gradient inputs, conditional behaviour.
+7. **The instruction genome — done**, and it supersedes the eleven scalars
+   entirely. `formula-design.md` carries the design and the four claims in it
+   that measurement overturned. Gradient inputs are still to come.
 
 ## Risks
 

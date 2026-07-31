@@ -253,16 +253,53 @@ const PARAMS = {
   seeds:   40,      // starting nodes
   budget:  130000,  // hard cap on live nodes
   grow:    900,     // bud attempts per simulation tick
-  step:    0.0055,  // angular distance from a node to its child (radians)
-  collide: 0.72,    // refusal radius, as a fraction of a step. Geometry, not
-                    // taste: at 1.0 a node holds 5 children and turns die
-                    // beyond 120 degrees; 8 children needs 0.68 or less.
-  kids:    6,       // cap on children, though collision usually binds first
-  tries:   22,      // consecutive refusals before a node leaves the frontier
-  spread:  0.80,    // footprint radius across the branch, per step
+  step:    0.0055,  // base angular distance from a node to its child (radians),
+                    // scaled per node by the spread its formula returns
+  collide: 0.72,    // refusal radius, as a fraction of a *base* step. Geometry,
+                    // not taste: it decides how many children fit around a node
+                    // and how short a step may get before its own siblings
+                    // start colliding. See SLOTS.
+  splo:    0.75,    // the range the spread output is squashed into. The floor
+  sphi:    1.75,    // must stay above `collide` or a child lands on its parent;
+                    // just above it is where dense lineages start losing their
+                    // outer slots, which is the self-regulation we want visible.
+  glen:    24,      // instructions per genome. Fixed for a whole run
+  konst:   4,       // evolved constants per genome
+  clamp:   8,       // the magnitude an instruction result is held to. This is
+                    // not a safety rail, it is the most important dial in the
+                    // genome: the outputs are read through tanh(x/4), so if a
+                    // program can reach a thousand every output is a step
+                    // function of one sign bit and the formula is a constant
+                    // wearing a program's clothes. Measured: at 1e6 three seeds
+                    // in four collapsed to a single niche.
+  pmut:    2.00,    // expected point mutations on the program at a bifurcation
+  tries:   1,       // refusals before a node is judged boxed in and leaves the
+                    // frontier. 0 keeps every unfilled node on it for ever,
+                    // which is what the formula design called for and what
+                    // measurement overturned: see the comment on `admit`.
+                    // One is not a token value, it is the measured optimum —
+                    // niche evenness falls monotonically as it rises.
+  readmit: 1,       // 1 = a death offers its neighbours their place back. Worth
+                    // it: evenness 0.82 against 0.72, for a fifth more wasted
+                    // draws. Gap dynamics, and the best diversity measured.
+  jitter:  0.17,    // radians of slop on a slot angle — about ten degrees.
+                    // Lattices are not the problem and are not a bug: exact
+                    // slot angles inherited through an exact heading close into
+                    // one, a three-child plant *should* make a square lattice
+                    // and a five-child one a hexagonal, and those are efficient
+                    // packings. What is wrong is a *perfectly* closed lattice,
+                    // because then every lineage packs identically and there is
+                    // nothing to choose between them. Ten degrees breaks the
+                    // degeneracy and keeps the packing: measured, niche
+                    // evenness 0.83 against 0.71 at zero — and it falls away
+                    // again by twenty degrees, where the packing is being lost.
+  vote:    3,       // frontier draws per bud; the highest vigour takes it
+  vmem:    0.05,    // how fast a body's vigour level is tracked, so that vigour
+                    // ranks nodes inside a body and not bodies against each other
+  fat:     0.80,    // painted footprint radius, per step actually taken
   soft:    0.50,    // how soft the footprint edge is, 0..1
   alpha:   0.80,    // how much of the ground a mature node hides
-  mature:  90,      // ticks from bud to full width
+  mature:  90,      // reference ticks from bud to maturity, scaled by pace
   life:    1500,    // ticks per unit of fit; a pure specialist at home gets 5x
   viable:  0.40,    // fit below which a node will not even be attempted
   kin:     0.00,    // how much a crowd of near-relatives shortens a life.
@@ -272,7 +309,7 @@ const PARAMS = {
   kinr:    3.0,     // how far that crowd is counted, in steps
   kind:    1.30,    // affinity distance within which a neighbour counts as kin
   rare:    0.00,    // how much being a COMMON strategy globally shortens a life
-  mut:     1.00,    // strength of the mutation minted at each bifurcation
+  mut:     1.00,    // strength of the affinity mutation minted at a bifurcation
   minfrag: 5,       // a severed piece smaller than this is not viable
   hostile: 150,     // ticks a node lasts on ground that does not suit it at all
   sweep:   40,      // ticks between one pass of connected-component labelling
@@ -639,7 +676,7 @@ const PW = 2048, PH = 1024;                 // the sheet plants are drawn into
 const PMAX  = PARAMS.budget|0;
 const NPX=new Float32Array(PMAX), NPY=new Float32Array(PMAX), NPZ=new Float32Array(PMAX);
 const NHX=new Float32Array(PMAX), NHY=new Float32Array(PMAX), NHZ=new Float32Array(PMAX);
-const NKID=new Uint8Array(PMAX), NFAIL=new Uint8Array(PMAX);
+const NKID=new Uint8Array(PMAX), NSLOT=new Uint8Array(PMAX);
 const NLIVE=new Uint8Array(PMAX), NBIN=new Int32Array(PMAX);
 const NBORN=new Int32Array(PMAX), NLIFE=new Int32Array(PMAX);
 const NPAR=new Int32Array(PMAX), NPGEN=new Int32Array(PMAX), NGEN=new Int32Array(PMAX);
@@ -650,37 +687,39 @@ let ptick = 0, reapCursor = 0, plantsDirty = true, deaths = 0, woodN = 0, comps 
 const NLK=new Int32Array(PMAX);      // children still standing, alive or wood
 const CSTAMP=new Int32Array(PMAX);   // last turn a body was allowed to bud
 
+/* What the formulas decided for this node, read once at birth and then fixed:
+   a body permanently records the conditions each of its nodes grew through. */
+const NCAP=new Uint8Array(PMAX);     // children this node may ever have, 1..5
+const NPCAP=new Uint8Array(PMAX);    // its parent's, so an architecture can
+                                     // inherit a rule rather than a value
+const NDEP=new Uint16Array(PMAX);    // depth below the body's own root
+const NPACE=new Float32Array(PMAX);  // maturation rate, paid for in lifespan
+const NSPRD=new Float32Array(PMAX);  // step distance to its children, per step
+const NSTEP=new Float32Array(PMAX);  // the step that actually placed it
+const NMAT=new Int32Array(PMAX);     // ticks from bud to first possible child
+const NFIT=new Float32Array(PMAX);   // fit where it stands, kept fresh by reap
+const NENV=new Float32Array(PMAX*5); // and the five memberships behind it
+const BVIG=new Float32Array(PMAX);   // per body, the vigour level to rank against
+
 /* its own stream, so changing plant parameters cannot shift the terrain */
 let pseed = (SEED ^ 0x85ebca6b)>>>0 || 1;
 function prnd(){ pseed=(pseed*1664525+1013904223)>>>0; return pseed/4294967296; }
 
-/* ---- the genome ----
-   Eleven numbers, inherited whole and mutated where a branch forks. Numbers
-   before programs: this is enough for real selection — specialists against
-   generalists, fast and cheap against slow and tough — and if lineages will
-   not differentiate on eleven floats they will not differentiate on sixty
-   instructions either, only it will be much harder to see why. Conditional
-   behaviour, and with it any question about formula length, comes after.
+/* ---- the affinities ----
+   Five numbers, a normalised vector, inherited whole and mutated where a branch
+   forks. These stay numbers while everything else becomes a program, and the
+   fixed budget is why: it is what stops the drift to a bland immortal
+   generalist, a formula output cannot easily be budget-constrained across five
+   values, and this is what colour is projected from, which is what makes
+   convergent evolution visible.
 
-   The first five are affinities for the five environments the climate
-   controller already holds in balance. That is the whole argument for this
-   planet as an arena: the controller guarantees each of the five continues to
-   exist and merely moves it, so a specialist for any one of them always has
-   somewhere to live, and never has it for long. */
-const G = 11;                   // genes per node
-const G_SEA=0, G_ICE=1, G_DES=2, G_GRA=3, G_FOR=4,
-      G_PACE=5, G_BRANCH=6, G_TURN=7, G_WANDER=8, G_SPREAD=9, G_ELONG=10;
+   They are affinities for the five environments the climate controller already
+   holds in balance. That is the whole argument for this planet as an arena: the
+   controller guarantees each of the five continues to exist and merely moves
+   it, so a specialist for any one of them always has somewhere to live, and
+   never has it for long. */
+const G = 5;
 const GENE = new Float32Array(PMAX*G);
-/* lo, hi, mutation step */
-const GLIM = [
-  [0.02,5,0.30],[0.02,5,0.30],[0.02,5,0.30],[0.02,5,0.30],[0.02,5,0.30],
-  [0.00,1.00,0.10],   // pace: growth bought with lifespan
-  [0.05,0.75,0.07],   // branch
-  [0.20,1.50,0.14],   // turn
-  [0.05,0.90,0.09],   // wander
-  [0.40,1.40,0.10],   // spread
-  [1.00,3.50,0.25],   // elongation
-];
 /* Nothing costs affinity and lifespan rises with it, so unconstrained they all
    drift upward until every node likes everything and lives for ever — not
    hyperspecialisation but affinity inflation, ending in a bland immortal
@@ -693,12 +732,325 @@ function normalise(o){
   const f=5/sum;
   for(let i=0;i<5;i++) GENE[o+i]*=f;
 }
-function mutate(src,dst,amt){
-  for(let i=0;i<G;i++){
-    let v = GENE[src+i] + (prnd()*2-1)*GLIM[i][2]*amt;
-    GENE[dst+i] = Math.max(GLIM[i][0], Math.min(GLIM[i][1], v));
+function mutateAff(o,amt){
+  for(let i=0;i<5;i++)
+    GENE[o+i] = Math.max(0.02, Math.min(5, GENE[o+i]+(prnd()*2-1)*0.30*amt));
+  normalise(o);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   the formula genome
+   ══════════════════════════════════════════════════════════════════════
+   A number cannot say *when*. Eleven scalars bought real selection, but every
+   lineage ended up much the same shape, because nothing in the genome could
+   condition on where a node found itself. A formula can, and the behaviour
+   this exists to produce is one plant carrying **nursery** nodes that sit and
+   reproduce and **scout** nodes that run a vine out as fast as they can, the
+   difference decided by the conditions each was born into. If both kinds
+   cannot be seen inside a single body the system is not working, whatever the
+   diversity numbers say — which is why the within-body spread of pace and
+   capacity is measured below and not merely the population's.
+
+   Linear/Cartesian GP, not expression trees: a fixed-length list over a fixed
+   read space. No bloat by construction, point mutations stay small, and the
+   instructions that reach no output drift neutrally and become the raw material
+   that makes a genome evolvable rather than brittle.
+
+   Four outputs on two clocks, and the split is the whole point:
+
+     capacity  once, at birth   how many children this node may ever have, 1-5
+     spread    once, at birth   how far its children are placed from it
+     pace      once, at birth   how fast it matures, paid for in lifespan
+     vigour    every look       how badly it wants a child *now*
+
+   The first three are fixed at birth, so a body is a permanent record of the
+   conditions it grew through. Vigour is re-read, so it can depend on age —
+   rising as a node matures, or oscillating if age goes through a sine, which
+   is where whorls and rhythmic branching come from. */
+const OP_ADD=0, OP_SUB=1, OP_MUL=2, OP_DIV=3, OP_MIN=4, OP_MAX=5,
+      OP_ABS=6, OP_NEG=7, OP_SIN=8, OP_TANH=9, OP_CMP=10, OP_SEL=11;
+const NOP = 12;
+const OPNAME = ["ADD","SUB","MUL","DIV","MIN","MAX","ABS","NEG","SIN","TANH","CMP","SEL"];
+const ARITY  = [2,2,2,2,2,2,1,1,1,1,2,3];
+/* EXP and POW explode, LOG has a domain problem, MOD is chaotic for the same
+   reason it is the wrong way to map capacity — and there is deliberately no
+   random operator, because seed plus parameters must go on determining a world
+   completely. A link to a particular planet is a feature of the piece. */
+
+/* Inputs, all scaled so that the interesting region sits around zero and the
+   genome need not discover units. `one` is the constant every linear-GP needs
+   to build an offset from. */
+const IN_ONE=0, IN_AGE=1, IN_DEPTH=2, IN_FIT=3, IN_ENV=4, IN_LAT=9,
+      IN_USED=10, IN_PCAP=11, IN_CROWD=12;
+const NIN = 13;
+const INNAME = ["one","age","depth","fit","sea","ice","desert","grass","forest",
+                "lat","used","pcap","crowd"];
+
+const matBase = Math.max(1, PARAMS.mature);                // reference maturity
+const PLEN  = Math.max(4, Math.min(80, PARAMS.glen|0));    // instructions
+const NK    = Math.max(1, Math.min(16, PARAMS.konst|0));   // evolved constants
+const NADDR = NIN + NK + PLEN;                             // the read space
+const NOUT  = 4;
+const O_CAP=0, O_SPREAD=1, O_PACE=2, O_VIG=3;
+const OUTNAME = ["capacity","spread","pace","vigour"];
+
+/* One instruction is (op, a, b, c). Writing to slot *i* rather than to a named
+   register is what makes the active path walkable backwards from the outputs,
+   and that walk is one of the things measured — a program whose active count is
+   one is a constant wearing a program's clothes, however long it is. */
+const PROG  = new Uint8Array(PMAX*PLEN*4);
+const KONST = new Float32Array(PMAX*NK);
+const POUT  = new Uint8Array(PMAX*NOUT);
+
+/* Results are clamped rather than allowed to run away, and anything that comes
+   back non-finite is counted and zeroed. The counter is expected to stay at
+   zero and is *checked* rather than assumed: this project has already lost four
+   commits to a silent NaN that a downstream Math.max turned into a plausible
+   constant. */
+const PCLAMP = Math.max(1, PARAMS.clamp);
+const V = new Float32Array(NADDR);
+const OUTV = new Float32Array(NOUT);
+let progNonFinite = 0, progRuns = 0;
+
+function fillInputs(i){
+  V[IN_ONE  ] = 1;
+  V[IN_AGE  ] = (ptick-NBORN[i])/matBase - 1;   // -1 at birth, 0 at maturity,
+                                                // and linear after, so a SIN
+                                                // over it can actually oscillate
+  V[IN_DEPTH] = NDEP[i]*0.125 - 1;
+  V[IN_FIT  ] = NFIT[i] - 1;                    // 0 is a generalist anywhere
+  const e=i*5;
+  V[IN_ENV  ]=NENV[e  ]; V[IN_ENV+1]=NENV[e+1]; V[IN_ENV+2]=NENV[e+2];
+  V[IN_ENV+3]=NENV[e+3]; V[IN_ENV+4]=NENV[e+4];
+  V[IN_LAT  ] = NPY[i];                         // sin(latitude), pole to pole
+  V[IN_USED ] = NKID[i]*0.5 - 1;
+  V[IN_PCAP ] = (NPCAP[i]-3)*0.5;               // -1.5 marks a founder
+  V[IN_CROWD] = CCOUNT[NCC[i]]*(1/CROWD_REF) - 1;
+}
+
+function runProgram(i){
+  fillInputs(i);
+  const k=i*NK;
+  for(let j=0;j<NK;j++) V[NIN+j]=KONST[k+j];
+  /* cleared every run, so a reference forward to a slot not yet computed reads
+     zero — well defined, harmless, and simply inactive */
+  for(let j=0;j<PLEN;j++) V[NIN+NK+j]=0;
+  const p=i*PLEN*4;
+  for(let j=0;j<PLEN;j++){
+    const q=p+j*4;
+    const a=V[PROG[q+1]], b=V[PROG[q+2]], c=V[PROG[q+3]];
+    let r;
+    switch(PROG[q]){
+      case OP_ADD: r=a+b; break;
+      case OP_SUB: r=a-b; break;
+      case OP_MUL: r=a*b; break;
+      /* protected: a divisor is never allowed near zero, so no ratio can
+         produce an infinity for the clamp below to have to catch */
+      case OP_DIV: r=a/(Math.abs(b)<1e-3 ? (b<0?-1e-3:1e-3) : b); break;
+      case OP_MIN: r=a<b?a:b; break;
+      case OP_MAX: r=a>b?a:b; break;
+      case OP_ABS: r=a<0?-a:a; break;
+      case OP_NEG: r=-a; break;
+      case OP_SIN: r=Math.sin(a); break;
+      case OP_TANH:r=Math.tanh(a); break;
+      case OP_CMP: r=a<b?1:0; break;
+      default:     r=c>0?a:b; break;              // SEL
+    }
+    /* one test that catches NaN, both infinities and any runaway magnitude */
+    if(!(r>=-PCLAMP && r<=PCLAMP)){
+      if(r>PCLAMP) r=PCLAMP;
+      else if(r<-PCLAMP) r=-PCLAMP;
+      else { progNonFinite++; r=0; }
+    }
+    V[NIN+NK+j]=r;
   }
-  normalise(dst);
+  for(let j=0;j<NOUT;j++) OUTV[j]=V[POUT[i*NOUT+j]];
+  progRuns++;
+  if((progRuns&15)===0) sampleInputs();
+}
+
+/* How many instructions actually reach an output, walked backwards from the
+   four output addresses. Forward references contribute nothing, so they are not
+   followed. */
+const AMARK = new Uint8Array(PLEN), ASTK = new Int32Array(PLEN+4);
+function activeCount(i){
+  AMARK.fill(0);
+  let sn=0, n=0;
+  const base=NIN+NK;
+  for(let j=0;j<NOUT;j++){
+    const a=POUT[i*NOUT+j];
+    if(a>=base && a<NADDR) ASTK[sn++]=a-base;
+  }
+  while(sn>0){
+    const j=ASTK[--sn];
+    if(AMARK[j]) continue;
+    AMARK[j]=1; n++;
+    const q=(i*PLEN+j)*4, ar=ARITY[PROG[q]];
+    for(let t=1;t<=ar;t++){
+      const a=PROG[q+t];
+      if(a>=base && a<NADDR){ const s=a-base; if(s<j && !AMARK[s]) ASTK[sn++]=s; }
+    }
+  }
+  return n;
+}
+
+/* Mapped by squashing, never by modulo. `round(x) mod 5` is chaotic at the
+   boundary — 4.9 gives five slots and 5.1 gives one — so the smallest mutation
+   would turn a branch hub into a vine segment, which is precisely the
+   destructive-mutation failure a fixed-length genome exists to prevent. */
+const squash = x => Math.tanh(x*0.25)*0.5+0.5;
+
+/* A slot is an angular position, not a counter, measured from the heading the
+   node inherited. Odd capacities keep the main axis and even ones split it,
+   which is deliberate: committing the whole system to one habit — monopodial
+   like a tree, or dichotomous like many algae — would throw away a dimension,
+   so capacity itself carries the distinction and a lineage wanting a trunk
+   evolves odd capacities down it.
+
+   Five is a choice, not a limit. At collide = 0.72 two children need only 42
+   degrees between them and turns are legal out to 138, which is room for
+   seven — so these angles are chosen for how they look. What the geometry does
+   still decide, on its own and with nobody writing the rule, is that a
+   short-stepping lineage loses its outer slots: siblings 60 degrees apart on a
+   step of s sit 2s·sin(30) = s apart, so below s ≈ 0.72 a rosette cannot hold
+   together and dense lineages stop being able to branch widely. */
+const R = Math.PI/180;
+const SLOTS = [ null,
+  [0],
+  [-45*R, 45*R],
+  [0, -90*R, 90*R],
+  [-36*R, 36*R, -108*R, 108*R],
+  [0, -60*R, 60*R, -120*R, 120*R] ];
+const FREESLOT = new Int32Array(8);
+
+/* ---- mutation ----
+   A point mutation on one instruction — its operator or one of its sources — or
+   a nudge to an evolved constant, or a rerouting of where an output is read
+   from. Fixed length, so no bloat and no parsimony pressure to tune. Minted
+   where a branch forks and never per node, so a sector stays a coherent unit
+   for selection to act on. */
+function randomGenome(i){
+  const p=i*PLEN*4;
+  for(let j=0;j<PLEN;j++){
+    const q=p+j*4, lim=NIN+NK+j;   // only what this instruction can already see
+    PROG[q  ]=(prnd()*NOP)|0;
+    PROG[q+1]=(prnd()*lim)|0; PROG[q+2]=(prnd()*lim)|0; PROG[q+3]=(prnd()*lim)|0;
+  }
+  const k=i*NK;
+  for(let j=0;j<NK;j++) KONST[k+j]=(prnd()*4-2);
+  const o=i*G;
+  for(let j=0;j<5;j++) GENE[o+j]=0.25+prnd()*2.5;
+  normalise(o);
+  /* read the outputs from near the end, so a fresh genome computes something
+     rather than echoing an input */
+  const back=Math.min(PLEN,8), po=i*NOUT;
+  for(let j=0;j<NOUT;j++) POUT[po+j]=NIN+NK+PLEN-1-((prnd()*back)|0);
+}
+function inherit(src,dst){
+  PROG.copyWithin(dst*PLEN*4, src*PLEN*4, (src+1)*PLEN*4);
+  KONST.copyWithin(dst*NK, src*NK, (src+1)*NK);
+  POUT.copyWithin(dst*NOUT, src*NOUT, (src+1)*NOUT);
+  GENE.copyWithin(dst*G, src*G, (src+1)*G);
+}
+function pointMutate(i){
+  const r=prnd();
+  if(r < 0.72){
+    const j=(prnd()*PLEN)|0, q=(i*PLEN+j)*4, f=(prnd()*4)|0;
+    if(f===0) PROG[q]=(prnd()*NOP)|0;
+    else PROG[q+f]=(prnd()*(NIN+NK+j))|0;
+  } else if(r < 0.90){
+    const k=i*NK+((prnd()*NK)|0);
+    KONST[k]=Math.max(-8,Math.min(8, KONST[k]+(prnd()*2-1)*0.4));
+  } else {
+    POUT[i*NOUT+((prnd()*NOUT)|0)]=(prnd()*NADDR)|0;
+  }
+}
+/* ---- the frontier, and when a node joins it ----
+   Measured: with the maturity gate but no queue, four draws in five landed on a
+   node too young to bud, and during the colonising phase it was closer to nine
+   in ten. Since a node's maturity date is known the moment it is born, bucket
+   it by that date and splice it in when it is due — the same trick the death
+   scheduler uses. The frontier then means "could grow right now", the open
+   question about whether it is worth drawing from uniformly answers itself, and
+   nothing is scanned. */
+/* A freed slot is handed straight to the next birth, so a bare index is not an
+   identity: both the queue and the frontier itself carry the generation with
+   it, or a stale entry silently becomes a claim on whichever stranger moved in.
+   Measured: without this, six draws in a hundred landed on a node that had not
+   matured — a node inheriting a dead one's place in the queue, budding early
+   and drawing twice as often as it should. */
+const tag  = i => i + (NGEN[i]&1023)*PMAX;
+const same = (v,i) => (NGEN[i]&1023)===((v/PMAX)|0);
+const MATB = Math.max(8, Math.ceil(matBase*1.6)+2);
+const PENDQ = []; for(let n=0;n<MATB;n++) PENDQ.push([]);
+function joinWhenMature(i){ PENDQ[(ptick+NMAT[i])%MATB].push(tag(i)); }
+
+/* ---- what the frontier is, and the thing measurement overturned ----
+   The formula design deleted the retry counter, on the argument that a slot
+   blocked by a neighbour is simply not taken this time, the node stays eligible
+   and may be picked again later, by which time the obstruction may be gone —
+   so eligibility alone should replace failure counters and no arbitrary retry
+   constant is needed.
+
+   Measured: it does not. On a full planet an interior node is boxed in by its
+   own children and *stays* boxed in, so it never fills, never leaves, and the
+   frontier grows into the entire population — 92 to 100 per cent of all living
+   nodes. That is not a frontier, it is area, and sampling from area is the
+   exact failure this project had already diagnosed once: a body's draws land on
+   interior nodes that cannot grow, so its growth decays as 1/r while its area
+   grows as r², and it stalls at a size the sampling rule picked rather than one
+   anybody chose. The largest body on the planet fell from about 1,900 nodes to
+   42.
+
+   So a node does leave after a few refusals — but the design's instinct was
+   right about *why* it should be able to come back, and that is made real
+   rather than hoped for: when a node dies, everything pressed against it is
+   offered its place again. The obstruction really is gone, and it is an event
+   we already know about, so nothing has to scan for it. */
+const NONF = new Uint8Array(PMAX);   // already on the frontier
+const NTRY = new Uint8Array(PMAX);   // refusals since it last placed a child
+function admit(i){
+  if(NONF[i] || NLIVE[i]!==1 || NKID[i]>=NCAP[i] || frontN>=PMAX) return;
+  if(ptick-NBORN[i] < NMAT[i]) return;
+  NONF[i]=1; NTRY[i]=0; PFRONT[frontN++]=tag(i);
+}
+function admitMature(){
+  const q = PENDQ[ptick%MATB];
+  for(let n=0;n<q.length;n++){ const v=q[n], i=v%PMAX; if(same(v,i)) admit(i); }
+  q.length=0;
+}
+function retire(fi){
+  const v=PFRONT[fi], i=v%PMAX;
+  if(same(v,i)) NONF[i]=0;
+  PFRONT[fi]=PFRONT[--frontN];
+}
+/* the 27 bins a query touches are the same ones a bud tests, so this is one
+   collision query's worth of work on each death */
+function freeGround(x,y,z){
+  if(PARAMS.readmit<=0) return;
+  const gi=Math.min(PGRID-1,Math.max(0,((x+1)*0.5*PGRID)|0));
+  const gj=Math.min(PGRID-1,Math.max(0,((y+1)*0.5*PGRID)|0));
+  const gk=Math.min(PGRID-1,Math.max(0,((z+1)*0.5*PGRID)|0));
+  for(let a=-1;a<=1;a++){
+    const ia=gi+a; if(ia<0||ia>=PGRID) continue;
+    for(let b=-1;b<=1;b++){
+      const jb=gj+b; if(jb<0||jb>=PGRID) continue;
+      for(let c=-1;c<=1;c++){
+        const kc=gk+c; if(kc<0||kc>=PGRID) continue;
+        const list=pbins.get((ia*PGRID+jb)*PGRID+kc);
+        if(!list) continue;
+        for(let n=0;n<list.length;n++) admit(list[n]);
+      }
+    }
+  }
+}
+
+function inheritMutated(src,dst,amt){
+  inherit(src,dst);
+  mutateAff(dst*G, amt);
+  const n=PARAMS.pmut*amt;
+  let k=n|0; if(prnd() < n-k) k++;
+  for(let t=0;t<k;t++) pointMutate(dst);
 }
 
 /* ---- what a place is ----
@@ -733,6 +1085,116 @@ function fitOf(o,k){
 }
 function fitAt(x,y,z,o){ return fitOf(o, cellAt(x,y,z)); }
 
+/* The program reads fit and the five memberships every time it runs, and
+   recomputing them would mean an asin, an atan2 and five smoothsteps per look.
+   Cache them on the node instead and let `reap` refresh them on the same
+   rolling cursor that revises lifespan — the staleness is the one the ground
+   already has. */
+function refreshEnv(i){
+  const m=envAt(cellAt(NPX[i],NPY[i],NPZ[i])), e=i*5, o=i*G;
+  let f=0;
+  for(let g=0;g<5;g++){ NENV[e+g]=m[g]; f+=GENE[o+g]*m[g]; }
+  NFIT[i]=f;
+  return f;
+}
+
+/* ---- local crowding ----
+   "Living neighbours nearby", as an input the genome can condition on, has to
+   be O(1) or it cannot be read on every look. A coarse count grid maintained by
+   the births and deaths themselves gives it for two array operations, where
+   scanning the collision bins would cost a hundred and twenty-five of them. */
+const CG = 72;
+const CCOUNT = new Int32Array(CG*CG*CG);
+const NCC = new Int32Array(PMAX);
+/* Measured, not guessed: a full planet puts about ten living nodes in a cell
+   this size, so this is where the input has to sit to have any variance at all
+   around zero. */
+const CROWD_REF = 12;                 // count at which the input reads zero
+function coarseOf(x,y,z){
+  const i=Math.min(CG-1,Math.max(0,((x+1)*0.5*CG)|0));
+  const j=Math.min(CG-1,Math.max(0,((y+1)*0.5*CG)|0));
+  const k=Math.min(CG-1,Math.max(0,((z+1)*0.5*CG)|0));
+  return (i*CG+j)*CG+k;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   observability — built with the mechanism, never after it
+   ══════════════════════════════════════════════════════════════════════
+   A stale function declaration once shadowed its replacement here for four
+   commits. It returned NaN, `NaN|0` is 0, and a `Math.max` downstream turned
+   total failure into a plausible constant. Fit-based selection was off the
+   entire time, two mechanisms and three written-up conclusions were built on
+   the bug, and nothing threw and nothing logged. Small steps would not have
+   caught it. A counter on the line would have caught it in minutes.
+
+   So: the distribution of every output, the number of instructions that reach
+   one, a non-finite counter that is checked rather than assumed, the variance
+   of every input — an input that never varies is not an input — and the spread
+   of pace and capacity *within single bodies*. That last one is the only test
+   that can tell one plant carrying two kinds of node from two plants each
+   internally uniform; every population statistic reads them as identical, and
+   the first is the entire thing this design exists to produce. */
+const NBIN_H = 32;                                  // buckets per distribution
+const CAPHIST = new Int32Array(6);
+const OUTHIST = new Int32Array(NOUT*NBIN_H);
+const OUTMIN = new Float32Array(NOUT), OUTMAX = new Float32Array(NOUT);
+const OUTRAW = new Float64Array(NOUT);              // mean |raw|, before squashing
+let outN = 0;
+const OUTLO = new Float32Array([1, PARAMS.splo, 0, -1]);
+const OUTHI = new Float32Array([6, PARAMS.sphi, 1,  1]);
+const INSUM = new Float64Array(NIN), INSUM2 = new Float64Array(NIN);
+const INMIN = new Float32Array(NIN), INMAX = new Float32Array(NIN);
+let inN = 0;
+function resetStats(){
+  CAPHIST.fill(0); OUTHIST.fill(0); OUTRAW.fill(0); outN=0;
+  OUTMIN.fill(Infinity); OUTMAX.fill(-Infinity);
+  INSUM.fill(0); INSUM2.fill(0); inN=0;
+  INMIN.fill(Infinity); INMAX.fill(-Infinity);
+  progNonFinite=0; progRuns=0;
+}
+function sampleInputs(){
+  inN++;
+  for(let j=0;j<NIN;j++){
+    const v=V[j];
+    INSUM[j]+=v; INSUM2[j]+=v*v;
+    if(v<INMIN[j]) INMIN[j]=v;
+    if(v>INMAX[j]) INMAX[j]=v;
+  }
+}
+/* recorded where the outputs are actually used, so the histogram cannot drift
+   away from what the simulation read */
+const RECV = new Float32Array(NOUT);
+function recordOutputs(cap,spr,pace,vig){
+  outN++;
+  CAPHIST[cap]++;
+  RECV[0]=cap; RECV[1]=spr; RECV[2]=pace; RECV[3]=vig;
+  for(let j=0;j<NOUT;j++){
+    const v=RECV[j];
+    OUTRAW[j]+=Math.abs(OUTV[j]);
+    if(v<OUTMIN[j]) OUTMIN[j]=v;
+    if(v>OUTMAX[j]) OUTMAX[j]=v;
+    let t=(v-OUTLO[j])/(OUTHI[j]-OUTLO[j]);
+    t = t<0?0:(t>0.99999?0.99999:t);
+    OUTHIST[j*NBIN_H+((t*NBIN_H)|0)]++;
+  }
+}
+/* median and quartiles straight off the histogram, which is all that is wanted:
+   a flat spread means the formula is ignoring its inputs, and a single spike
+   means it is a constant wearing a program's clothes */
+function quantiles(j){
+  const b=j*NBIN_H;
+  let tot=0; for(let n=0;n<NBIN_H;n++) tot+=OUTHIST[b+n];
+  if(!tot) return {q1:0,med:0,q3:0,peak:0};
+  const at=f=>{
+    let want=tot*f, c=0;
+    for(let n=0;n<NBIN_H;n++){ c+=OUTHIST[b+n]; if(c>=want)
+      return +(OUTLO[j]+(n+0.5)/NBIN_H*(OUTHI[j]-OUTLO[j])).toFixed(3); }
+    return OUTHI[j];
+  };
+  let mx=0; for(let n=0;n<NBIN_H;n++) if(OUTHIST[b+n]>mx) mx=OUTHIST[b+n];
+  return {q1:at(0.25), med:at(0.5), q3:at(0.75), peak:+(mx/tot).toFixed(3)};
+}
+
 /* ---- colour is a fixed projection of the genome, never a lineage palette ----
    Hue says which of the five a lineage is for, so related plants look related
    and convergent evolution shows up as the same colour appearing twice in
@@ -745,7 +1207,7 @@ const ENVCOL = [
   [162,158, 60],   // grass
   [ 34, 88, 66],   // forest
 ];
-function geneColour(o,out){
+function geneColour(o,pace,out){
   let r=0,g=0,b=0,mx=0;
   for(let i=0;i<5;i++){
     const w=GENE[o+i]*0.2;
@@ -755,7 +1217,10 @@ function geneColour(o,out){
   const spec = Math.max(0, Math.min(1, (mx-1)/3));       // 0 generalist, 1 pure
   const lum = 0.30*r+0.59*g+0.11*b;
   const sat = 0.30+0.70*spec;
-  const lift = 0.82+0.36*GENE[o+G_PACE];                 // fast lineages are paler
+  /* Lightness carries the life-history axis, and pace is now per node rather
+     than per genome — so a scout and the nursery that made it read differently
+     inside one body, which is the difference this design exists to produce. */
+  const lift = 0.82+0.36*pace;
   out[0]=(lum+(r-lum)*sat)*lift;
   out[1]=(lum+(g-lum)*sat)*lift;
   out[2]=(lum+(b-lum)*sat)*lift;
@@ -848,8 +1313,12 @@ function kinPressure(i){
    and how hard. Coarse on purpose — scored finely enough, every lineage is
    unique, everyone is rare, and frequency dependence has nothing to bite on. */
 const CENSUS = new Int32Array(32);
-let censusN = 0, kinMean = 0, kinSpread = 0;
-let dbgHits=0, dbgCrowd=0, dbgLife=0, dbgAgeDeaths=0, dbgFit=0, dbgRaw=0, dbgNaN=0, dbgFloor=0, dbgFitOk=0;
+let censusN = 0;
+let dbgHits=0, dbgLife=0, dbgAgeDeaths=0, dbgFit=0, dbgRaw=0, dbgNaN=0, dbgFloor=0, dbgFitOk=0;
+/* Where the growth loop's draws actually go. The open question is whether slot
+   eligibility and the maturity gate shrink the candidate set enough to be worth
+   drawing from uniformly, and that wants measuring rather than assuming. */
+let frontDraw=0, frontDrop=0, frontYoung=0, budOk=0, budNo=0;
 function strategyOf(o){
   let mx=0, at=0;
   for(let g=0;g<5;g++) if(GENE[o+g]>mx){ mx=GENE[o+g]; at=g; }
@@ -892,7 +1361,6 @@ const IBUF = new Float32Array(PMAX*INST);
 let instN = 0;
 
 function buildInstances(){
-  const sp0=PARAMS.spread*PARAMS.step, mat=Math.max(1,PARAMS.mature);
   let w=0;
   for(let i=0;i<nodeHigh;i++){
     if(NLIVE[i]===0) continue;
@@ -910,13 +1378,17 @@ function buildInstances(){
        which is also the frontier, and also what is about to die. One variable
        tells all three. */
     const age=ptick-NBORN[i];
-    const grow=wood ? 1 : Math.min(1, age/mat);
+    const grow=wood ? 1 : Math.min(1, age/Math.max(1,NMAT[i]));
     const go=i*G;
-    const wid=sp0*GENE[go+G_SPREAD]*(0.30+0.70*grow);
+    /* The footprint scales with the step that actually placed this node, so
+       the picture stops lying about what is claimed: a long-stepping lineage
+       draws further apart because it *is* further apart, and the loose body it
+       leaves is ground somebody else can still grow into. */
+    const wid=PARAMS.fat*NSTEP[i]*(0.30+0.70*grow);
 
     /* colour: the form's own, drifted by the sector's inherited tint and
        lifted at the young tips, so expansion reads as motion */
-    geneColour(go, GC);
+    geneColour(go, NPACE[i], GC);
     const young=1-grow;
     let r=GC[0]+young*44, g=GC[1]+young*40, b=GC[2]+young*34;
     /* Dead wood is not black. Black would swamp hue, which is the channel
@@ -932,7 +1404,7 @@ function buildInstances(){
 
     IBUF[w  ]=(lon+Math.PI)/(Math.PI*2);
     IBUF[w+1]=(Math.PI*0.5-lat)/Math.PI;
-    IBUF[w+2]=wid*GENE[go+G_ELONG];
+    IBUF[w+2]=wid;
     IBUF[w+3]=wid;
     IBUF[w+4]=Math.atan2(hn,he);
     IBUF[w+5]=Math.min(255,r)/255;
@@ -944,32 +1416,55 @@ function buildInstances(){
   instN=w/INST;
 }
 
-function addNode(x,y,z,hx,hy,hz,src,par,amt){
+/* The three outputs read once at birth and kept for life, so that a body is a
+   permanent record of the conditions each of its nodes grew through. */
+function readBirthOutputs(i){
+  runProgram(i);
+  const cap = 1 + ((4.999*squash(OUTV[O_CAP]))|0);
+  const spr = PARAMS.splo + (PARAMS.sphi-PARAMS.splo)*squash(OUTV[O_SPREAD]);
+  const pace = squash(OUTV[O_PACE]);
+  NCAP[i]=cap; NSPRD[i]=spr; NPACE[i]=pace;
+  /* Pace buys growth with life, and this time it buys something: a node cannot
+     bud at all until it has matured, so a high-pace node is productive almost
+     at once and short-lived, and a low-pace node spends a long time as
+     structure before it contributes anything, and persists. That is the scout
+     and the nursery, and it is the only thing that gives a plant any notion of
+     investment. The old scalar pace had the cost and never the benefit, which
+     is why selection could only ever delete it. */
+  NMAT[i]  = Math.max(1, Math.min(MATB-1, (matBase*(1.60-1.20*pace))|0));
+  NLIFE[i] = Math.max(PARAMS.hostile|0, (PARAMS.life*NFIT[i]*(1.40-0.80*pace))|0);
+  recordOutputs(cap, spr, pace, Math.tanh(OUTV[O_VIG]*0.25));
+}
+
+function addNode(x,y,z,hx,hy,hz,src,par,amt,stepUsed){
   const i = freeN>0 ? PFREE[--freeN] : nodeHigh++;
   NPX[i]=x; NPY[i]=y; NPZ[i]=z;
   NHX[i]=hx; NHY[i]=hy; NHZ[i]=hz;
-  NKID[i]=0; NFAIL[i]=0; NLIVE[i]=1;
-  const o=i*G;
-  if(src<0){ for(let n=0;n<G;n++) GENE[o+n]=GLIM[n][0]+prnd()*(GLIM[n][1]-GLIM[n][0]); normalise(o); }
-  else if(amt>0) mutate(src*G, o, amt);
-  else { const so=src*G; for(let n=0;n<G;n++) GENE[o+n]=GENE[so+n]; }
+  NKID[i]=0; NSLOT[i]=0; NLIVE[i]=1; NSTEP[i]=stepUsed;
+  if(src<0) randomGenome(i);
+  else if(amt>0) inheritMutated(src,i,amt);
+  else inherit(src,i);
   NGEN[i]++; NPAR[i]=par; NPGEN[i] = par>=0 ? NGEN[par] : -1;
   NLK[i]=0; if(par>=0) NLK[par]++;
   PROOT[i] = par>=0 ? PROOT[par] : i;   /* body identity, kept fresh between sweeps */
+  /* Depth is depth below the body's *own* root, not generations since the
+     world began, because that is the quantity architecture can be built on.
+     pruneFragments recomputes it whenever a body splits; between sweeps a new
+     node simply counts on from its parent. */
+  NDEP[i] = par>=0 ? Math.min(65535, NDEP[par]+1) : 0;
+  NPCAP[i] = par>=0 ? NCAP[par] : 0;
   NBORN[i]=ptick;
-  /* pace buys growth with life: a weed is quick and brief, a persister slow
-     and durable, and cleared ground becomes an opening only a weed can take */
-  const pace=GENE[o+G_PACE];
-  NLIFE[i]=Math.max(PARAMS.hostile|0,
-    (PARAMS.life*fitAt(x,y,z,o)*(1.40-0.80*pace))|0);
+  if(par<0) BVIG[i]=0;
   const key = binOf(x,y,z);
   NBIN[i]=key;
   const list = pbins.get(key);
   if(list) list.push(i); else pbins.set(key,[i]);
-  /* dead nodes are dropped from the frontier lazily, so it carries some slack;
-     never let that slack run off the end of the array */
-  if(frontN < PMAX) PFRONT[frontN++] = i;
+  const cc = coarseOf(x,y,z); NCC[i]=cc; CCOUNT[cc]++;
+  refreshEnv(i);
+
+  readBirthOutputs(i);
   liveN++; plantsDirty=true;
+  joinWhenMature(i);
   return i;
 }
 
@@ -984,7 +1479,8 @@ function freeNode(i){
   for(let j=i;;){
     const par = rooted(j) ? NPAR[j] : -1;
     if(NLIVE[j]===2) woodN--;
-    NLIVE[j]=0; unbin(j); PFREE[freeN++]=j;
+    else if(NLIVE[j]===1){ CCOUNT[NCC[j]]--; freeGround(NPX[j],NPY[j],NPZ[j]); }
+    NLIVE[j]=0; NONF[j]=0; unbin(j); PFREE[freeN++]=j;
     if(par<0) break;
     if(--NLK[par] > 0) break;
     if(NLIVE[par]!==2) break;      /* a living parent simply loses a child */
@@ -1001,7 +1497,9 @@ function killNode(i){
        collision bins it walled off two fifths of the planet against the very
        plants that made it, and a body could never grow back through its own
        dead interior — which is exactly what a crust does. */
-    NLIVE[i]=2; woodN++; unbin(i);
+    CCOUNT[NCC[i]]--;              /* wood is structure, not a living neighbour */
+    NLIVE[i]=2; NONF[i]=0; woodN++; unbin(i);
+    freeGround(NPX[i],NPY[i],NPZ[i]);   /* and it stops holding ground, too */
     /* Wood is only ever released from the tips inward, while growth runs the
        other way, so it accumulates without limit and eventually crowds the
        living out. Real crust sheds. Give it its own clock: when it rots
@@ -1035,14 +1533,12 @@ function reap(){
        a niche shifted, and the shower of fragments that followed read as the
        design failing when it was only this. */
     if((n&7)===0){
-      const o=i*G, f=fitAt(NPX[i],NPY[i],NPZ[i],o);
+      const o=i*G, f=refreshEnv(i);
       const crowd = PARAMS.kin>0 ? kinPressure(i) : 0;
       const freq  = PARAMS.rare>0 ? commonness(o) : 0;
-      const nl = Math.max(PARAMS.hostile|0,
-        (PARAMS.life*f*(1.40-0.80*GENE[o+G_PACE])
-          *(1-PARAMS.kin*crowd)*(1-PARAMS.rare*freq))|0);
-      const raw = PARAMS.life*f*(1.40-0.80*GENE[o+G_PACE])*(1-PARAMS.kin*crowd)*(1-PARAMS.rare*freq);
-      dbgHits++; dbgCrowd+=crowd; dbgLife+=nl;
+      const raw = PARAMS.life*f*(1.40-0.80*NPACE[i])*(1-PARAMS.kin*crowd)*(1-PARAMS.rare*freq);
+      const nl = Math.max(PARAMS.hostile|0, raw|0);
+      dbgHits++; dbgLife+=nl;
       if(!isFinite(f)) dbgNaN++; else { dbgFit+=f; dbgFitOk++; dbgRaw+=raw; if(raw < (PARAMS.hostile|0)) dbgFloor++; }
       NLIFE[i]=nl;
     }
@@ -1054,26 +1550,29 @@ function bud(ni){
   const px=NPX[ni], py=NPY[ni], pz=NPZ[ni];
   const hx=NHX[ni], hy=NHY[ni], hz=NHZ[ni];
 
-  /* The first child continues the sector; later children are true
-     bifurcations and take a decisive turn. That distinction is where the
-     genome will be minted once there is one. */
-  /* A tip that has just been refused casts about instead of pushing at the
-     same wall. Without this a node fails its allowance of tries in nearly the
-     same direction every time and retires with open ground beside it, and
-     growth stalls at a fraction of the land. */
-  const th = NFAIL[ni] > 0
-    ? (prnd()*2-1)*2.0
-    : NKID[ni] > 0
-      ? (prnd()<0.5?-1:1)*GENE[go+G_TURN]*(0.65+0.7*prnd())
-      : (prnd()-0.5)*2*GENE[go+G_WANDER];
+  /* One of the slots still open, chosen at random from those remaining. A slot
+     blocked by a neighbour is simply not taken this time: the node stays
+     eligible and may be picked again later, by which time the obstruction may
+     be gone. That is what replaces the old failure counter and its arbitrary
+     retry constant — being passed over is not a penalty, and a node is done
+     only when it is full. */
+  const cap=NCAP[ni], mask=NSLOT[ni];
+  let nfree=0;
+  for(let s=0;s<cap;s++) if(!(mask&(1<<s))) FREESLOT[nfree++]=s;
+  if(nfree===0) return false;
+  const slot = FREESLOT[(prnd()*nfree)|0];
+  const th = SLOTS[cap][slot] + (prnd()*2-1)*PARAMS.jitter;
 
   /* turn the heading about the surface normal */
   const cx=py*hz-pz*hy, cy=pz*hx-px*hz, cz=px*hy-py*hx;
   const c=Math.cos(th), s=Math.sin(th);
   const ax=hx*c+cx*s, ay=hy*c+cy*s, az=hz*c+cz*s;
 
-  /* step along the geodesic, and carry the heading with it */
-  const d=PARAMS.step, cd=Math.cos(d), sd=Math.sin(d);
+  /* step along the geodesic, and carry the heading with it. The distance is
+     the parent's spread: long steps cover ground quickly but leave a loose
+     body others can grow into, short steps build a dense mat that resists
+     invasion and claims territory slowly. */
+  const d=PARAMS.step*NSPRD[ni], cd=Math.cos(d), sd=Math.sin(d);
   let nx=px*cd+ax*sd, ny=py*cd+ay*sd, nz=pz*cd+az*sd;
   let l=1/Math.hypot(nx,ny,nz); nx*=l; ny*=l; nz*=l;
   let ex=-px*sd+ax*cd, ey=-py*sd+ay*cd, ez=-pz*sd+az*cd;
@@ -1088,12 +1587,10 @@ function bud(ni){
      between bodies — lineages would blur and selection could not accumulate.
      This way a sector is a coherent unit for selection to act on, and a piece
      that breaks off carries a real identity rather than a smear. */
-  addNode(nx,ny,nz,ex,ey,ez,ni,ni, NKID[ni] > 0 ? PARAMS.mut : 0);
-  NKID[ni]++;
+  addNode(nx,ny,nz,ex,ey,ez,ni,ni, NKID[ni] > 0 ? PARAMS.mut : 0, d);
+  NSLOT[ni] |= (1<<slot); NKID[ni]++;
   return true;
 }
-
-function retire(fi){ PFRONT[fi]=PFRONT[--frontN]; }
 
 /* thrown clear of the parent, landing anywhere that suits, and rooted in its
    own right — a new body, carrying its parent's colour */
@@ -1110,7 +1607,7 @@ function spore(ni){
     let hx=ax*cc+bx*ss, hy=ay*cc+by*ss, hz=az*cc+bz*ss;
     const dp=hx*x+hy*y+hz*z; hx-=x*dp; hy-=y*dp; hz-=z*dp;
     const l=1/Math.hypot(hx,hy,hz);
-    addNode(x,y,z,hx*l,hy*l,hz*l,ni,-1,PARAMS.mut);
+    addNode(x,y,z,hx*l,hy*l,hz*l,ni,-1,PARAMS.mut,PARAMS.step);
     return true;
   }
   return false;
@@ -1142,8 +1639,15 @@ function pruneFragments(){
       j=p;
     }
     const last=PSTK[sn-1];
-    const r = rooted(last) && PROOT[NPAR[last]]>=0 ? PROOT[NPAR[last]] : last;
-    while(sn>0) PROOT[PSTK[--sn]]=r;
+    const known = rooted(last) && PROOT[NPAR[last]]>=0;
+    const r = known ? PROOT[NPAR[last]] : last;
+    /* The chain unwinds root-first, so depth below the body's own root falls
+       straight out of the same walk. It has to be recomputed here rather than
+       only counted from the parent at birth: when a body splits, every node in
+       the severed half is suddenly nearer its root than it was, and depth is
+       the input a lineage builds architecture on. */
+    let d = known ? NDEP[NPAR[last]]+1 : 0;
+    while(sn>0){ const q=PSTK[--sn]; PROOT[q]=r; NDEP[q]=d<65535?d:65535; d++; }
   }
   /* size is counted in living nodes: a body held up by wood alone is a corpse */
   PSIZE.fill(0,0,nodeHigh);
@@ -1174,6 +1678,7 @@ function pruneFragments(){
 function plantsStep(){
   if(!plantsOn) return;
   ptick++;
+  admitMature();
   reap();
   if(PARAMS.sweep>0 && ptick%(PARAMS.sweep|0)===0){ pruneFragments(); census(); }
 
@@ -1184,11 +1689,34 @@ function plantsStep(){
      population then expands at the same rate per body as a large one and can
      actually converge on its niche. Capped, so cost stays bounded. */
   const cap = PARAMS.grow|0, perBody = PARAMS.perbody > 0;
+  const vote = Math.max(1, PARAMS.vote|0), vmem = PARAMS.vmem, tries = PARAMS.tries|0;
   let tried=0, guard=cap*8;
   while(tried < cap && guard-- > 0 && frontN > 0 && (liveN+woodN) < PMAX){
-    const fi = (prnd()*frontN)|0;
-    const ni = PFRONT[fi];
-    if(NLIVE[ni]!==1){ retire(fi); continue; }
+    /* Vigour ranks nodes *within* a body and never bodies against each other.
+       A tournament between whichever tips happen to be drawn would do the
+       opposite, and the runaway is obvious: the lineage that shouts loudest
+       wins every draw, vigour pins at its ceiling, and the output becomes a
+       constant — losing exactly the conditional behaviour it exists for. So a
+       candidate is scored against its own body's running level instead, which
+       a uniform shift cannot move, exactly as a within-plant maximum cannot be
+       moved by a plant-wide multiplier. Between bodies the score is then noise,
+       and allocation stays where the frontier put it: proportional to tips. */
+    let best=-1, bestFi=-1, bestTag=0, bestScore=-Infinity;
+    for(let v=0;v<vote;v++){
+      const fi = (prnd()*frontN)|0;
+      const fv = PFRONT[fi], ni = fv%PMAX;
+      /* eligibility, and the only place the frontier is cleaned: a node is
+         eligible while it has an unused slot and is old enough to use it */
+      if(NLIVE[ni]!==1 || !same(fv,ni) || NKID[ni]>=NCAP[ni]){ retire(fi); frontDrop++; continue; }
+      frontDraw++;
+      if(ptick-NBORN[ni] < NMAT[ni]){ frontYoung++; continue; }
+      runProgram(ni);
+      const vg = Math.tanh(OUTV[O_VIG]*0.25);
+      const b = PROOT[ni], s = vg - BVIG[b];
+      BVIG[b] += s*vmem;
+      if(s > bestScore){ bestScore=s; best=ni; bestFi=fi; bestTag=fv; }
+    }
+    if(best<0) continue;
     /* Sampling the frontier is already the fair rule the brief was reaching
        for: the frontier is the perimeter, so a body's growth follows its
        number of tips rather than its area, and per unit area it still slows
@@ -1196,7 +1724,7 @@ function plantsStep(){
        minting plants by the thousand; with nothing splitting, forty plants
        taking one node a turn cannot fill a planet. */
     if(perBody){
-      const body = PROOT[ni];
+      const body = PROOT[best];
       if(CSTAMP[body] === ptick) continue;
       CSTAMP[body] = ptick;
     }
@@ -1205,11 +1733,19 @@ function plantsStep(){
        apart. Now that nothing falls apart, nothing is founded either, and the
        population can only decline — so the spore the brief asked for is no
        longer optional. Rare enough that an arrival still reads as an event. */
-    if(prnd() < PARAMS.spore){ spore(ni); continue; }
-    if(bud(ni)){
-      NFAIL[ni] = 0;
-      if(NKID[ni] >= PARAMS.kids || prnd() > GENE[ni*G+G_BRANCH]) retire(fi);
-    } else if(++NFAIL[ni] >= PARAMS.tries) retire(fi);
+    if(prnd() < PARAMS.spore){ spore(best); continue; }
+    /* Retiring by index is only safe if that index still holds this node: the
+       draws above may have swapped the array about while cleaning stale
+       entries. If it has moved, leave it — the next draw that finds it full
+       will drop it, which is the same lazy cleaning as everywhere else. */
+    const stillThere = PFRONT[bestFi]===bestTag;
+    if(bud(best)){
+      budOk++; NTRY[best]=0;
+      if(NKID[best] >= NCAP[best] && stillThere) retire(bestFi);
+    } else {
+      budNo++;
+      if(tries>0 && ++NTRY[best] >= tries && stillThere) retire(bestFi);
+    }
   }
 }
 
@@ -1227,16 +1763,167 @@ function plantsSeed(){
     let hx=ax*cc+bx*ss, hy=ay*cc+by*ss, hz=az*cc+bz*ss;
     const dp=hx*x+hy*y+hz*z; hx-=x*dp; hy-=y*dp; hz-=z*dp;
     const l=1/Math.hypot(hx,hy,hz);
-    const i = addNode(x,y,z,hx*l,hy*l,hz*l,-1,-1,0);
+    const i = addNode(x,y,z,hx*l,hy*l,hz*l,-1,-1,0,PARAMS.step);
     const o = i*G, fav = (prnd()*5)|0;
     for(let g=0;g<5;g++) GENE[o+g] = 0.25+prnd()*0.5;
     GENE[o+fav] += 2.2+prnd()*1.6;
     normalise(o);
-    if(fitOf(o, cellAt(x,y,z)) < PARAMS.viable){ killNode(i); continue; }
-    NLIFE[i]=Math.max(PARAMS.hostile|0,
-      (PARAMS.life*fitOf(o,cellAt(x,y,z))*(1.40-0.80*GENE[o+G_PACE]))|0);
+    /* the affinities were rewritten after the node was built, so everything the
+       program read off them has to be taken again */
+    if(refreshEnv(i) < PARAMS.viable){ killNode(i); continue; }
+    readBirthOutputs(i);
     n++;
   }
+  resetStats();   /* seeding is not a sample of what the world is doing */
+}
+
+/* ---- the scout-and-nursery test ----
+   Two plants each internally uniform look identical, by every population
+   statistic, to one plant carrying both kinds of node. Only the spread of pace
+   and capacity *within* single bodies tells them apart, and the second is the
+   thing this design exists to produce. Pooled within-body variance against the
+   population's is the answer in one number: near zero and bodies are uniform
+   and the formulas are only reading the genome, not the situation. */
+const BN=new Int32Array(PMAX), BP=new Float32Array(PMAX), BP2=new Float32Array(PMAX);
+const BC=new Float32Array(PMAX), BC2=new Float32Array(PMAX), BCM=new Uint8Array(PMAX);
+const POPPACE=new Int32Array(NBIN_H), POPSPRD=new Int32Array(NBIN_H);
+const POPCAP=new Int32Array(6);
+function withinBody(){
+  BN.fill(0,0,nodeHigh); BP.fill(0,0,nodeHigh); BP2.fill(0,0,nodeHigh);
+  BC.fill(0,0,nodeHigh); BC2.fill(0,0,nodeHigh); BCM.fill(0,0,nodeHigh);
+  POPPACE.fill(0); POPSPRD.fill(0); POPCAP.fill(0);
+  const slo=PARAMS.splo, srange=Math.max(1e-6,PARAMS.sphi-PARAMS.splo);
+  let n=0, sp=0, sp2=0, sc=0, sc2=0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]!==1) continue;
+    const r=PROOT[i], p=NPACE[i], c=NCAP[i];
+    BN[r]++; BP[r]+=p; BP2[r]+=p*p; BC[r]+=c; BC2[r]+=c*c; BCM[r]|=(1<<c);
+    n++; sp+=p; sp2+=p*p; sc+=c; sc2+=c*c;
+    POPCAP[c<6?c:5]++;
+    let t=p; t=t<0?0:(t>0.99999?0.99999:t); POPPACE[(t*NBIN_H)|0]++;
+    t=(NSPRD[i]-slo)/srange; t=t<0?0:(t>0.99999?0.99999:t); POPSPRD[(t*NBIN_H)|0]++;
+  }
+  /* pooled within-body sums of squares, over bodies big enough to have a shape */
+  let wss=0, wdf=0, css=0, mixed=0, bodies=0, bestSD=0, bestN=0;
+  for(let r=0;r<nodeHigh;r++){
+    const nb=BN[r]; if(nb<2) continue;
+    const ss = Math.max(0, BP2[r] - BP[r]*BP[r]/nb);
+    wss+=ss; wdf+=nb-1;
+    css+=Math.max(0, BC2[r] - BC[r]*BC[r]/nb);
+    if(nb>=8){
+      bodies++;
+      let m=BCM[r], bits=0; while(m){ bits+=m&1; m>>=1; }
+      if(bits>=2) mixed++;
+      const sd=Math.sqrt(ss/(nb-1));
+      if(sd>bestSD){ bestSD=sd; bestN=nb; }
+    }
+  }
+  const pv = n>1 ? Math.max(0, sp2/n - (sp/n)*(sp/n)) : 0;
+  const cv = n>1 ? Math.max(0, sc2/n - (sc/n)*(sc/n)) : 0;
+  const wp = wdf>0 ? wss/wdf : 0, wc = wdf>0 ? css/wdf : 0;
+  return {
+    paceSD:+Math.sqrt(pv).toFixed(4), paceWithinSD:+Math.sqrt(wp).toFixed(4),
+    paceWithinShare:+(pv>1e-9 ? wp/pv : 0).toFixed(3),
+    capSD:+Math.sqrt(cv).toFixed(4), capWithinSD:+Math.sqrt(wc).toFixed(4),
+    capWithinShare:+(cv>1e-9 ? wc/cv : 0).toFixed(3),
+    /* the plainest version of the same question: how many bodies of any size
+       hold more than one kind of node at all */
+    bodies8:bodies, mixedCapBodies:+(bodies? mixed/bodies : 0).toFixed(3),
+    widestBodySD:+bestSD.toFixed(4), widestBodyN:bestN,
+    meanPace:+(n?sp/n:0).toFixed(3), meanCap:+(n?sc/n:0).toFixed(3),
+    capShare:Array.from(POPCAP.subarray(1)).map(v=>+(v/Math.max(1,n)).toFixed(3))
+  };
+}
+
+function plantStats(reset){
+  const per=[0,0,0,0,0]; let spec=0;
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]!==1) continue;
+    const o=i*G; let mx=0, at=0;
+    for(let g=0;g<5;g++) if(GENE[o+g]>mx){ mx=GENE[o+g]; at=g; }
+    per[at]++; spec+=(mx-1)/4;
+  }
+  /* how much of a program actually reaches an output. One means nothing is
+     being computed, however long the list is */
+  let act=0, actN=0, actMin=1e9, actMax=0, badGene=0, badK=0;
+  for(let i=0;i<nodeHigh;i+=53){
+    if(NLIVE[i]!==1) continue;
+    const a=activeCount(i); act+=a; actN++;
+    if(a<actMin) actMin=a; if(a>actMax) actMax=a;
+    for(let g=0;g<G;g++) if(!isFinite(GENE[i*G+g])) badGene++;
+    for(let g=0;g<NK;g++) if(!isFinite(KONST[i*NK+g])) badK++;
+  }
+  const outs={};
+  for(let j=0;j<NOUT;j++){
+    const q=quantiles(j);
+    outs[OUTNAME[j]]={ min:+(OUTMIN[j]===Infinity?0:OUTMIN[j]).toFixed(3),
+                       q1:q.q1, med:q.med, q3:q.q3,
+                       max:+(OUTMAX[j]===-Infinity?0:OUTMAX[j]).toFixed(3),
+                       peakShare:q.peak,
+                       meanRawMag:+(OUTRAW[j]/Math.max(1,outN)).toFixed(2) };
+  }
+  const ins={};
+  for(let j=0;j<NIN;j++){
+    const m=INSUM[j]/Math.max(1,inN);
+    ins[INNAME[j]]={ mean:+m.toFixed(3),
+                     sd:+Math.sqrt(Math.max(0,INSUM2[j]/Math.max(1,inN)-m*m)).toFixed(3),
+                     min:+(INMIN[j]===Infinity?0:INMIN[j]).toFixed(2),
+                     max:+(INMAX[j]===-Infinity?0:INMAX[j]).toFixed(2) };
+  }
+  const out = {
+    live:liveN, wood:woodN, slots:nodeHigh, deaths, bodies:comps,
+    meanBody:+meanComp.toFixed(1), largestBody:bigFrag, frontier:frontN, tick:ptick,
+    /* expected to stay at zero, and checked rather than assumed */
+    nonFinite:progNonFinite, progRuns, badGenes:badGene, badKonst:badK, nanFits:dbgNaN,
+    outputs:outs, births:outN,
+    capBirthShare:Array.from(CAPHIST.subarray(1)).map(v=>+(v/Math.max(1,outN)).toFixed(3)),
+    active:{ mean:+(act/Math.max(1,actN)).toFixed(1),
+             min:actN?actMin:0, max:actMax, of:PLEN, sampled:actN },
+    inputs:ins,
+    body:withinBody(),
+    /* where the growth loop's draws went, which is the open question about
+       whether the eligible set is small enough to draw from uniformly */
+    draws:{ eligible:frontDraw, dropped:frontDrop, immature:frontYoung,
+            budOk, budBlocked:budNo,
+            eligibleShare:+(frontDraw/Math.max(1,frontDraw+frontDrop)).toFixed(3),
+            matureShare:+((frontDraw-frontYoung)/Math.max(1,frontDraw)).toFixed(3),
+            budShare:+(budOk/Math.max(1,budOk+budNo)).toFixed(3) },
+    meanFit:+(dbgFit/Math.max(1,dbgFitOk)).toFixed(3),
+    meanLifeSet:+(dbgLife/Math.max(1,dbgHits)).toFixed(0),
+    hitFloor:dbgFloor, ageDeaths:dbgAgeDeaths,
+    strategies:Array.from(CENSUS).filter(v=>v>0).length,
+    topStrategy:+(Math.max(...CENSUS)/Math.max(1,censusN)).toFixed(3),
+    specialisation:+(spec/Math.max(1,liveN)).toFixed(3),
+    niche:{sea:per[0], ice:per[1], desert:per[2], grass:per[3], forest:per[4]}
+  };
+  if(reset){ resetStats(); frontDraw=frontDrop=frontYoung=budOk=budNo=0; }
+  return out;
+}
+
+/* An algorithm can be printed, which a neural net cannot, and that is half the
+   reason for choosing this representation. Inactive instructions are marked
+   rather than hidden: they are the neutral reservoir mutation draws on. */
+function genomeText(i){
+  if(i==null){
+    for(let n=0;n<nodeHigh;n++) if(NLIVE[n]===1 && PROOT[n]===n){ i=n; break; }
+    if(i==null) for(let n=0;n<nodeHigh;n++) if(NLIVE[n]===1){ i=n; break; }
+  }
+  if(i==null) return "no live nodes";
+  activeCount(i);
+  const nm=a=> a<NIN ? INNAME[a]
+            : a<NIN+NK ? "k"+(a-NIN)+"="+KONST[i*NK+(a-NIN)].toFixed(2)
+            : "r"+(a-NIN-NK);
+  const L=[];
+  for(let j=0;j<PLEN;j++){
+    const q=(i*PLEN+j)*4, op=PROG[q], ar=ARITY[op];
+    const args=[]; for(let t=1;t<=ar;t++) args.push(nm(PROG[q+t]));
+    L.push((AMARK[j]?"  ":"· ")+"r"+j+" = "+OPNAME[op]+"("+args.join(", ")+")");
+  }
+  for(let j=0;j<NOUT;j++) L.push("  "+OUTNAME[j]+" <- "+nm(POUT[i*NOUT+j]));
+  L.push("  affinity ["+Array.from(GENE.subarray(i*G,i*G+5)).map(v=>v.toFixed(2)).join(" ")+"]");
+  L.push("  built: capacity "+NCAP[i]+"  spread "+NSPRD[i].toFixed(2)+
+         "  pace "+NPACE[i].toFixed(2)+"  depth "+NDEP[i]);
+  return L.join("\n");
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -2687,60 +3374,13 @@ window.__world = {
   cam(){ return CAM; },
   pointerCount(){ return ptrs.size; },
   params(){ return PARAMS; },
-  plants(){
-    /* No species to count any more. What matters instead is whether lineages
-       are differentiating: which of the five each is committed to, and how
-       committed. A collapse to one column, or to no commitment at all, is the
-       failure this whole design is trying to avoid. */
-    /* the test of the diagnosis: if local kin pressure barely varies between
-       nodes, it is measuring how clonal growth is and not how rare a strategy
-       is, and it can never create frequency dependence */
-    let ks=0, ks2=0, kn=0;
-    for(let i=0;i<nodeHigh;i+=97){
-      if(NLIVE[i]!==1) continue;
-      const c=kinPressure(i); ks+=c; ks2+=c*c; kn++;
-    }
-    kinMean = kn? ks/kn : 0;
-    kinSpread = kn? Math.sqrt(Math.max(0, ks2/kn - kinMean*kinMean)) : 0;
-    const per=[0,0,0,0,0]; let spec=0, pace=0;
-    for(let i=0;i<nodeHigh;i++){
-      if(NLIVE[i]!==1) continue;
-      const o=i*G; let mx=0, at=0;
-      for(let g=0;g<5;g++) if(GENE[o+g]>mx){ mx=GENE[o+g]; at=g; }
-      per[at]++; spec+=(mx-1)/4; pace+=GENE[o+G_PACE];
-    }
-    return { live:liveN, wood:woodN, slots:nodeHigh, deaths, bodies:comps,
-             meanBody:+meanComp.toFixed(1), largestBody:bigFrag,
-             frontier:frontN, tick:ptick,
-             probe:(()=>{
-               let badGene=0, badEnv=0, badFit=0, seen=0, sample=null;
-               for(let i=0;i<nodeHigh;i++){
-                 if(NLIVE[i]!==1) continue; seen++;
-                 const o=i*G; let bg=false;
-                 for(let g=0;g<G;g++) if(!isFinite(GENE[o+g])) bg=true;
-                 if(bg){ badGene++; continue; }
-                 const k=cellAt(NPX[i],NPY[i],NPZ[i]);
-                 const m=envAt(k); let be=false;
-                 for(let g=0;g<5;g++) if(!isFinite(m[g])) be=true;
-                 if(be){ badEnv++; continue; }
-                 const f=fitOf(o,k);
-                 if(!isFinite(f)) badFit++;
-                 else if(!sample) sample={fit:+f.toFixed(3), env:Array.from(m).map(v=>+v.toFixed(2)),
-                                          gene:Array.from(GENE.subarray(o,o+5)).map(v=>+v.toFixed(2))};
-               }
-               return {seen, badGene, badEnv, badFit, sample};
-             })(),
-             nanFits:dbgNaN, finiteFits:dbgFitOk, hitFloor:dbgFloor,
-             meanFit:+(dbgFit/Math.max(1,dbgFitOk)).toFixed(3), meanRawLife:+(dbgRaw/Math.max(1,dbgFitOk)).toFixed(0),
-             reapUpdates:dbgHits, meanCrowdSeen:+(dbgCrowd/Math.max(1,dbgHits)).toFixed(3),
-             meanLifeSet:+(dbgLife/Math.max(1,dbgHits)).toFixed(0), ageDeaths:dbgAgeDeaths,
-             kinMean:+kinMean.toFixed(3), kinSpread:+kinSpread.toFixed(3),
-             strategies:Array.from(CENSUS).filter(v=>v>0).length,
-             topStrategy:+(Math.max(...CENSUS)/Math.max(1,censusN)).toFixed(3),
-             specialisation:+(spec/Math.max(1,liveN)).toFixed(3),
-             pace:+(pace/Math.max(1,liveN)).toFixed(3),
-             niche:{sea:per[0], ice:per[1], desert:per[2], grass:per[3], forest:per[4]} };
-  },
+  /* pass true to zero the sampling accumulators, so the next reading covers
+     only the interval since this one */
+  plants(reset){ return plantStats(reset); },
+  /* the algorithm one lineage is actually running, printed. A genome that can
+     be read is the difference between "selection is doing something" and
+     knowing what it is doing */
+  printGenome(i){ return genomeText(i); },
   /* run growth on its own, so the form can be judged without waiting for the
      climate to catch up */
   growPlants(ticks){ for(let i=0;i<(ticks|0);i++) plantsStep(); },

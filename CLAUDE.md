@@ -168,8 +168,16 @@ modelled — don't claim otherwise in the README.
 ## Next feature
 
 Evolving plants competing for exclusive area — branching growth in continuous
-position, not a grid mosaic. See `docs/plants-design.md` for the agreed model and
-open questions, and read it before starting that work. The formula genome that
-supersedes its scalar one is designed in `docs/formula-design.md`. **Start at stage 0**: one
-plant, hand-written formulas, static planet, rendered. It is the only stage that
-can invalidate all the others, and it is the cheapest.
+position, not a grid mosaic. Lives on the `plants` branch, not yet merged. See
+`docs/plants-design.md` for the model, the build order and what has been
+measured; `docs/formula-design.md` for the formula genome that replaced the
+scalar one, and for the four of its claims that measurement overturned. Read
+both before touching it.
+
+**Measure, do not reason, and build the counter before the mechanism.** Every
+finding on this branch came from `window.__world.plants()` and none from
+argument; two settled design decisions were wrong and one of them cost an order
+of magnitude in body size. The hooks — `runWorld(ticks, mult)`, `growPlants`,
+`plants()`, `printGenome()`, and every `PARAMS` entry overridable from the URL
+hash (`#seed=7&glen=48`) — exist so a variant costs a minute. Single seeds vary
+more than the effects worth chasing, so average four.

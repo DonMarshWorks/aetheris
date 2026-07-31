@@ -1,7 +1,14 @@
 # Evolving formulas — design brief
 
-Status: **agreed, not started.** Record of a design discussion between Don and
-Claude. Read it, and `plants-design.md`, before writing any of it.
+Status: **built.** Record of a design discussion between Don and Claude, kept
+current as the thing got made. Read it, and `plants-design.md`, before writing
+any more of it.
+
+Four of the decisions below were overturned by measurement once it ran. As in
+`plants-design.md`, the wrong reasoning is kept and marked rather than quietly
+rewritten — it is the most useful part of a document like this. They are
+gathered under **What measurement overturned** at the end, and flagged where
+they arise.
 
 This replaces the scalar genome. Eleven floats per node bought real selection —
 niches redistributing unbidden, lineages committing to the sea nobody told them
@@ -53,6 +60,23 @@ That is a 276° arc at 42° spacing — room for **seven**. So **1–5 is a choi
 comfortably inside what is legal, and the slot angles are free to be chosen for
 how they look rather than forced.
 
+**What that missed: exact slot angles build a lattice.** A heading is inherited
+exactly and a slot angle is added exactly, so the angles close. Capacity 3 is the
+commonest and its slots are 0 and ±90°, which is a square lattice; the planet came
+out tiled with right-angled patches that read as circuitry, which is the one risk
+`plants-design.md` names as bigger than anything in the evolution itself.
+
+**A lattice is not the bug, though, and should not be designed out.** A three-child
+plant *ought* to make a square lattice and a five-child one a hexagonal, and those
+are efficient packings — that is the geometry being honest. What is wrong is a
+*perfectly closed* lattice, because then every lineage packs identically and there
+is nothing for selection to choose between. **About ten degrees of slop on the
+slot angle** breaks the degeneracy and keeps the packing. Measured: niche evenness
+0.83 at ±10°, against 0.71 at zero — and it falls back to 0.74 by ±29°, where the
+packing itself is being lost. So the jitter is not decoration and not noise-for-
+its-own-sake; it is the smallest perturbation that stops the tiling being
+degenerate, and more of it is worse.
+
 ## Capacity, and what a slot is
 
 **Mapped by squashing, never modulo.** `round(x) mod 5` is chaotic at the
@@ -83,10 +107,29 @@ like a tree, or dichotomous like many algae — would throw away a dimension.
 Instead capacity itself carries the distinction, and a lineage wanting a
 persistent trunk evolves odd capacities down it.
 
-**Eligibility replaces failure counters.** A node is eligible while it has unused
-slots and mature enough to use them; full nodes are done. Only a subset is
+~~**Eligibility replaces failure counters.** A node is eligible while it has
+unused slots and mature enough to use them; full nodes are done. Only a subset is
 evaluated per cycle, so being passed over is not a penalty and no retirement
-policy or arbitrary retry constant is needed.
+policy or arbitrary retry constant is needed.~~
+
+**Measured, and it is wrong — this was the most expensive mistake in the brief.**
+It assumes a blocked slot is a temporary accident. On a full planet it is not: an
+interior node is boxed in by its own children and stays boxed in, so it never
+fills, never leaves, and the frontier grows to **92–100% of all living nodes**.
+That is not a frontier, it is area — and sampling from area is the exact failure
+this project had already diagnosed and fixed once, where a body's draws land on
+nodes that cannot grow and its growth decays as 1/r while its area grows as r².
+The largest body on the planet fell from about 1,900 nodes to **42**.
+
+A node now leaves after a single refusal, and one is the measured optimum rather
+than a token — niche evenness falls monotonically as the allowance rises (0.77 at
+one, 0.69 at two, 0.53 at three). But the instinct behind the claim was right
+about *why* a node should be able to come back, so that is made real instead of
+hoped for: **when a node dies, everything pressed against it is offered its place
+again.** The obstruction genuinely is gone, and a death is an event already known,
+so nothing has to scan for it. It costs about a fifth more wasted draws and buys
+evenness 0.83 against 0.72. That is gap dynamics, and it is the best diversity
+measured.
 
 ## pace — maturation, and the reason a node might not be reproducing yet
 
@@ -222,12 +265,65 @@ in minutes. So, from the first commit:
   inside it. Only the within-body spread tells them apart, and that is the thing
   this design exists to produce
 
+## What measurement overturned
+
+Everything below is from headless sweeps, each figure the mean of four seeds over
+2,500 ticks at ×100 climate. `window.__world.plants()` returns all of it.
+
+**1. The clamp on an instruction result is the most important dial in the genome,
+and the brief never mentions it.** Outputs are read through `tanh(x/4)`, which
+assumes `x` is of order one. Nothing made it so. Random programs with `MUL` in
+them reach magnitudes around a thousand, `tanh` saturates, and **every output
+becomes a step function of one sign bit** — the "constant wearing a program's
+clothes" the observability section was written to catch, caught by exactly the
+counter it asked for. Instruction results are now held to ±8.
+
+**2. Vigour's within-body normalisation is load-bearing, not bookkeeping.** The
+brief says vigour ranks nodes within a plant and not plants against each other,
+but the growth loop draws from one global frontier, so there was no within-plant
+comparison to make. Scoring a candidate against its own body's running level is
+what restores the property, and a uniform shift cannot move it — exactly as a
+plant-wide multiplier cannot move a within-plant maximum. Measured, on evenness:
+ranking vigour globally instead gives **0.47**, no tournament at all gives
+**0.58**, and the within-body version **0.69–0.83**. Both halves earn their place.
+
+**3. An array index is not an identity.** A freed slot is handed straight to the
+next birth, so a stale frontier entry silently became a claim on whichever
+stranger moved in: six draws in a hundred landed on a node that had not matured,
+budding early and drawing twice as often as it should. Both the frontier and the
+maturity queue now carry a generation with the index. The bug was found by
+asserting that a metric which *must* be 1.000 was, and finding 0.94.
+
+**4. The maturity gate needs a queue, or it wastes the draws it gates.** With the
+gate but no queue, four draws in five hit a node too young to bud, and nine in ten
+during colonisation. A node's maturity date is known when it is born, so it is
+bucketed by that date and spliced in when due — the same trick the death scheduler
+already uses. Nothing is scanned.
+
+**And the target behaviour is present.** About a third of the variation in pace
+and in capacity is *within* single bodies rather than between them, and **half of
+all bodies carry more than one capacity**. Two plants each internally uniform
+would score zero on that and identically on every population statistic. Roughly
+6 instructions of 24 reach an output, the rest drifting neutrally — the productive
+Cartesian-GP regime the brief asked for. A printed genome reads, for instance,
+`vigour <- MUL(age, MAX(age, forest))`: a node that wants children more as it
+matures, which is precisely what re-evaluating vigour was for.
+
 ## Open questions
 
-- **Program length.** Start around 24 instructions. It is a parameter, and the
-  point of a fixed-length genome is that trying another is cheap.
-- **How many registers**, and how many evolved constants.
-- **Is the eligible set small enough?** The frontier currently saturates at
+- **Program length**, still. 24 instructions is what it was built with and has not
+  been swept against 12 or 48. Same for the register and constant counts. The
+  point of a fixed-length genome is that trying another is cheap — `#glen=48`.
+- **Long runs erode it.** At 9,000 ticks rather than 2,500, evenness falls to 0.50,
+  the largest body to 81 nodes, and the within-body spread of pace to 0.18. Some
+  of that is the documented erosion of specialisation under a moving climate, but
+  the collapse in body size and within-body variety is not obviously the same
+  thing and is the next thing to understand.
+- ~~**Is the eligible set small enough?** The frontier currently saturates at
   130,000 entries and uniform sampling wastes most draws on nodes that cannot
   grow. Slot-eligibility and the maturity gate should shrink it a great deal, but
-  that wants measuring rather than assuming.
+  that wants measuring rather than assuming.~~ **Answered, and the answer was no
+  — they shrank it not at all.** See the strike-through under *Capacity, and what
+  a slot is*. Retirement after one refusal plus readmission on a neighbour's death
+  brings the frontier to about two thirds of living nodes, and bud success from
+  0.31 to 0.47.
