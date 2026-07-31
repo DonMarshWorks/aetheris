@@ -369,18 +369,37 @@ const PARAMS = {
   vote:    3,       // frontier draws per bud; the highest vigour takes it
   vmem:    0.05,    // how fast a body's vigour level is tracked, so that vigour
                     // ranks nodes inside a body and not bodies against each other
-  stemdark: 0.70,   // how much darker a branch is than the nodes it joins. The
+  limbs:   0,       // what order a plant's parts are drawn in.
+                    //   0  interleaved — branch, leaf, next branch over it
+                    //   1  every branch of a plant, then all its leaves
+                    //   2  every leaf, then all its branches over them
+                    // 1 is how a real plant is built and it reads worst here:
+                    // the branches are the most legible thing in the picture
+                    // and burying them loses the structure. 0 shows them in
+                    // glimpses, which is what it did before anyone chose. Any
+                    // of these is per *plant*, never globally — one plant may
+                    // legitimately stand over another — and the plants are
+                    // always walked in the same order, or overlapping
+                    // neighbours swap depth and the picture flickers.
+  stemdark: 0.50,   // how much darker a branch is than the nodes it joins. The
                     // structure reads far better when the two separate.
-  stem:    0.20,    // thickness of the branch drawn between a node and its
+  stem:    0.10,    // thickness of the branch drawn between a node and its
                     // parent, per step. 0 draws none. Without it a plant is a
                     // scatter of disconnected blobs and the branching — the
                     // whole structure of the thing — is invisible.
-  fat:     0.34,    // painted footprint radius, per step actually taken. Well
+  fat:     0.25,    // painted footprint radius, per step actually taken. Well
                     // under the step, so the ground shows between nodes: at
                     // 0.80 the planet vanished under its own vegetation and
                     // there was nothing left to be alive *on*.
-  soft:    0.50,    // how soft the footprint edge is, 0..1
-  alpha:   0.80,    // how much of the ground a mature node hides
+  soft:    0.20,    // how soft the footprint edge is, 0..1. This is the
+                    // leaf's anti-aliasing and nothing more; larger values
+                    // read as translucency at high zoom.
+  alpha:   0.80,    // how much of the ground a mature node hides. Nearly opaque, and
+                    // the nodes made small enough to leave gaps instead: a
+                    // translucent mark laid over its neighbours averages into
+                    // haze and you cannot see the shape of anything, whereas
+                    // small solid marks with ground between them read as
+                    // structure. Coverage is bought with `fat`, not opacity.
   mature:  90,      // reference ticks from bud to maturity, scaled by pace
   life:    1500,    // ticks per unit of fit; a pure specialist at home gets 5x
   seafit:  1.00,    // a flat multiplier on how habitable the sea is at all.
@@ -495,6 +514,14 @@ const PARAMS = {
                     // already unstable. Do not raise this without re-measuring,
                     // and raise `settle` with it if you do.
   hostile: 150,     // ticks a node lasts on ground that does not suit it at all
+  detail:  1,       // 1 = redraw the visible patch at full resolution when
+                    // close in, 0 = never. A tangent-plane patch cannot
+                    // represent anything 90 degrees from its centre, so it is
+                    // only used when the planet's limb is off screen; with the
+                    // horizon in view it failed out near the edge and left a
+                    // band of blur that swept round as the view turned. Set 0
+                    // to tell this apart from the ring's own shadow, which
+                    // also falls in bands and has always been there.
   topn:    25,      // ring the largest N plants. 0 turns it off.
   rim:     0.62,    // how strongly that rim reads. Magenta, because every
                     // colour this world makes is a mix of five environment
@@ -541,6 +568,12 @@ const PARAMS = {
     if(m) PARAMS[k] = parseFloat(m[1]);
   }
 })();
+/* Editing the hash in the address bar does not reload a page — the browser
+   only moves to the fragment — so a changed parameter appeared to do nothing
+   and the world carried on with the settings it booted with. Every one of
+   these is read once at startup and half of them size an array, so the honest
+   response to a change is to start again. */
+addEventListener("hashchange", ()=>location.reload());
 
 const PERM = new Uint16Array(512);
 (function(){
@@ -1723,6 +1756,109 @@ const MAXINST = PMAX*2 + RIMCAP + GHOSTN;
 const IBUF = new Float32Array(MAXINST*INST);
 let instN = 0;
 
+
+/* Nodes grouped by the plant they belong to, so a body can be drawn in two
+   passes. A counting sort over the roots: one pass to count, one to place, and
+   node order is preserved inside each body so the result is stable frame to
+   frame. */
+const ORDER = new Int32Array(PMAX), BOFF = new Int32Array(PMAX+1);
+let orderN = 0;
+function orderByBody(){
+  BOFF.fill(0,0,nodeHigh+1);
+  orderN = 0;
+  for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0){ BOFF[PROOT[i]]++; orderN++; }
+  let run=0;
+  for(let r=0;r<nodeHigh;r++){ const c=BOFF[r]; BOFF[r]=run; run+=c; }
+  for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0) ORDER[BOFF[PROOT[i]]++]=i;
+}
+
+/* one node of a plant: pass 0 lays its branch, pass 1 its foliage */
+function emitNode(i, pass, w){
+  if(NLIVE[i]===0) return w;
+    const wood = NLIVE[i]===2;
+    const x=NPX[i], y=NPY[i], z=NPZ[i];
+    const lat=Math.asin(Math.max(-1,Math.min(1,y))), lon=Math.atan2(z,x);
+    const cl=Math.max(Math.cos(lat),1e-3);
+    const sl=Math.sin(lat), sn=Math.sin(lon), cs=Math.cos(lon);
+    const hx=NHX[i], hy=NHY[i], hz=NHZ[i];
+    const he=-hx*sn + hz*cs;
+    const hn=-hx*sl*cs + hy*cl - hz*sl*sn;
+
+    /* A branch reads as a branch because it tapers. Width comes from age, so
+       the old wood near the root is broad and the growing tips are fine —
+       which is also the frontier, and also what is about to die. One variable
+       tells all three. */
+    const age=ptick-NBORN[i];
+    const grow=wood ? 1 : Math.min(1, age/Math.max(1,NMAT[i]));
+    const go=i*G;
+    /* The footprint scales with the step that actually placed this node, so
+       the picture stops lying about what is claimed: a long-stepping lineage
+       draws further apart because it *is* further apart, and the loose body it
+       leaves is ground somebody else can still grow into. */
+    const form=NFORM[i];
+    const wid=PARAMS.fat*NSTEP[i]*FORMSZ[form&3];
+    const asp=FORMASP[(form>>2)&3];
+
+    /* colour: the form's own, drifted by the sector's inherited tint and
+       lifted at the young tips, so expansion reads as motion */
+    geneColour(go, NPACE[i], GC);
+    const young=1-grow;
+    let r=GC[0]+young*44, g=GC[1]+young*40, b=GC[2]+young*34;
+    /* Dead wood is not black. Black would swamp hue, which is the channel
+       carrying niche, and half the standing structure would go to it — the
+       planet would read as scorched. Keep the lineage's hue, take the colour
+       and the value out of it, and let more ground show through: one value
+       ramp from bright new tip to grey wood, so growth and die-back both read
+       as movement. */
+    if(wood){
+      const lum=0.30*r+0.59*g+0.11*b;
+      r=(r*0.24+lum*0.76)*0.52; g=(g*0.24+lum*0.76)*0.52; b=(b*0.24+lum*0.76)*0.52;
+    }
+
+    const rot=Math.atan2(hn,he);
+    /* Solid. Growth and die-back are already carried by colour — a young tip
+       is lifted toward white, wood is drained toward grey — so fading them as
+       well was saying the same thing twice and costing every leaf its edge.
+       The only translucency left in a living plant is the anti-aliasing on the
+       footprint rim, and the dying, which should be translucent. */
+    const al=PARAMS.alpha*(wood?0.90:1.0);
+
+    /* the branch back to the parent: an ellipse lying along the step, centred
+       between the two, so a body reads as connected structure rather than as a
+       scatter of blobs. The child's heading is the direction it travelled, so
+       it is the direction of the branch too — no extra geometry needed. */
+    const par=NPAR[i];
+    if(pass===0 && PARAMS.stem>0 && par>=0 && NLIVE[par]!==0 && NGEN[par]===NPGEN[i]){
+      let mx=(x+NPX[par])*0.5, my=(y+NPY[par])*0.5, mz=(z+NPZ[par])*0.5;
+      const ml=1/Math.hypot(mx,my,mz); mx*=ml; my*=ml; mz*=ml;
+      const mlat=Math.asin(Math.max(-1,Math.min(1,my))), mlon=Math.atan2(mz,mx);
+      IBUF[w  ]=(mlon+Math.PI)/(Math.PI*2);
+      IBUF[w+1]=(Math.PI*0.5-mlat)/Math.PI;
+      IBUF[w+2]=NSTEP[i]*0.56;
+      IBUF[w+3]=PARAMS.stem*NSTEP[i];
+      IBUF[w+4]=rot;
+      IBUF[w+5]=Math.min(255,r*PARAMS.stemdark)/255;
+      IBUF[w+6]=Math.min(255,g*PARAMS.stemdark)/255;
+      IBUF[w+7]=Math.min(255,b*PARAMS.stemdark)/255;
+      IBUF[w+8]=al;
+      w+=INST;
+    }
+
+    if(pass===0) return w;
+    IBUF[w  ]=(lon+Math.PI)/(Math.PI*2);
+    IBUF[w+1]=(Math.PI*0.5-lat)/Math.PI;
+    IBUF[w+2]=wid*asp;
+    IBUF[w+3]=wid;
+    IBUF[w+4]=rot;
+    IBUF[w+5]=Math.min(255,r)/255;
+    IBUF[w+6]=Math.min(255,g)/255;
+    IBUF[w+7]=Math.min(255,b)/255;
+    IBUF[w+8]=al;
+    w+=INST;
+  
+  return w;
+}
+
 function buildInstances(){
   let w=0;
   const WLIM=(MAXINST-2)*INST;
@@ -1792,82 +1928,30 @@ function buildInstances(){
     IBUF[w+8]=ga;
     w+=INST;
   }
-  for(let i=0;i<nodeHigh && w<WLIM;i++){
-    if(NLIVE[i]===0) continue;
-    const wood = NLIVE[i]===2;
-    const x=NPX[i], y=NPY[i], z=NPZ[i];
-    const lat=Math.asin(Math.max(-1,Math.min(1,y))), lon=Math.atan2(z,x);
-    const cl=Math.max(Math.cos(lat),1e-3);
-    const sl=Math.sin(lat), sn=Math.sin(lon), cs=Math.cos(lon);
-    const hx=NHX[i], hy=NHY[i], hz=NHZ[i];
-    const he=-hx*sn + hz*cs;
-    const hn=-hx*sl*cs + hy*cl - hz*sl*sn;
-
-    /* A branch reads as a branch because it tapers. Width comes from age, so
-       the old wood near the root is broad and the growing tips are fine —
-       which is also the frontier, and also what is about to die. One variable
-       tells all three. */
-    const age=ptick-NBORN[i];
-    const grow=wood ? 1 : Math.min(1, age/Math.max(1,NMAT[i]));
-    const go=i*G;
-    /* The footprint scales with the step that actually placed this node, so
-       the picture stops lying about what is claimed: a long-stepping lineage
-       draws further apart because it *is* further apart, and the loose body it
-       leaves is ground somebody else can still grow into. */
-    const form=NFORM[i];
-    const wid=PARAMS.fat*NSTEP[i]*FORMSZ[form&3];
-    const asp=FORMASP[(form>>2)&3];
-
-    /* colour: the form's own, drifted by the sector's inherited tint and
-       lifted at the young tips, so expansion reads as motion */
-    geneColour(go, NPACE[i], GC);
-    const young=1-grow;
-    let r=GC[0]+young*44, g=GC[1]+young*40, b=GC[2]+young*34;
-    /* Dead wood is not black. Black would swamp hue, which is the channel
-       carrying niche, and half the standing structure would go to it — the
-       planet would read as scorched. Keep the lineage's hue, take the colour
-       and the value out of it, and let more ground show through: one value
-       ramp from bright new tip to grey wood, so growth and die-back both read
-       as movement. */
-    if(wood){
-      const lum=0.30*r+0.59*g+0.11*b;
-      r=(r*0.24+lum*0.76)*0.52; g=(g*0.24+lum*0.76)*0.52; b=(b*0.24+lum*0.76)*0.52;
+  /* Leaves sit on top of the branches that carry them, so every branch of a
+     plant goes down before any of its nodes — but per plant, not globally: one
+     plant may legitimately stand over another, and flattening all the branches
+     of the world under all its foliage would lose that. The order plants are
+     drawn in must also never change between frames, or overlapping neighbours
+     swap depth and the picture flickers, so they are walked by body in node
+     order and both are stable. */
+  orderByBody();
+  const limbs = PARAMS.limbs|0;
+  for(let a=0;a<orderN && w<WLIM;){
+    const root = PROOT[ORDER[a]];
+    let b=a;
+    while(b<orderN && PROOT[ORDER[b]]===root) b++;
+    if(limbs===0){
+      for(let q=a;q<b && w<WLIM;q++){
+        const i=ORDER[q];
+        w = emitNode(i, 0, w); w = emitNode(i, 1, w);
+      }
+    } else {
+      const first = limbs===2 ? 1 : 0;
+      for(let q=a;q<b && w<WLIM;q++) w = emitNode(ORDER[q], first, w);
+      for(let q=a;q<b && w<WLIM;q++) w = emitNode(ORDER[q], 1-first, w);
     }
-
-    const rot=Math.atan2(hn,he);
-    const al=PARAMS.alpha*(0.45+0.55*grow)*(wood?0.62:1.0);
-
-    /* the branch back to the parent: an ellipse lying along the step, centred
-       between the two, so a body reads as connected structure rather than as a
-       scatter of blobs. The child's heading is the direction it travelled, so
-       it is the direction of the branch too — no extra geometry needed. */
-    const par=NPAR[i];
-    if(PARAMS.stem>0 && par>=0 && NLIVE[par]!==0 && NGEN[par]===NPGEN[i]){
-      let mx=(x+NPX[par])*0.5, my=(y+NPY[par])*0.5, mz=(z+NPZ[par])*0.5;
-      const ml=1/Math.hypot(mx,my,mz); mx*=ml; my*=ml; mz*=ml;
-      const mlat=Math.asin(Math.max(-1,Math.min(1,my))), mlon=Math.atan2(mz,mx);
-      IBUF[w  ]=(mlon+Math.PI)/(Math.PI*2);
-      IBUF[w+1]=(Math.PI*0.5-mlat)/Math.PI;
-      IBUF[w+2]=NSTEP[i]*0.56;
-      IBUF[w+3]=PARAMS.stem*NSTEP[i];
-      IBUF[w+4]=rot;
-      IBUF[w+5]=Math.min(255,r*PARAMS.stemdark)/255;
-      IBUF[w+6]=Math.min(255,g*PARAMS.stemdark)/255;
-      IBUF[w+7]=Math.min(255,b*PARAMS.stemdark)/255;
-      IBUF[w+8]=al;
-      w+=INST;
-    }
-
-    IBUF[w  ]=(lon+Math.PI)/(Math.PI*2);
-    IBUF[w+1]=(Math.PI*0.5-lat)/Math.PI;
-    IBUF[w+2]=wid*asp;
-    IBUF[w+3]=wid;
-    IBUF[w+4]=rot;
-    IBUF[w+5]=Math.min(255,r)/255;
-    IBUF[w+6]=Math.min(255,g)/255;
-    IBUF[w+7]=Math.min(255,b)/255;
-    IBUF[w+8]=al;
-    w+=INST;
+    a=b;
   }
   instN=w/INST;
 }
@@ -2859,6 +2943,14 @@ uniform float uSeam;
    (0,0,1,1); a detail window is a small box, and the same quads land in it
    magnified. */
 uniform vec4 uWin;
+/* The detail patch is a *tangent plane* centred on wherever the camera is
+   looking, not a lat/lon box. A box cannot describe the region round a pole —
+   every longitude converges there, so it either fails to cover the screen or
+   has to span the whole planet — and that is why the poles came out half sharp
+   and half not. A gnomonic patch has no poles and wastes no texels. */
+uniform mat3 uFrame;      /* right, up, forward */
+uniform float uSpan;      /* tan of the patch's half-angle */
+uniform float uTan;       /* 1 = patch, 0 = the equirectangular sheet */
 out vec2 vC; out vec4 vCol;
 void main(){
   float lat = (0.5 - aUV.y)*3.14159265;
@@ -2878,6 +2970,28 @@ void main(){
   /* ascending, always — a descending smoothstep is undefined */
   float polar = 1.0 - smoothstep(0.978, 0.9976, abs(sin(lat)));
   vC = aCorner; vCol = vec4(aCol.rgb, aCol.a*polar);
+  if(uTan > 0.5){
+    float lon2 = aUV.x*6.2831853 - 3.14159265;
+    float sn2 = sin(lon2), cs2 = cos(lon2), cl2 = cos(lat), sl2 = sin(lat);
+    vec3 dir  = vec3(cl2*cs2, sl2, cl2*sn2);
+    vec3 east = vec3(-sn2, 0.0, cs2);
+    vec3 nrt  = cross(east, dir);
+    /* Cull on the *node*, never on the corner. A quad has four vertices and
+       one node; testing each vertex meant a node near the projection's horizon
+       could have three corners project normally and the fourth thrown to
+       infinity, which stretches the quad into a streak clear across the
+       screen. With a quarter of a million instances a great many sit near that
+       line at any moment, and they sweep as the view turns — bands, moving.
+       Testing the centre makes a quad wholly in or wholly out, and the cut is
+       set well outside the patch so nothing visible is ever dropped. */
+    float cz = dot(dir, uFrame[2]);
+    if(cz <= 0.30){ gl_Position = vec4(4.0, 4.0, 0.0, 1.0); return; }
+    vec3 pp = normalize(dir + east*arc.x + nrt*arc.y);
+    float fz = max(0.30, dot(pp, uFrame[2]));
+    gl_Position = vec4(dot(pp,uFrame[0])/(fz*uSpan),
+                       dot(pp,uFrame[1])/(fz*uSpan), 0.0, 1.0);
+    return;
+  }
   gl_Position = vec4(((u - uWin.x)/uWin.z)*2.0-1.0,
                      ((v - uWin.y)/uWin.w)*2.0-1.0, 0.0, 1.0);
 }`, `#version 300 es
@@ -2920,8 +3034,8 @@ const detailFBO = gl.createFramebuffer();
 gl.bindFramebuffer(gl.FRAMEBUFFER, detailFBO);
 gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,detailTex,0);
 gl.bindFramebuffer(gl.FRAMEBUFFER,null);
-const DETAIL = new Float32Array([0,0,1,1]);
-let detailOn = 0;
+const DFRAME = new Float32Array(9);   /* right, up, forward — column major */
+let detailSpan = 1, detailOn = 0;
 
 const plantVAO=gl.createVertexArray();
 gl.bindVertexArray(plantVAO);
@@ -2955,14 +3069,14 @@ function renderDetail(){
        gradient with it. Holding `soft` constant would make the detail patch
        blurrier than the sheet it replaces, which is the opposite of the point. */
     gl.uniform1f(plantProg.u.uSoft, Math.max(0.02,PARAMS.soft*0.45));
-    gl.uniform4fv(plantProg.u.uWin, DETAIL);
+    gl.uniformMatrix3fv(plantProg.u.uFrame, false, DFRAME);
+    gl.uniform1f(plantProg.u.uSpan, detailSpan);
+    gl.uniform1f(plantProg.u.uTan, 1);
+    gl.uniform1f(plantProg.u.uSeam, 0);      /* a patch has no seam to cross */
     gl.bindVertexArray(plantVAO);
-    /* the window can straddle the back meridian exactly as the sheet can */
-    for(const off of [-1,0,1]){
-      gl.uniform1f(plantProg.u.uSeam, off);
-      gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,instN);
-    }
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,instN);
     gl.bindVertexArray(null);
+    gl.uniform1f(plantProg.u.uTan, 0);
   }
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
 }
@@ -2992,6 +3106,7 @@ function renderPlants(){
     /* three passes a turn apart, so a footprint straddling the back meridian
        is drawn on both sides of it instead of being torn in half */
     gl.uniform4f(plantProg.u.uWin, 0,0,1,1);
+    gl.uniform1f(plantProg.u.uTan, 0);
     for(const off of [-1,0,1]){
       gl.uniform1f(plantProg.u.uSeam, off);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP,0,4,instN);
@@ -3212,7 +3327,8 @@ uniform sampler2D uPlant;
 uniform sampler2D uDetail;
 /* (u0, v0, du, dv) of the patch drawn at full resolution, and 0 when there is
    none. Longitude wraps, latitude does not. */
-uniform vec4 uDetailWin;
+uniform mat3 uDetailFrame;
+uniform float uDetailSpan;
 uniform float uDetailOn;
 uniform mat3 uRot;
 uniform vec3 uSun, uCam;
@@ -3428,14 +3544,17 @@ void main(){
      the plants turn to fuzz. Where a detail patch exists, it holds the same
      plants at the resolution the zoom deserves; feathered at the edges so the
      seam between the two never shows. */
-  if(uDetailOn > 0.5){
-    vec2 w = vec2(fract(pu - uDetailWin.x + 1.0)/uDetailWin.z,
-                  (pv - uDetailWin.y)/uDetailWin.w);
-    if(w.x > 0.0 && w.x < 1.0 && w.y > 0.0 && w.y < 1.0){
-      /* ascending only — a reversed smoothstep is undefined */
-      float k = smoothstep(0.0, 0.06, w.x)*(1.0 - smoothstep(0.94, 1.0, w.x))
-              * smoothstep(0.0, 0.06, w.y)*(1.0 - smoothstep(0.94, 1.0, w.y));
-      pl = mix(pl, texture(uDetail, w), k*uDetailOn);
+  if(uDetailOn > 0.002){
+    float dz = dot(d, uDetailFrame[2]);
+    if(dz > 0.03){
+      vec2 t = vec2(dot(d,uDetailFrame[0]), dot(d,uDetailFrame[1]))
+                 /(dz*uDetailSpan)*0.5 + 0.5;
+      if(t.x > 0.0 && t.x < 1.0 && t.y > 0.0 && t.y < 1.0){
+        /* ascending only — a reversed smoothstep is undefined */
+        float k = smoothstep(0.0, 0.05, t.x)*(1.0 - smoothstep(0.95, 1.0, t.x))
+                * smoothstep(0.0, 0.05, t.y)*(1.0 - smoothstep(0.95, 1.0, t.y));
+        pl = mix(pl, texture(uDetail, t), k*uDetailOn);
+      }
     }
   }
   albedo = mix(albedo, pl.rgb, pl.a);
@@ -3717,6 +3836,13 @@ void main(){
    4.  camera + interaction
    ══════════════════════════════════════════════════════════════════════ */
 const FOVY = 42*Math.PI/180;
+/* Past this the camera stops approaching and the lens narrows instead. Coming
+   closer would put the eye inside the planet — the surface is at radius 1 and
+   the old floor of 0.44 already sat at about 1.06 — so the only way to get down
+   to a couple of plants is a longer lens, not a shorter distance. */
+const ZTELE = 0.44, ZMIN = 0.11;
+function camFov(){ return FOVY*Math.max(0.13, Math.min(1, CAM.zoom/ZTELE)); }
+function camDistOf(z){ return fitDist()*Math.max(ZTELE, z); }
 /* frame the planet so it never touches the edge of the window, whatever
    shape that window is */
 function fitDist(){
@@ -3815,8 +3941,8 @@ addEventListener("pointermove",e=>{
     const d = spread();
     if(d > 12 && pinchSpread > 12){
       /* fingers apart -> closer to the planet -> smaller camera distance */
-      CAM.zoom  = clamp(pinchZoom0*(pinchSpread/d), 0.44, 2.6);
-      CAM.tDist = fitDist()*CAM.zoom;
+      CAM.zoom  = clamp(pinchZoom0*(pinchSpread/d), ZMIN, 2.6);
+      CAM.tDist = camDistOf(CAM.zoom);
     }
     const c = centroid();
     orbitBy(c.x-cx0, c.y-cy0);
@@ -3872,8 +3998,8 @@ document.addEventListener("visibilitychange", ()=>{ if(document.hidden) clearPoi
 
 canvas.addEventListener("wheel",e=>{
   e.preventDefault();
-  CAM.zoom = clamp(CAM.zoom*Math.exp(e.deltaY*0.0011), 0.44, 2.6);
-  CAM.tDist = fitDist()*CAM.zoom;
+  CAM.zoom = clamp(CAM.zoom*Math.exp(e.deltaY*0.0011), ZMIN, 2.6);
+  CAM.tDist = camDistOf(CAM.zoom);
 },{passive:false});
 
 /* Belt and braces against the browser zooming the whole page: trackpad
@@ -4097,7 +4223,6 @@ function frame(now){
     packTexture(); uploadData();
     hudAcc++; if(hudAcc>=4){ hudAcc=0; updateHUD(); }
   }
-  renderPlants();
 
   /* Growth is *owed* by the simulation tick and *paid* across the frames that
      follow, against a wall-clock budget. Sixty-four steps in one lump is forty
@@ -4120,7 +4245,8 @@ function frame(now){
              Math.sin(py)*CAM.dist,
              Math.cos(py)*Math.cos(CAM.yaw)*CAM.dist];
   const W=canvas.width, Hh=canvas.height;
-  perspective(mProj, FOVY, W/Hh, 0.35, 30);
+  const fovNow = camFov();
+  perspective(mProj, fovNow, W/Hh, 0.35, 30);
   lookAt(mView, eye,[0,0,0],[0,1,0]);
   mul(mVP,mProj,mView); invert(mInvVP,mVP);
 
@@ -4141,31 +4267,59 @@ function frame(now){
      falling from a ring that is no longer there. */
   const ringFade = smoothstep(1.95, 3.05, CAM.dist);
 
-  /* Where to spend the detail texture: the patch under the camera, sized to
-     what is actually on screen. Faded in rather than switched on, or the
-     plants would visibly sharpen at a threshold. */
+  /* Where to spend the detail texture: a tangent patch centred on whatever the
+     camera is looking at, sized to what is genuinely on screen. Faded in
+     rather than switched on, or the plants would sharpen at a threshold. */
   {
-    const amt = 1.0 - smoothstep(1.30, 1.95, CAM.dist);
+    const amt = PARAMS.detail<=0 ? 0
+              : Math.max(1.0 - smoothstep(1.70, 2.55, CAM.dist),
+                         1.0 - smoothstep(0.55, 1.00, CAM.zoom/ZTELE));
     detailOn = amt;
     if(amt > 0.002){
       /* the sub-camera point, taken back into the planet's own frame */
-      const ex=eye[0], ey=eye[1], ez=eye[2];
-      const il=1/Math.max(1e-6,Math.hypot(ex,ey,ez));
-      const wx=ex*il, wy=ey*il, wz=ez*il;
-      const px=R[0]*wx+R[1]*wy+R[2]*wz;      /* Rt * w, R is column-major */
-      const py=R[3]*wx+R[4]*wy+R[5]*wz;
-      const pz=R[6]*wx+R[7]*wy+R[8]*wz;
-      const lat=Math.asin(Math.max(-1,Math.min(1,py)));
-      const lon=Math.atan2(pz,px);
-      /* half the angle the visible cap subtends, with margin for the horizon */
-      const half=Math.min(1.05, Math.acos(Math.max(0.02,Math.min(1,1/Math.max(1.001,CAM.dist))))*1.25);
-      const dv=Math.min(0.5, half/Math.PI);
-      const du=Math.min(0.5, half/(Math.PI*2*Math.max(0.18,Math.cos(lat))));
-      DETAIL[0]=(lon+Math.PI)/(Math.PI*2) - du;
-      DETAIL[1]=Math.max(0,Math.min(1-2*dv,(Math.PI*0.5-lat)/Math.PI - dv));
-      DETAIL[2]=2*du; DETAIL[3]=2*dv;
+      const il=1/Math.max(1e-6,Math.hypot(eye[0],eye[1],eye[2]));
+      const wx=eye[0]*il, wy=eye[1]*il, wz=eye[2]*il;
+      const fx=R[0]*wx+R[1]*wy+R[2]*wz;     /* Rt * w, R is column-major */
+      const fy=R[3]*wx+R[4]*wy+R[5]*wz;
+      const fz=R[6]*wx+R[7]*wy+R[8]*wz;
+      /* The camera's own right axis, carried into the planet's frame. Choosing
+         a reference axis and switching it near the poles made the patch snap
+         between two orientations from one frame to the next; this is
+         perpendicular to the view by construction, so it never degenerates and
+         never jumps. */
+      const mrx=mView[0], mry=mView[4], mrz=mView[8];
+      let rx=R[0]*mrx+R[1]*mry+R[2]*mrz;
+      let ry=R[3]*mrx+R[4]*mry+R[5]*mrz;
+      let rz=R[6]*mrx+R[7]*mry+R[8]*mrz;
+      /* orthogonalise against the view direction, then normalise */
+      const dp=rx*fx+ry*fy+rz*fz; rx-=fx*dp; ry-=fy*dp; rz-=fz*dp;
+      const rl=1/Math.max(1e-6,Math.hypot(rx,ry,rz)); rx*=rl; ry*=rl; rz*=rl;
+      const vx=fy*rz-fz*ry, vy=fz*rx-fx*rz, vz=fx*ry-fy*rx;
+      DFRAME[0]=rx; DFRAME[1]=ry; DFRAME[2]=rz;
+      DFRAME[3]=vx; DFRAME[4]=vy; DFRAME[5]=vz;
+      DFRAME[6]=fx; DFRAME[7]=fy; DFRAME[8]=fz;
+      /* exactly how much globe is on screen: where the corner ray strikes the
+         sphere, or the horizon if it misses */
+      const asp=Math.max(1e-3, W/Hh);
+      const aMax=Math.atan(Math.tan(fovNow*0.5)*Math.hypot(1, asp));
+      const sMax=CAM.dist*Math.sin(aMax);
+      const half=(sMax>=1 ? 9 : (Math.asin(sMax)-aMax)*1.16 + 0.008);
+      detailSpan = Math.tan(Math.min(1.0, half));
+      /* Off unless the patch can cover the whole frame. A tangent plane runs to
+         infinity at 90 degrees from its centre, so the moment the limb is in
+         view there is a ring of screen it cannot reach — and a patch that
+         covers only part of the picture is worse than none, because the two
+         resolutions update on different clocks and tear apart as the view
+         turns. Also off when it would be no finer than the sheet it replaces. */
+      if(half > 0.80 || DW/(2*half) < (PH/Math.PI)*1.25) detailOn = 0;
     }
   }
+
+  /* Only now, with the camera resolved. Drawing the detail patch earlier meant
+     rendering it through last frame's projection and sampling it through this
+     one; standing still that is invisible, and moving, the two slide apart and
+     the patch smears into bands. */
+  renderPlants();
 
   gl.viewport(0,0,W,Hh);
   gl.clearColor(0,0,0,1);
@@ -4192,7 +4346,8 @@ function frame(now){
   gl.uniform1i(planetProg.u.uPlant,2);
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D,detailTex);
   gl.uniform1i(planetProg.u.uDetail,3);
-  gl.uniform4fv(planetProg.u.uDetailWin, DETAIL);
+  gl.uniformMatrix3fv(planetProg.u.uDetailFrame, false, DFRAME);
+  gl.uniform1f(planetProg.u.uDetailSpan, detailSpan);
   gl.uniform1f(planetProg.u.uDetailOn, detailOn);
   gl.activeTexture(gl.TEXTURE0);
   gl.uniformMatrix4fv(planetProg.u.uVP,false,mVP);
@@ -4236,7 +4391,7 @@ function frame(now){
     gl.uniform3fv(ringProg.u.uCam,eye);
     gl.uniform3fv(ringProg.u.uRingN,POLE);
     gl.uniform1f(ringProg.u.uRingFade, ringFade);
-    gl.uniform1f(ringProg.u.uPixel, 2.0*Math.tan(FOVY*0.5)/Math.max(1,Hh));
+    gl.uniform1f(ringProg.u.uPixel, 2.0*Math.tan(fovNow*0.5)/Math.max(1,Hh));
     gl.bindVertexArray(ringVAO);
     gl.drawElements(gl.TRIANGLES,RING.idx.length,gl.UNSIGNED_INT,0);
     gl.bindVertexArray(sphVAO);
@@ -4412,7 +4567,7 @@ window.__world = {
   setSpeed(v){ speed=v; },
   debug(v){ DEBUG=v|0; },
   freeze(v){ spin=v; frozen=true; },
-  setView(y,pi,z){ CAM.yaw=y; CAM.pitch=pi; if(z){CAM.zoom=z;} CAM.tDist=fitDist()*CAM.zoom; },
+  setView(y,pi,z){ CAM.yaw=y; CAM.pitch=pi; if(z){CAM.zoom=z;} CAM.tDist=camDistOf(CAM.zoom); },
   sunDir(){ return [SUN[0],SUN[1],SUN[2]]; },
   cam(){ return CAM; },
   pointerCount(){ return ptrs.size; },
