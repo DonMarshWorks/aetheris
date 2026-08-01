@@ -4156,12 +4156,24 @@ function camFov(){
   const want = fitDist()*CAM.zoom;
   return Math.max(FOVMIN, FOVY*Math.min(1, want/Math.max(DMIN, want)));
 }
-/* How much of the visible field a pixel of drag is worth. At full zoom the
-   field is 42 degrees and at full telephoto 5.5, so a fixed radians-per-pixel
-   rate sweeps eight times more of what can actually be seen when zoomed in,
-   which is what makes it twitchy. Scaling by the lens keeps the ground moving
-   at a constant rate across the screen. */
-function orbitRate(){ return 0.0055*(camFov()/FOVY); }
+/* What a pixel of drag is worth, in radians of orbit.
+ *
+ * Three things go into it. The lens, because a fixed radians-per-pixel rate
+ * sweeps eight times more of what can actually be seen once the field narrows
+ * from 42 degrees to 5.5. The window height, because the same gesture crosses
+ * a different fraction of a tall phone than of a wide desktop and the control
+ * should not depend on which. And a gain that falls with the lens on top of
+ * both: scaling by the field alone keeps the ground moving at a constant rate
+ * across the screen, which sounds right and is not enough — zoomed out the
+ * gesture means "spin the globe" and wants to be several times life size,
+ * while zoomed in it means "put that plant in the middle" and wants to be
+ * nearly one to one. Six-ish falling to under two does that, and leaves the
+ * familiar feel at full view untouched. */
+function orbitRate(){
+  const h = Math.max(1, canvas.clientHeight || innerHeight || 800);
+  const f = camFov();
+  return (f/h)*(1 + 5*(f/FOVY));
+}
 /* frame the planet so it never touches the edge of the window, whatever
    shape that window is */
 function fitDist(){
@@ -4301,7 +4313,18 @@ function trackSpin(a){
 
   CAM.yaw   = Math.atan2(_e2[0], _e2[2]);
   CAM.pitch = clamp(Math.asin(Math.max(-1,Math.min(1,_e2[1]))), -1.35, 1.35);
-  CAM.tYaw = CAM.yaw; CAM.tPitch = CAM.pitch;
+  /* The target is carried by the same rotation rather than snapped to the new
+     position. Assigning it here is what stopped dragging working while held:
+     a drag moves the target and the very next frame overwrote it, so the eye
+     was chased back to the ground it had been on and the finger did nothing.
+     Rotating both leaves the difference between them — which is exactly the
+     drag still waiting to be eased in — untouched. */
+  { const tcp=Math.cos(CAM.tPitch);
+    _e[0]=tcp*Math.sin(CAM.tYaw); _e[1]=Math.sin(CAM.tPitch); _e[2]=tcp*Math.cos(CAM.tYaw);
+    rotAbout(_e,POLE,c,s,_u2);
+    CAM.tYaw   = Math.atan2(_u2[0], _u2[2]);
+    CAM.tPitch = clamp(Math.asin(Math.max(-1,Math.min(1,_u2[1]))), -1.35, 1.35);
+    rotAbout(_u,POLE,c,s,_u2); }
   /* whatever of the transported up is not explained by the new yaw and pitch
      is roll, and keeping it is what stops the drift accumulating */
   naturalUp(CAM.yaw, CAM.pitch, _n);
