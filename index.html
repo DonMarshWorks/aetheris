@@ -578,6 +578,22 @@ const PARAMS = {
                     // winning, flung across the planet, so a high rate is the
                     // current champion reseeding itself everywhere. Dropping
                     // 0.030 -> 0.006 took niche evenness from 0.56 to 0.86.
+  cullmin: 0,       // bud attempts a body must have had before either of the
+                    // two rules below may judge it. 0 turns both off. Don's
+                    // objection to the size cull, and it is right: a fragment
+                    // in a crowded neighbourhood is culled for being small
+                    // when its smallness belongs to the neighbours.
+  sparefenced: 0,   // if a body's refusals are mostly from OTHER plants -- a
+                    // self share below this -- it is exempt from the size
+                    // cull. It is not failing, it is fenced in, and the fence
+                    // moves when a neighbour dies.
+  cullself: 0,      // if a body's refusals are mostly from ITSELF -- a self
+                    // share above this -- it is culled whatever its size,
+                    // because its own angles and step have boxed it in and it
+                    // will stay boxed in. Careful: a dense mat self-collides
+                    // constantly BY DESIGN, and short-stepping is a real
+                    // strategy this design wants to keep. Setting this too low
+                    // will delete that whole habit and leave one morphology.
   sporemut: 1.00,   // how much harder a spore is mutated than an ordinary
                     // bifurcation. 1 = the same. A founder cannot out-compete
                     // an established neighbour on equal terms, so its only
@@ -1683,7 +1699,7 @@ function binOf(x,y,z){
   const k=Math.min(PGRID-1,Math.max(0,((z+1)*0.5*PGRID)|0));
   return (i*PGRID+j)*PGRID+k;
 }
-function occupied(x,y,z){
+function blockedBy(x,y,z){
   const i=Math.min(PGRID-1,Math.max(0,((x+1)*0.5*PGRID)|0));
   const j=Math.min(PGRID-1,Math.max(0,((y+1)*0.5*PGRID)|0));
   const k=Math.min(PGRID-1,Math.max(0,((z+1)*0.5*PGRID)|0));
@@ -1699,13 +1715,22 @@ function occupied(x,y,z){
         for(let n=0;n<list.length;n++){
           const t=list[n];
           const dx=NPX[t]-x, dy=NPY[t]-y, dz=NPZ[t]-z;
-          if(dx*dx+dy*dy+dz*dz < r2) return true;
+          if(dx*dx+dy*dy+dz*dz < r2) return t;
         }
       }
     }
   }
-  return false;
+  return -1;
 }
+/* Which node refused a placement, not merely that one did. A bud blocked by
+   the plant's own body is a fact about its genome — its angles and its step
+   have boxed it in, and it will stay boxed in. A bud blocked by a stranger is
+   a fact about its neighbourhood, which will change when the neighbour dies.
+   The fragment cull cannot tell those apart while it only knows size, so a
+   good plant wedged between two large ones is culled for being small when its
+   smallness belongs to the neighbours. Same test, same cost — the caller now
+   gets to ask whose fault it was. */
+function occupied(x,y,z){ return blockedBy(x,y,z) >= 0; }
 
 function unbin(i){
   const list = pbins.get(NBIN[i]);
@@ -2276,7 +2301,22 @@ function bud(ni){
   l=1/Math.hypot(ex,ey,ez); ex*=l; ey*=l; ez*=l;
 
   if(fitAt(nx,ny,nz,go) < PARAMS.viable) return false;
-  if(occupied(nx,ny,nz)){ angBlocked++; return false; }
+  const hit = blockedBy(nx,ny,nz);
+  if(hit >= 0){
+    angBlocked++;
+    /* Charge the refusal to the body, and record whose fault it was. Kept as
+       two decaying counters rather than a ring of the last hundred attempts:
+       bodies churn constantly here and per-plant state has to be cheap to
+       create, so a hundred slots each is not affordable and an exponential
+       memory answers the same question. */
+    const r = PROOT[ni];
+    if(r >= 0){
+      BTRY[r]++;
+      if(PROOT[hit] === r) BSELF[r]++;
+    }
+    return false;
+  }
+  { const r = PROOT[ni]; if(r >= 0) BTRY[r]++; }
   /* The first child continues the sector on its parent's genome exactly; the
      second and later are true bifurcations and mint a mutated one. Mutating
      every node instead would let drift inside one body swamp the differences
@@ -2326,6 +2366,11 @@ function spore(ni){
    fragment onto a stranger. */
 const PROOT=new Int32Array(PMAX), PSIZE=new Int32Array(PMAX), PSTK=new Int32Array(PMAX);
 const BTOP=new Uint8Array(PMAX); const SIZES=[];   // the largest plants, ringed
+/* bud attempts charged to a body, and how many of those its own body refused.
+   Halved on every cull pass, so they are an exponential memory of recent
+   effort rather than a lifetime tally — a plant that was boxed in long ago and
+   has since broken out should not be answering for it. */
+const BTRY=new Int32Array(PMAX), BSELF=new Int32Array(PMAX);
 const BX=new Float32Array(PMAX), BY=new Float32Array(PMAX), BZ=new Float32Array(PMAX);
 
 /* ---- history, so stasis can be seen rather than guessed at ----
@@ -2487,10 +2532,30 @@ function pruneFragments(){
          its grace, then the bar climbs to full by the end of it. */
       let a=((ptick-NBORN[r])/settle - yf)/Math.max(1e-3,1-yf);
       a = a<0?0:(a>1?1:a);
-      const need=minf*a*a*(3-2*a);
+      let need=minf*a*a*(3-2*a);
+      /* Size is a proxy for viability and a poor one, because a body wedged
+         between two large neighbours is small on account of the neighbours.
+         Where the refusals came from says which it is. Both rules below are
+         off by default and each is the other's opposite: one spares a plant
+         the size bar because it is fenced in, the other kills a plant that
+         clears the size bar because it has boxed itself in. */
+      const tries=BTRY[r];
+      if(tries >= (PARAMS.cullmin|0) && (PARAMS.cullmin|0) > 0){
+        const selfShare = BSELF[r]/tries;
+        if(PARAMS.sparefenced>0 && selfShare < PARAMS.sparefenced) need=0;
+        if(PARAMS.cullself>0 && selfShare > PARAMS.cullself) need=Infinity;
+      }
       if(PSIZE[r] < need) killNode(i);
     }
     else if(NLIVE[i]===2 && PSIZE[PROOT[i]]===0) freeNode(i);
+  }
+  /* Halve the effort counters. A body that has broken out of a corner should
+     stop answering for the corner, and a body whose root index has just been
+     recycled to a stranger must not inherit its record — the same identity
+     hazard that put a generation on the frontier entries. */
+  for(let r=0;r<nodeHigh;r++){
+    if(PROOT[r]!==r || PSIZE[r]===0){ BTRY[r]=0; BSELF[r]=0; }
+    else { BTRY[r]>>=1; BSELF[r]>>=1; }
   }
 }
 

@@ -1,0 +1,12 @@
+{ "note":"Don's efficiency cull. sparefenced spares a plant the size bar when its refusals come from strangers; cullself kills one whose refusals come from itself. Both need cullmin opportunities first.",
+  "ticks": 45000, "checkpoints": [15000,30000,45000], "defaultEcorate": 16,
+  "seeds": [7,31337,424242,999],
+  "configs": [
+    { "tag":"c-off",        "params": {} },
+    { "tag":"c-spare30",    "params": { "cullmin":100, "sparefenced":0.30 } },
+    { "tag":"c-spare50",    "params": { "cullmin":100, "sparefenced":0.50 } },
+    { "tag":"c-self70",     "params": { "cullmin":100, "cullself":0.70 } },
+    { "tag":"c-self50",     "params": { "cullmin":100, "cullself":0.50 } },
+    { "tag":"c-both",       "params": { "cullmin":100, "sparefenced":0.30, "cullself":0.70 } },
+    { "tag":"c-both-mf20",  "params": { "cullmin":100, "sparefenced":0.30, "cullself":0.70, "minfrag":20 } }
+  ] }
