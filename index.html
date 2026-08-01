@@ -78,14 +78,19 @@
 
   .clockrow{display:flex;align-items:center;gap:14px}
   .clock{font-size:26px;font-weight:200;letter-spacing:.06em;font-variant-numeric:tabular-nums;line-height:1}
-  #playpause{
+  /* the round controls, wherever they sit */
+  .rbtn{
     pointer-events:auto;flex:0 0 34px;width:34px;height:34px;padding:0;
     display:flex;align-items:center;justify-content:center;
     background:transparent;border:1px solid var(--faint);border-radius:50%;
-    color:var(--ink);cursor:pointer;transition:.25s;
+    color:var(--ink);cursor:pointer;transition:.25s;font:inherit;
   }
-  #playpause:hover{border-color:rgba(233,240,255,.60);background:rgba(233,240,255,.10)}
-  #playpause svg{width:12px;height:12px;display:block}
+  .rbtn:hover{border-color:rgba(233,240,255,.60);background:rgba(233,240,255,.10)}
+  .rbtn svg{width:12px;height:12px;display:block}
+  /* held down reads as a state, not a hover */
+  .rbtn.on{border-color:rgba(233,240,255,.72);background:rgba(233,240,255,.16)}
+  #info{font-size:15px;font-weight:700;line-height:1}
+  .ctrls{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
   .clocklabel{margin-top:8px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
 
   .bars{margin-top:16px;display:flex;gap:9px;align-items:flex-end}
@@ -97,12 +102,6 @@
   .scales{margin-top:15px;font-size:10px;letter-spacing:.13em;text-transform:uppercase;
     color:rgba(233,240,255,.56);font-variant-numeric:tabular-nums;line-height:1.85}
 
-  #chartlink{
-    pointer-events:auto;font:inherit;font-size:inherit;letter-spacing:inherit;
-    text-transform:inherit;color:rgba(233,240,255,.56);background:none;border:0;
-    padding:0;margin-top:3px;cursor:pointer;transition:color .25s;
-  }
-  #chartlink:hover{color:var(--ink)}
   /* Fixed and clipped: the page itself must never gain a scrollbar, and an
      overlay is the easiest way to give it one by accident. */
   #charts{
@@ -156,7 +155,9 @@
     .sub{font-size:9.5px;margin-top:5px}
     .clock{font-size:21px}
     .clockrow{gap:11px}
-    #playpause{flex:0 0 30px;width:30px;height:30px}
+    .rbtn{flex:0 0 30px;width:30px;height:30px}
+    .ctrls{gap:7px;margin-top:10px}
+    #info{font-size:13px}
     .clocklabel{font-size:9.5px;letter-spacing:.13em;margin-top:6px}
     .bars{gap:6px;margin-top:12px}
     .bar{width:44px}
@@ -185,18 +186,21 @@
       <button class="sp" data-s="20">&times;20</button>
       <button class="sp" data-s="100">&times;100</button>
     </div>
+    <div class="ctrls">
+      <button id="playpause" class="rbtn" type="button" aria-label="pause" title="pause"></button>
+      <button id="lock" class="rbtn" type="button" aria-label="hold the view" title="hold the view" aria-pressed="false"></button>
+      <button id="info" class="rbtn" type="button" aria-label="the life of it" title="the life of it">i</button>
+    </div>
   </div>
 
   <div class="corner bl">
     <div class="clockrow">
-      <button id="playpause" type="button" aria-label="pause" title="pause"></button>
       <div class="clock" id="clock">0:00:00</div>
     </div>
     <div class="clocklabel" id="clocklabel">elapsed</div>
     <div class="bars" id="bars"></div>
     <div class="scales" id="scales">
       <div id="sc1"></div><div id="sc2"></div><div id="sc3"></div>
-      <div><button id="chartlink" type="button">the life of it &rsaquo;</button></div>
     </div>
   </div>
 </div>
@@ -4018,9 +4022,33 @@ const FOVY = 42*Math.PI/180;
    closer would put the eye inside the planet — the surface is at radius 1 and
    the old floor of 0.44 already sat at about 1.06 — so the only way to get down
    to a couple of plants is a longer lens, not a shorter distance. */
-const ZTELE = 0.44, ZMIN = 0.11;
-function camFov(){ return FOVY*Math.max(0.13, Math.min(1, CAM.zoom/ZTELE)); }
-function camDistOf(z){ return fitDist()*Math.max(ZTELE, z); }
+/* The floor has to be an absolute DISTANCE, not a fraction of the framing
+   distance, and this was wrong for as long as it has existed. fitDist depends
+   on the window's shape — about 3.4 on a landscape desktop and about 7.0 on a
+   phone held upright, because a tall narrow window has to stand further off to
+   fit a disc inside its short axis. Flooring the zoom *fraction* at 0.44
+   therefore stopped the desktop eye at 1.5 radii and the phone eye at 3.1, so
+   the phone could never get close: the clouds, which fade on absolute distance
+   between 2.50 and 1.55, never even began to thin, and the detail patch never
+   engaged. Two complaints with one cause. Floor the distance instead and every
+   window shape arrives at the same place. */
+const DMIN = 1.50;                    // closest the eye may come; surface is at 1
+const FOVMIN = 5.5*Math.PI/180;       // and past that the lens narrows, to here
+const ZMIN = 0.02;                    // low enough that any window can reach FOVMIN
+function camDistOf(z){ return Math.max(DMIN, fitDist()*z); }
+/* Once the eye stops approaching, the lens narrows instead — by exactly the
+   factor the approach was denied, so magnification carries on smoothly through
+   the transition and lands on the same angle whatever the window shape. */
+function camFov(){
+  const want = fitDist()*CAM.zoom;
+  return Math.max(FOVMIN, FOVY*Math.min(1, want/Math.max(DMIN, want)));
+}
+/* How much of the visible field a pixel of drag is worth. At full zoom the
+   field is 42 degrees and at full telephoto 5.5, so a fixed radians-per-pixel
+   rate sweeps eight times more of what can actually be seen when zoomed in,
+   which is what makes it twitchy. Scaling by the lens keeps the ground moving
+   at a constant rate across the screen. */
+function orbitRate(){ return 0.0055*(camFov()/FOVY); }
 /* frame the planet so it never touches the edge of the window, whatever
    shape that window is */
 function fitDist(){
@@ -4051,6 +4079,45 @@ function setPaused(v){
 setPaused(false);
 ppBtn.addEventListener("click", e=>{ e.stopPropagation(); setPaused(!paused); });
 
+/* Hold the view. The surface turns once every two and a half minutes, so a
+   plant you have found drifts off the limb long before it has done anything
+   worth watching — which is the one thing this whole feature exists to let
+   you see.
+
+   The camera chases the ground; the world is not stopped. Stopping the spin
+   was the first attempt and it reads as the whole planet freezing, which is
+   both alarming and a lie — the point is to watch something grow, and a
+   halted world suggests nothing is growing. Everything keeps running: the
+   spin, the orbit, the seasons, the ecology. Only the eye moves to stay over
+   the same ground.
+
+   Exactly, too, rather than by advancing the yaw at the spin rate. A surface
+   point's velocity is POLE x p — the daily turn is about the tilted axis, not
+   about the world's vertical — so a yaw-only chase tracks the equator and
+   slides everywhere else. Rotating the eye about POLE itself tracks any
+   latitude, and dragging still works because it simply moves the eye that the
+   chase then carries on carrying.
+
+   And it hides the clouds, because at this range a deck of them is a shutter
+   over the very thing being watched. */
+const ICON_LOCK  ='<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.4" y="5.3" width="7.2" height="5.4" rx="1" fill="currentColor"/><path d="M4.1 5.3 V3.7 a1.9 1.9 0 0 1 3.8 0 V5.3" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>';
+const ICON_OPEN  ='<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.4" y="5.3" width="7.2" height="5.4" rx="1" fill="currentColor"/><path d="M4.1 5.3 V3.7 a1.9 1.9 0 0 1 3.8 -0.4" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>';
+const lockBtn = document.getElementById("lock");
+let viewLock = false;
+function setLock(v){
+  viewLock = v;
+  lockBtn.innerHTML = viewLock ? ICON_LOCK : ICON_OPEN;
+  lockBtn.classList.toggle("on", viewLock);
+  lockBtn.setAttribute("aria-pressed", viewLock ? "true" : "false");
+  lockBtn.title = viewLock ? "release the view" : "hold the view";
+  lockBtn.setAttribute("aria-label", lockBtn.title);
+}
+setLock(false);
+lockBtn.addEventListener("click", e=>{ e.stopPropagation(); setLock(!viewLock); });
+document.getElementById("info").addEventListener("click", e=>{
+  e.stopPropagation(); setCharts(true);
+});
+
 /* ── input ─────────────────────────────────────────────────────────────
    One pointer orbits, two pinch to zoom. Every transition between those
    states re-baselines the deltas, because reusing a stale baseline when a
@@ -4074,8 +4141,24 @@ function spread(){
   return Math.hypot(a[0].x-a[1].x, a[0].y-a[1].y);
 }
 function orbitBy(dx, dy){
-  CAM.yaw   -= dx*0.0055;
-  CAM.pitch  = clamp(CAM.pitch + dy*0.0055, -1.35, 1.35);
+  const r = orbitRate();
+  CAM.yaw   -= dx*r;
+  CAM.pitch  = clamp(CAM.pitch + dy*r, -1.35, 1.35);
+}
+/* Turn the eye about the planet's own axis by `a`, so it stays over the ground
+   it was over. Rodrigues about POLE, then back into the yaw and pitch the rest
+   of the camera is expressed in — the eye direction is
+   (cos p sin y, sin p, cos p cos y), so both fall straight out of it. */
+function trackSpin(a){
+  const cp=Math.cos(CAM.pitch), sp=Math.sin(CAM.pitch);
+  const vx=cp*Math.sin(CAM.yaw), vy=sp, vz=cp*Math.cos(CAM.yaw);
+  const kx=POLE[0], ky=POLE[1], kz=POLE[2];
+  const c=Math.cos(a), s=Math.sin(a), k=(kx*vx+ky*vy+kz*vz)*(1-c);
+  const rx=vx*c+(ky*vz-kz*vy)*s+kx*k;
+  const ry=vy*c+(kz*vx-kx*vz)*s+ky*k;
+  const rz=vz*c+(kx*vy-ky*vx)*s+kz*k;
+  CAM.yaw   = Math.atan2(rx, rz);
+  CAM.pitch = clamp(Math.asin(Math.max(-1,Math.min(1,ry))), -1.35, 1.35);
 }
 /* called whenever the number of pointers changes */
 function rebase(){
@@ -4333,7 +4416,9 @@ function resize(){
 }
 function relayout(){
   dpr=Math.min(devicePixelRatio||1,2); resize();
-  CAM.tDist = fitDist()*CAM.zoom;
+  /* through camDistOf, or a resize while zoomed in re-derives the distance
+     without the floor and puts the eye inside the planet */
+  CAM.tDist = camDistOf(CAM.zoom);
 }
 addEventListener("resize", relayout);
 addEventListener("orientationchange", ()=>setTimeout(relayout,220));
@@ -4357,8 +4442,12 @@ function frame(now){
   }
 
   if(!paused && !frozen){
-    spin += dt*(Math.PI*2/DAY);
-    cloudDrift += dt*(Math.PI*2/DAY)*0.06;
+    const dSpin = dt*(Math.PI*2/DAY);
+    spin += dSpin;
+    cloudDrift += dSpin*0.06;
+    /* carry the eye with the ground it is over, about the axis the ground
+       actually turns about */
+    if(viewLock) trackSpin(dSpin);
   }
   if(!paused) simAccum += dt;
   if(paused){ rateT0 = 0; }
@@ -4449,9 +4538,12 @@ function frame(now){
      camera is looking at, sized to what is genuinely on screen. Faded in
      rather than switched on, or the plants would sharpen at a threshold. */
   {
+    /* keyed off the lens now that the distance floors absolutely: once the eye
+       has stopped approaching, distance says nothing more about how close the
+       view really is, and only the narrowing lens still says it */
     const amt = PARAMS.detail<=0 ? 0
               : Math.max(1.0 - smoothstep(1.70, 2.55, CAM.dist),
-                         1.0 - smoothstep(0.55, 1.00, CAM.zoom/ZTELE));
+                         1.0 - smoothstep(0.55, 1.00, camFov()/FOVY));
     detailOn = amt;
     if(amt > 0.002){
       /* the sub-camera point, taken back into the planet's own frame */
@@ -4543,9 +4635,11 @@ function frame(now){
   gl.bindVertexArray(sphVAO);
   gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
 
-  /* clouds */
+  /* clouds — not while the view is held: at that range the deck is a shutter
+     over the one thing being watched */
   gl.depthMask(false); gl.enable(gl.BLEND);
   gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+  if(!viewLock){
   gl.useProgram(cloudProg);
   gl.uniform1i(cloudProg.u.uData,0);
   gl.uniformMatrix4fv(cloudProg.u.uVP,false,mVP);
@@ -4559,6 +4653,7 @@ function frame(now){
   gl.uniform3fv(cloudProg.u.uRingN, POLE);
   gl.uniform1f(cloudProg.u.uRingFade, ringFade);
   gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
+  }
 
   /* Ring. Same blend and culling the clouds just left set, and the depth the
      planet wrote already hides the far half. */
@@ -4729,9 +4824,6 @@ function setCharts(on){
   clearInterval(chartTimer);
   if(on){ drawCharts(); chartTimer=setInterval(drawCharts,1000); }
 }
-document.getElementById("chartlink").addEventListener("click",e=>{
-  e.stopPropagation(); setCharts(true);
-});
 document.getElementById("chartclose").addEventListener("click",e=>{
   e.stopPropagation(); setCharts(false);
 });

@@ -397,7 +397,7 @@ async function touch(browser) {
 
   // The metrics overlay must open, stay inside the viewport and close again.
   const charts = await page.evaluate(() => {
-    document.getElementById('chartlink').click();
+    document.getElementById('info').click();
     const on = document.getElementById('charts').classList.contains('on');
     const d = document.documentElement;
     const fits = d.scrollWidth === d.clientWidth && d.scrollHeight === d.clientHeight;
