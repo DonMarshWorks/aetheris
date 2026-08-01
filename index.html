@@ -4286,10 +4286,70 @@ function spread(){
   if(a.length < 2) return 0;
   return Math.hypot(a[0].x-a[1].x, a[0].y-a[1].y);
 }
+/* Take a yaw/pitch/roll into an eye direction and an up vector, and back. The
+   pair is the honest state of a camera; yaw and pitch are a chart on it with a
+   singularity at the poles, and everything below exists to avoid working in
+   that chart while dragging. */
+/* Never let the chart reach the pole exactly. At pitch = pi/2 the eye is
+   (0,1,0), atan2 of its horizontal parts is atan2(0,0), and the yaw is simply
+   gone — absorbed into roll, which is consistent but leaves the conversion
+   back ill-conditioned, and a drag there comes out perpendicular to itself.
+   A tenth of a degree short of the pole costs nothing anyone can see and keeps
+   every quantity well behaved. */
+const PITCH_MAX = Math.PI/2 - 0.02;
+const clampPitch = p => p>PITCH_MAX ? PITCH_MAX : (p<-PITCH_MAX ? -PITCH_MAX : p);
+function camFrame(yaw,pitch,roll,e,u){
+  const cp=Math.cos(pitch);
+  e[0]=cp*Math.sin(yaw); e[1]=Math.sin(pitch); e[2]=cp*Math.cos(yaw);
+  naturalUp(yaw,pitch,_n);
+  const cr=Math.cos(roll), sr=Math.sin(roll);
+  u[0]=_n[0]*cr+(e[1]*_n[2]-e[2]*_n[1])*sr;
+  u[1]=_n[1]*cr+(e[2]*_n[0]-e[0]*_n[2])*sr;
+  u[2]=_n[2]*cr+(e[0]*_n[1]-e[1]*_n[0])*sr;
+}
+function frameToRoll(e,u){
+  naturalUp(Math.atan2(e[0],e[2]),
+            Math.asin(Math.max(-1,Math.min(1,e[1]))), _n);
+  const dx=e[1]*_n[2]-e[2]*_n[1], dy=e[2]*_n[0]-e[0]*_n[2], dz=e[0]*_n[1]-e[1]*_n[0];
+  return Math.atan2(dx*u[0]+dy*u[1]+dz*u[2], _n[0]*u[0]+_n[1]*u[1]+_n[2]*u[2]);
+}
+
+/* Dragging rotates the camera about its OWN axes — sideways about its up,
+   vertically about its right — never about the world's vertical.
+ *
+ * Yaw and pitch have a singularity at the poles and it is not a rounding
+ * problem, it is the chart: turning about the world's vertical while standing
+ * over the pole spins the view instead of sliding it, and the sense inverts on
+ * crossing. Zoomed in on the ice that is the whole gesture going wrong. In the
+ * camera's own frame there is no pole anywhere — sideways is sideways at every
+ * latitude — so the fix is to leave the chart, rotate the frame, and convert
+ * back once at the end, letting roll absorb whatever the chart cannot hold. */
 function orbitBy(dx, dy){
   const r = orbitRate();
-  CAM.tYaw   -= dx*r;
-  CAM.tPitch  = clamp(CAM.tPitch + dy*r, -1.35, 1.35);
+  camFrame(CAM.tYaw, CAM.tPitch, CAM.roll, _e, _u);
+  /* screen right, from the frame rather than from the world */
+  let sx=_u[1]*_e[2]-_u[2]*_e[1], sy=_u[2]*_e[0]-_u[0]*_e[2], sz=_u[0]*_e[1]-_u[1]*_e[0];
+  const il=1/Math.max(1e-9,Math.hypot(sx,sy,sz)); sx*=il; sy*=il; sz*=il;
+  _n[0]=sx; _n[1]=sy; _n[2]=sz;
+
+  let a=-dx*r, c=Math.cos(a), s=Math.sin(a);
+  rotAbout(_e,_u,c,s,_e2);                      // about up: u is unchanged
+  _e[0]=_e2[0]; _e[1]=_e2[1]; _e[2]=_e2[2];
+
+  a=-dy*r; c=Math.cos(a); s=Math.sin(a);
+  rotAbout(_e,_n,c,s,_e2);                      // about right: carries up with it
+  rotAbout(_u,_n,c,s,_u2);
+
+  setYawTarget(Math.atan2(_e2[0], _e2[2]));
+  CAM.tPitch = clampPitch(Math.asin(Math.max(-1,Math.min(1,_e2[1]))));
+  CAM.roll   = frameToRoll(_e2,_u2);
+}
+/* atan2 comes back in -pi..pi, and the eased yaw would then take the long way
+   round every time a drag crossed the cut — a full spin of the planet for one
+   pixel of finger. Carry the target to the nearest turn instead. */
+function setYawTarget(y){
+  const k = Math.round((CAM.yaw - y)/(Math.PI*2));
+  CAM.tYaw = y + k*Math.PI*2;
 }
 /* Turn the eye about the planet's own axis by `a`, so it stays over the ground
    it was over. Rodrigues about POLE, then back into the yaw and pitch the rest
@@ -4327,8 +4387,10 @@ function trackSpin(a){
   rotAbout(_e,POLE,c,s,_e2);
   rotAbout(_u,POLE,c,s,_u2);
 
-  CAM.yaw   = Math.atan2(_e2[0], _e2[2]);
-  CAM.pitch = clamp(Math.asin(Math.max(-1,Math.min(1,_e2[1]))), -1.35, 1.35);
+  /* the eased pair must stay on the same turn as each other, or a chase that
+     crosses the cut sends the planet the long way round */
+  CAM.yaw  += ((Math.atan2(_e2[0],_e2[2])-CAM.yaw+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
+  CAM.pitch = clampPitch(Math.asin(Math.max(-1,Math.min(1,_e2[1]))));
   /* The target is carried by the same rotation rather than snapped to the new
      position. Assigning it here is what stopped dragging working while held:
      a drag moves the target and the very next frame overwrote it, so the eye
@@ -4338,8 +4400,8 @@ function trackSpin(a){
   { const tcp=Math.cos(CAM.tPitch);
     _e[0]=tcp*Math.sin(CAM.tYaw); _e[1]=Math.sin(CAM.tPitch); _e[2]=tcp*Math.cos(CAM.tYaw);
     rotAbout(_e,POLE,c,s,_u2);
-    CAM.tYaw   = Math.atan2(_u2[0], _u2[2]);
-    CAM.tPitch = clamp(Math.asin(Math.max(-1,Math.min(1,_u2[1]))), -1.35, 1.35);
+    setYawTarget(Math.atan2(_u2[0], _u2[2]));
+    CAM.tPitch = clampPitch(Math.asin(Math.max(-1,Math.min(1,_u2[1]))));
     rotAbout(_u,POLE,c,s,_u2); }
   /* whatever of the transported up is not explained by the new yaw and pitch
      is roll, and keeping it is what stops the drift accumulating */
@@ -5066,7 +5128,7 @@ window.__world = {
   setSpeed(v){ speed=v; },
   debug(v){ DEBUG=v|0; },
   freeze(v){ spin=v; frozen=true; },
-  setView(y,pi,z){ CAM.yaw=CAM.tYaw=y; CAM.pitch=CAM.tPitch=pi; CAM.roll=0;
+  setView(y,pi,z){ CAM.yaw=CAM.tYaw=y; CAM.pitch=CAM.tPitch=clampPitch(pi); CAM.roll=0;
                    if(z){CAM.zoom=CAM.tZoom=z;} CAM.dist=CAM.tDist=camDistOf(CAM.zoom); },
   sunDir(){ return [SUN[0],SUN[1],SUN[2]]; },
   cam(){ return CAM; },
