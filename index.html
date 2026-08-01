@@ -588,6 +588,21 @@ const PARAMS = {
                     // winning, flung across the planet, so a high rate is the
                     // current champion reseeding itself everywhere. Dropping
                     // 0.030 -> 0.006 took niche evenness from 0.56 to 0.86.
+  signal:  1,       // 1 = plants carry one number the whole body shares, so a
+                    // node can act on what is happening somewhere it cannot
+                    // see. Every node otherwise runs the same program on its
+                    // own inputs and is blind to the plant it belongs to.
+                    // A node adds its `emit` output to the body's signal and
+                    // reads the body's signal as an input; nothing else is
+                    // needed -- no messages, no traversal, no per-node store.
+                    // A node under stress evolving `emit <- -fit` makes an
+                    // alarm any other node can hear, and the listener is one
+                    // output-address mutation away from existing, which is
+                    // what decides whether a behaviour is reachable at all.
+  sigdecay: 0.90,   // how fast the signal fades per tick. Decay is what makes
+                    // it a signal rather than a running total; averaged over
+                    // the body as well, or a large plant would be loud purely
+                    // for being large and this would be a size counter.
   cullmin: 0,       // bud attempts a body must have had before either of the
                     // two rules below may judge it. 0 turns both off. Don's
                     // objection to the size cull, and it is right: a fragment
@@ -1145,10 +1160,10 @@ const ARITY  = [2,2,2,2,2,2,1,1,1,1,2,3];
    genome need not discover units. `one` is the constant every linear-GP needs
    to build an offset from. */
 const IN_ONE=0, IN_AGE=1, IN_DEPTH=2, IN_FIT=3, IN_ENV=4, IN_LAT=9,
-      IN_USED=10, IN_PCAP=11, IN_CROWD=12, IN_SLOT=13;
-const NIN = 14;
+      IN_USED=10, IN_PCAP=11, IN_CROWD=12, IN_SLOT=13, IN_SIG=14;
+const NIN = 15;
 const INNAME = ["one","age","depth","fit","sea","ice","desert","grass","forest",
-                "lat","used","pcap","crowd","slot"];
+                "lat","used","pcap","crowd","slot","signal"];
 
 const matBase = Math.max(1, PARAMS.mature);                // reference maturity
 const KIDMAX  = Math.max(1, Math.min(8, PARAMS.kids|0));   // children a node may hold
@@ -1178,10 +1193,10 @@ const NADDR = NIN + NK + PLEN;                             // the read space
 
    Between them: fan 0 drift 0 is a spike, fan 0 drift small is an arc, fan wide
    is a bush, and each is one number away from the others. */
-const NOUT  = 10;
-const O_CAP=0, O_SPREAD=1, O_PACE=2, O_VIG=3, O_ANGLE=4, O_AFF=5;
+const NOUT  = 11;
+const O_CAP=0, O_SPREAD=1, O_PACE=2, O_VIG=3, O_ANGLE=4, O_AFF=5, O_EMIT=10;
 const OUTNAME = ["capacity","spread","pace","vigour","angle",
-                 "affSea","affIce","affDesert","affGrass","affForest"];
+                 "affSea","affIce","affDesert","affGrass","affForest","emit"];
 
 /* One instruction is (op, a, b, c). Writing to slot *i* rather than to a named
    register is what makes the active path walkable backwards from the outputs,
@@ -1227,6 +1242,58 @@ function fillInputs(i){
      bias it, or ignore it, and nothing is imposed. */
   V[IN_SLOT ] = NKID[i] - (NCAP[i]-1)*0.5;
   V[IN_CROWD] = CCOUNT[NCC[i]]*(1/CROWD_REF) - 1;
+  /* The one thing a node can know about the rest of its own body. Every node
+     runs the same program on its own inputs and is otherwise blind to the
+     plant it belongs to; this is a single number any node may read and any
+     node may add to, which is enough for coordination without messages,
+     without a traversal, and without per-node storage.
+     A node under stress can evolve `emit <- -fit` and every other node in the
+     body then reads a value that rises when any part of the plant is
+     suffering — an alarm, and the listener is one output-address mutation
+     from existing too. That mattered: the evolved turn angle failed twice
+     because the first useful version was several mutations away, and worked
+     the moment it was one. Read as it stood at the start of the tick, never
+     as it is being accumulated, or the answer would depend on the order the
+     plants happened to be walked in — which is deliberately randomised — and
+     seed plus parameters would stop determining a world. */
+  V[IN_SIG  ] = BSIGR[PROOT[i]];
+}
+/* Charged where the program is actually run, so a node that is never evaluated
+   never speaks. */
+function emitInto(i){
+  if(PARAMS.signal<=0) return;
+  const r=PROOT[i];
+  if(r<0) return;
+  let e=Math.tanh(OUTV[O_EMIT]*0.25);
+  if(!isFinite(e)) e=0;
+  BSIG[r]+=e; BSIGN[r]++;
+  if(SIGSTAMP[r]!==ptick){ SIGSTAMP[r]=ptick; if(sigTouchN<PMAX) SIGTOUCH[sigTouchN++]=r; }
+}
+/* End of tick: fold what was said into what may be heard next tick. Bodies
+   that said nothing are not walked at all -- their decay is applied from the
+   gap when they next speak, which costs one power per speaking body per tick
+   instead of a pass over every body. */
+/* mean magnitude of the signal across bodies that have one, so silence and
+   loud-but-balanced can be told apart */
+function sigLevelOf(){
+  let s=0, n=0;
+  for(let r=0;r<nodeHigh;r++){
+    if(PROOT[r]!==r || PSIZE[r]===0) continue;
+    s+=Math.abs(BSIGR[r]); n++;
+  }
+  return n ? s/n : 0;
+}
+function settleSignals(){
+  const k=Math.max(0,Math.min(0.999,PARAMS.sigdecay));
+  for(let n=0;n<sigTouchN;n++){
+    const r=SIGTOUCH[n];
+    const gap=ptick-SIGT[r]; SIGT[r]=ptick;
+    const d = gap>=64 ? 0 : Math.pow(k,gap);
+    const mean = BSIGN[r] ? BSIG[r]/BSIGN[r] : 0;
+    BSIGR[r] = BSIGR[r]*d*k + mean*(1-k);
+    BSIG[r]=0; BSIGN[r]=0;
+  }
+  sigTouchN=0;
 }
 
 function runProgram(i){
@@ -1274,14 +1341,26 @@ function runProgram(i){
    four output addresses. Forward references contribute nothing, so they are not
    followed. */
 const AMARK = new Uint8Array(PLEN), ASTK = new Int32Array(PLEN+4);
+/* Also answers whether this genome is wired to the body signal at all, which
+   is the counter the whole mechanism has to be judged by: a shared register
+   that nothing reads is not coordination, it is an unused array. `listens` is
+   set if the signal reaches any live output; `speaks` if the emit output is
+   driven by anything that varies rather than by a constant or an immediate. */
+let actListens=false, actSpeaks=false;
 function activeCount(i){
   AMARK.fill(0);
+  actListens=false; actSpeaks=false;
   let sn=0, n=0;
   const base=NIN+NK;
   for(let j=0;j<NOUT;j++){
     const a=POUT[i*NOUT+j];
+    if(a===IN_SIG) actListens=true;
     if(a>=base && a<NADDR) ASTK[sn++]=a-base;
   }
+  { const a=POUT[i*NOUT+O_EMIT];
+    /* an emit wired to `one` or to an evolved constant says the same thing for
+       ever, which is silence with extra steps */
+    if(!(a===IN_ONE || (a>=NIN && a<NIN+NK))) actSpeaks=true; }
   while(sn>0){
     const j=ASTK[--sn];
     if(AMARK[j]) continue;
@@ -1289,6 +1368,7 @@ function activeCount(i){
     const q=(i*PLEN+j)*4, ar=ARITY[PROG[q]];
     for(let t=1;t<=ar;t++){
       const a=PROG[q+t];
+      if(a===IN_SIG) actListens=true;
       if(a>=base && a<NADDR){ const s=a-base; if(s<j && !AMARK[s]) ASTK[sn++]=s; }
     }
   }
@@ -2400,6 +2480,18 @@ const BTOP=new Uint8Array(PMAX); const SIZES=[];   // the largest plants, ringed
    effort rather than a lifetime tally — a plant that was boxed in long ago and
    has since broken out should not be answering for it. */
 const BTRY=new Int32Array(PMAX), BSELF=new Int32Array(PMAX);
+/* The body signal, in two halves. Nodes accumulate into BSIG during a tick and
+   read BSIGR, which is what BSIG settled to at the end of the last one. The
+   split is not tidiness: plants are walked in a randomised order every tick on
+   purpose, so a register that were read while it was being written would make
+   the result depend on that order, and seed plus parameters would stop
+   determining a world completely — which this piece treats as a feature.
+   Averaged over the body rather than summed, or a big plant would shout purely
+   by having more nodes and the signal would be a size counter. */
+const BSIG=new Float32Array(PMAX), BSIGR=new Float32Array(PMAX);
+const BSIGN=new Int32Array(PMAX), SIGT=new Int32Array(PMAX);
+const SIGSTAMP=new Int32Array(PMAX).fill(-1), SIGTOUCH=new Int32Array(PMAX);
+let sigTouchN=0;
 const BX=new Float32Array(PMAX), BY=new Float32Array(PMAX), BZ=new Float32Array(PMAX);
 
 /* ---- history, so stasis can be seen rather than guessed at ----
@@ -2633,6 +2725,10 @@ function plantsStep(){
       frontDraw++;
       if(ptick-NBORN[ni] < NMAT[ni]){ frontYoung++; continue; }
       runProgram(ni);
+      /* charged here rather than at every evaluation: this is the pass that
+         touches a fair sample of a body's nodes every tick, so it is where a
+         plant's voice is actually taken */
+      emitInto(ni);
       const vg = Math.tanh(OUTV[O_VIG]*0.25);
       const b = PROOT[ni], s = vg - BVIG[b];
       BVIG[b] += s*vmem;
@@ -2678,6 +2774,7 @@ function plantsStep(){
       if(tries>0 && ++NTRY[best] >= tries && stillThere) retire(bestFi);
     }
   }
+  settleSignals();
 }
 
 function plantsSeed(){
@@ -2830,9 +2927,15 @@ function plantStats(reset){
   /* how much of a program actually reaches an output. One means nothing is
      being computed, however long the list is */
   let act=0, actN=0, actMin=1e9, actMax=0, badGene=0, badK=0;
+  let listen=0, speak=0, both=0;
   for(let i=0;i<nodeHigh;i+=53){
     if(NLIVE[i]!==1) continue;
     const a=activeCount(i); act+=a; actN++;
+    /* the counter the body signal has to be judged by: a shared register
+       nothing reads is not coordination, it is an unused array */
+    if(actListens) listen++;
+    if(actSpeaks) speak++;
+    if(actListens && actSpeaks) both++;
     if(a<actMin) actMin=a; if(a>actMax) actMax=a;
     for(let g=0;g<G;g++) if(!isFinite(GENE[i*G+g])) badGene++;
     for(let g=0;g<NK;g++) if(!isFinite(KONST[i*NK+g])) badK++;
@@ -2871,6 +2974,16 @@ function plantStats(reset){
     capBirthShare:Array.from(CAPHIST.subarray(1)).map(v=>+(v/Math.max(1,outN)).toFixed(3)),
     active:{ mean:+(act/Math.max(1,actN)).toFixed(1),
              min:actN?actMin:0, max:actMax, of:PLEN, sampled:actN },
+    /* Is the body signal being used, and is use climbing? `listens` is the
+       share of genomes in which the signal reaches a live output, `speaks` the
+       share whose emit is driven by something that varies, and `both` the
+       share doing each — which is the one that means a lineage has actually
+       wired a sense to a voice. `level` is how loud the world is; if it is
+       zero, nothing is being said whatever the wiring says. */
+    signal:{ listens:+(listen/Math.max(1,actN)).toFixed(3),
+             speaks:+(speak/Math.max(1,actN)).toFixed(3),
+             both:+(both/Math.max(1,actN)).toFixed(3),
+             level:+(sigLevelOf()).toFixed(4), sampled:actN },
     inputs:ins,
     body:withinBody(),
     /* where the growth loop's draws went, which is the open question about
@@ -4057,7 +4170,12 @@ function fitDist(){
   const hHalf = Math.atan(Math.tan(vHalf)*asp);
   return 1.0/Math.sin(Math.min(vHalf,hHalf)*0.82);
 }
-const CAM = {yaw:1.42, pitch:0.26, dist:3.4, tDist:3.4, zoom:1.0};
+/* yaw and pitch are eased toward their targets exactly as the distance already
+   is. Set directly, every tremor of a finger lands on the screen unfiltered,
+   and zoomed in that is the whole complaint: the lens magnifies the shake
+   along with the ground. */
+const CAM = {yaw:1.42, pitch:0.26, tYaw:1.42, tPitch:0.26, roll:0,
+             dist:3.4, tDist:3.4, zoom:1.0, tZoom:1.0};
 let dragging=false, lastX=0, lastY=0;
 let paused=false, speed=1;
 const hud=document.getElementById("hud");
@@ -4142,23 +4260,54 @@ function spread(){
 }
 function orbitBy(dx, dy){
   const r = orbitRate();
-  CAM.yaw   -= dx*r;
-  CAM.pitch  = clamp(CAM.pitch + dy*r, -1.35, 1.35);
+  CAM.tYaw   -= dx*r;
+  CAM.tPitch  = clamp(CAM.tPitch + dy*r, -1.35, 1.35);
 }
 /* Turn the eye about the planet's own axis by `a`, so it stays over the ground
    it was over. Rodrigues about POLE, then back into the yaw and pitch the rest
    of the camera is expressed in — the eye direction is
    (cos p sin y, sin p, cos p cos y), so both fall straight out of it. */
+/* the screen-up direction implied by a yaw and pitch, before any roll: the way
+   the eye moves as pitch increases */
+function naturalUp(y,p,o){
+  const sp=Math.sin(p), cp=Math.cos(p);
+  o[0]=-sp*Math.sin(y); o[1]=cp; o[2]=-sp*Math.cos(y);
+}
+function rotAbout(v,k,c,s,o){
+  const d=(k[0]*v[0]+k[1]*v[1]+k[2]*v[2])*(1-c);
+  o[0]=v[0]*c+(k[1]*v[2]-k[2]*v[1])*s+k[0]*d;
+  o[1]=v[1]*c+(k[2]*v[0]-k[0]*v[2])*s+k[1]*d;
+  o[2]=v[2]*c+(k[0]*v[1]-k[1]*v[0])*s+k[2]*d;
+}
+const _e=[0,0,0], _u=[0,0,0], _e2=[0,0,0], _u2=[0,0,0], _n=[0,0,0];
 function trackSpin(a){
   const cp=Math.cos(CAM.pitch), sp=Math.sin(CAM.pitch);
-  const vx=cp*Math.sin(CAM.yaw), vy=sp, vz=cp*Math.cos(CAM.yaw);
-  const kx=POLE[0], ky=POLE[1], kz=POLE[2];
-  const c=Math.cos(a), s=Math.sin(a), k=(kx*vx+ky*vy+kz*vz)*(1-c);
-  const rx=vx*c+(ky*vz-kz*vy)*s+kx*k;
-  const ry=vy*c+(kz*vx-kx*vz)*s+ky*k;
-  const rz=vz*c+(kx*vy-ky*vx)*s+kz*k;
-  CAM.yaw   = Math.atan2(rx, rz);
-  CAM.pitch = clamp(Math.asin(Math.max(-1,Math.min(1,ry))), -1.35, 1.35);
+  _e[0]=cp*Math.sin(CAM.yaw); _e[1]=sp; _e[2]=cp*Math.cos(CAM.yaw);
+  /* Carry the WHOLE frame, not just where the eye points. Rotating only the
+     position tracks the ground but lets it turn underneath, because the up
+     vector stays pinned to the world's vertical while the ground turns about
+     the tilted axis — which reads as the view slowly spinning. Transporting
+     the up vector by the same rotation makes the view rigid against the
+     surface, which is what holding a view means. */
+  naturalUp(CAM.yaw, CAM.pitch, _n);
+  const cr=Math.cos(CAM.roll), sr=Math.sin(CAM.roll);
+  _u[0]=_n[0]*cr+(_e[1]*_n[2]-_e[2]*_n[1])*sr;
+  _u[1]=_n[1]*cr+(_e[2]*_n[0]-_e[0]*_n[2])*sr;
+  _u[2]=_n[2]*cr+(_e[0]*_n[1]-_e[1]*_n[0])*sr;
+
+  const c=Math.cos(a), s=Math.sin(a);
+  rotAbout(_e,POLE,c,s,_e2);
+  rotAbout(_u,POLE,c,s,_u2);
+
+  CAM.yaw   = Math.atan2(_e2[0], _e2[2]);
+  CAM.pitch = clamp(Math.asin(Math.max(-1,Math.min(1,_e2[1]))), -1.35, 1.35);
+  CAM.tYaw = CAM.yaw; CAM.tPitch = CAM.pitch;
+  /* whatever of the transported up is not explained by the new yaw and pitch
+     is roll, and keeping it is what stops the drift accumulating */
+  naturalUp(CAM.yaw, CAM.pitch, _n);
+  const dx=_e2[1]*_n[2]-_e2[2]*_n[1], dy=_e2[2]*_n[0]-_e2[0]*_n[2], dz=_e2[0]*_n[1]-_e2[1]*_n[0];
+  CAM.roll = Math.atan2(dx*_u2[0]+dy*_u2[1]+dz*_u2[2],
+                        _n[0]*_u2[0]+_n[1]*_u2[1]+_n[2]*_u2[2]);
 }
 /* called whenever the number of pointers changes */
 function rebase(){
@@ -4169,7 +4318,7 @@ function rebase(){
   } else if(ptrs.size >= 2){
     mode = 2;
     pinchSpread = spread() || 1;
-    pinchZoom0  = CAM.zoom;
+    pinchZoom0  = CAM.tZoom;
     const c = centroid(); cx0 = c.x; cy0 = c.y;
   } else {
     mode = 0;
@@ -4201,9 +4350,15 @@ addEventListener("pointermove",e=>{
   } else if(mode === 2){
     const d = spread();
     if(d > 12 && pinchSpread > 12){
-      /* fingers apart -> closer to the planet -> smaller camera distance */
-      CAM.zoom  = clamp(pinchZoom0*(pinchSpread/d), ZMIN, 2.6);
-      CAM.tDist = camDistOf(CAM.zoom);
+      /* fingers apart -> closer to the planet -> smaller camera distance.
+         The gain falls as the gesture starts deeper: a plain ratio is
+         scale-free, which is correct in principle and too eager in practice
+         once a hand's whole travel is worth a factor of five and every bit of
+         it is magnified. Taken from the zoom the gesture STARTED at, so it is
+         constant across the gesture and the pinch cannot fight itself. */
+      const gain = 0.5 + 0.5*Math.min(1, pinchZoom0/0.44);
+      CAM.tZoom = clamp(pinchZoom0*Math.pow(pinchSpread/d, gain), ZMIN, 2.6);
+      CAM.tDist = camDistOf(CAM.tZoom);
     }
     const c = centroid();
     orbitBy(c.x-cx0, c.y-cy0);
@@ -4259,8 +4414,9 @@ document.addEventListener("visibilitychange", ()=>{ if(document.hidden) clearPoi
 
 canvas.addEventListener("wheel",e=>{
   e.preventDefault();
-  CAM.zoom = clamp(CAM.zoom*Math.exp(e.deltaY*0.0011), ZMIN, 2.6);
-  CAM.tDist = camDistOf(CAM.zoom);
+  const gain = 0.5 + 0.5*Math.min(1, CAM.tZoom/0.44);
+  CAM.tZoom = clamp(CAM.tZoom*Math.exp(e.deltaY*0.0011*gain), ZMIN, 2.6);
+  CAM.tDist = camDistOf(CAM.tZoom);
 },{passive:false});
 
 /* Belt and braces against the browser zooming the whole page: trackpad
@@ -4418,7 +4574,7 @@ function relayout(){
   dpr=Math.min(devicePixelRatio||1,2); resize();
   /* through camDistOf, or a resize while zoomed in re-derives the distance
      without the floor and puts the eye inside the planet */
-  CAM.tDist = camDistOf(CAM.zoom);
+  CAM.tDist = camDistOf(CAM.tZoom);
 }
 addEventListener("resize", relayout);
 addEventListener("orientationchange", ()=>setTimeout(relayout,220));
@@ -4505,8 +4661,18 @@ function frame(now){
 
   /* ---- camera ---- */
   CAM.dist += (CAM.tDist-CAM.dist)*Math.min(1,dt*3.0);
-  /* a very slow breath, so the framing never feels locked off */
-  const bob = 0.028*Math.sin(now*0.000012);
+  CAM.zoom += (CAM.tZoom-CAM.zoom)*Math.min(1,dt*6.0);
+  /* Angles ease too, and faster than the distance so a drag still feels
+     attached to the finger. This is what takes the twitch out zoomed in:
+     the gain was already scaled by the lens, but a magnified view magnifies
+     hand tremor as well, and only smoothing answers that. */
+  const ang = Math.min(1, dt*9.0);
+  CAM.yaw   += (CAM.tYaw-CAM.yaw)*ang;
+  CAM.pitch += (CAM.tPitch-CAM.pitch)*ang;
+  /* a very slow breath, so the framing never feels locked off — but it is
+     0.028 radians, which is a third of the field at full telephoto, so it
+     fades out with the lens along with everything else */
+  const bob = 0.028*Math.sin(now*0.000012)*(camFov()/FOVY);
   const py=CAM.pitch+bob;
   const eye=[Math.cos(py)*Math.sin(CAM.yaw)*CAM.dist,
              Math.sin(py)*CAM.dist,
@@ -4514,7 +4680,15 @@ function frame(now){
   const W=canvas.width, Hh=canvas.height;
   const fovNow = camFov();
   perspective(mProj, fovNow, W/Hh, 0.35, 30);
-  lookAt(mView, eye,[0,0,0],[0,1,0]);
+  /* up carries the roll that holding the view accumulates, or the ground turns
+     underneath a held view */
+  naturalUp(CAM.yaw, py, _n);
+  { const ex=eye[0]/CAM.dist, ey=eye[1]/CAM.dist, ez=eye[2]/CAM.dist;
+    const cr=Math.cos(CAM.roll), sr=Math.sin(CAM.roll);
+    _u[0]=_n[0]*cr+(ey*_n[2]-ez*_n[1])*sr;
+    _u[1]=_n[1]*cr+(ez*_n[0]-ex*_n[2])*sr;
+    _u[2]=_n[2]*cr+(ex*_n[1]-ey*_n[0])*sr; }
+  lookAt(mView, eye,[0,0,0],_u);
   mul(mVP,mProj,mView); invert(mInvVP,mVP);
 
   /* planet orientation: a fixed tilted axis, spinning */
@@ -4853,7 +5027,8 @@ window.__world = {
   setSpeed(v){ speed=v; },
   debug(v){ DEBUG=v|0; },
   freeze(v){ spin=v; frozen=true; },
-  setView(y,pi,z){ CAM.yaw=y; CAM.pitch=pi; if(z){CAM.zoom=z;} CAM.tDist=camDistOf(CAM.zoom); },
+  setView(y,pi,z){ CAM.yaw=CAM.tYaw=y; CAM.pitch=CAM.tPitch=pi; CAM.roll=0;
+                   if(z){CAM.zoom=CAM.tZoom=z;} CAM.dist=CAM.tDist=camDistOf(CAM.zoom); },
   sunDir(){ return [SUN[0],SUN[1],SUN[2]]; },
   cam(){ return CAM; },
   pointerCount(){ return ptrs.size; },

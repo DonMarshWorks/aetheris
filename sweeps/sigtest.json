@@ -1,0 +1,8 @@
+{ "ticks": 45000, "checkpoints": [5000,15000,30000,45000], "defaultEcorate": 16,
+  "seeds": [7,31337,424242,999],
+  "configs": [
+    { "tag": "sig-on",  "params": {} },
+    { "tag": "sig-off", "params": { "signal": 0 } },
+    { "tag": "sig-slow","params": { "sigdecay": 0.98 } },
+    { "tag": "sig-fast","params": { "sigdecay": 0.60 } }
+  ] }
