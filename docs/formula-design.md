@@ -346,6 +346,12 @@ else changed underneath them. Neither announced it.
   the genome chooses, a retry is a *different* angle, so cutting a node off after
   one refusal punishes precisely the experiment worth making. At 8: evenness
   0.56 → 0.78, plants of two minds 0.59 → 0.84.
+
+  **Re-measured in the joint search, and 8 survives — but only past 20,000
+  ticks.** At 20,000 a 2⁶ factorial made `tries = 2` look better on the
+  composite, on within-body variety and on body size. At 45,000 it reverses and
+  8 wins by 0.026. This constant is fine; the short measurement was not. It is
+  the same mistake as the one below, one horizon further out.
 - **`settle`, the grace before the fragment cull.** 400 was set when growth was
   efficient. Free angles waste far more buds, no founder could reach the threshold
   in time, and the planet went sterile. It took two isolation runs to find,
@@ -382,6 +388,22 @@ qualify it badly, and both matter:
 
 **Nine thousand ticks is not long enough to judge an ecology.** It said modulation
 was a triumph; forty thousand may say it is the disease.
+
+**It did not. Modulation is exonerated, and it is load-bearing.** Measured in
+the joint search at 45,000 ticks over five seeds, with `affmod` at 1.0, 1.3 and
+2.2, the largest lineage's share is flat — 0.147, 0.140, 0.159 — so the
+runaway is not a function of how far the formula may swing an affinity.
+Turning modulation off altogether (`affmod = 1.0`) collapses specialisation
+0.61 → 0.32, drops mean fit 2.05 → 1.45 and loses one of the twenty strategies.
+So it is not merely harmless, it is doing the work it was built for.
+
+What the 44,600-tick collapse actually was is still open, but it is not this.
+A candidate worth checking before anything else: with the ocean uniformly rich
+the sea becomes a single undivided niche one lineage can hold, and that
+condition alone produces evenness 0.42 against 0.92 and a largest lineage of
+0.58 — which is close to the 0.63 that run reached. Whether that run in fact
+had `marine` off has not been established; it is a hypothesis with a matching
+signature, not a diagnosis.
 
 ## Open questions
 

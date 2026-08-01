@@ -532,6 +532,174 @@ before believing it**, which is the same lesson the climate controller learned.
   reads as a plate or a filigree, how many nodes the planet holds, and whether the
   320×160 climate grid is fine or coarse relative to a body. Stage 0 answers it.
 
+## The joint search — twelve dials at once
+
+Everything above was found by moving one dial. This section is what a search
+over combinations found, and three of its results contradict things recorded
+earlier in this document. The instruction that produced it was Don's: one at a
+time gives wrong answers here, and there is a measured example — ocean nutrient
+limitation was judged harmful twice in isolation and turned out to matter
+enormously in company.
+
+**Method, in four stages.** A randomised balanced screen of 56 configurations
+over twelve factors, three seeds, 15,000 ecology ticks — every factor moving at
+once, levels dealt out equally and shuffled independently, so main effects come
+out near-orthogonal and interactions are covered at random rather than aliased
+to a fixed pattern. Then two complete 2⁶ factorials, 64 cells each, where an
+effect is a clean contrast and nothing is aliased. Then confirmation of the
+finalists at 45,000 ticks and five seeds, a decomposition at eight seeds, and
+long runs at 135,000. Roughly 700 headless runs. `tools/sweep.js`,
+`tools/score.js`, `tools/analyse.js`, `tools/factorial.js`.
+
+Three harness rules, each of which has already voided a round of measurement on
+this project if broken: count **ecology** ticks and not climate updates, since
+configurations with different `ecorate` reach a given number of generations at
+different numbers of climate updates; retire the frame loop before measuring,
+or it advances the same world by an amount no result records; and difference
+the cumulative counters between readings, because `meanFit` is a lifetime
+average and a single reading at the end of a long run is mostly a report on the
+beginning of it.
+
+### What won
+
+Three parameters, all pushing the same way, and they are worth more than the
+other nine together. Against the previous defaults at 45,000 ticks:
+
+| | default | now | |
+|---|---|---|---|
+| `spore` | 0.006 | **0.001** | chance a bud is thrown clear to found a body |
+| `minfrag` | 45 | **65** | nodes below which a severed piece is not viable |
+| `settle` | 2000 | **1000** | grace before the fragment cull applies |
+
+Mean plant **26.7 → 95.3 nodes**, plants holding more than one kind of node
+**0.61 → 0.86**, largest lineage share 0.175 → 0.145, evenness 0.959 → 0.960,
+mean fit 1.92 → 2.03. Sixteen seeds, all sixteen clearing every gate, all
+twenty strategies occupied in every one. Nothing measured got worse.
+
+Decomposed at eight seeds, `spore` alone is over half of it: dropping only the
+spore rate takes the composite 0.702 → 0.758, only `minfrag` gives 0.720, only
+`settle` 0.753, and all three 0.803.
+
+**And an elaborate optimum lost to a simple one.** A ten-parameter
+configuration tuned on the 2⁶ factorials scored 0.790 against these three
+changes' 0.820. It was fitted to the 20,000-tick horizon rather than to the
+ecology — see `tries` below.
+
+### What actually interacts
+
+**`marine`, `fitcap` and `rare` are substitutes, not complements.** This
+contradicts the note under *Ideas not yet decided* below, which records the
+three as jointly "the whole cure". Mean niche evenness over the eight corners:
+
+| marine | fitcap | rare | evenness | mean fit | mean plant |
+|---|---|---|---|---|---|
+| 0 | 0 | 0 | 0.419 | 3.68 | 72.3 |
+| 0 | 2.0 | 0 | 0.608 | 3.23 | 58.8 |
+| 0 | 0 | 0.9 | 0.511 | 3.56 | 64.2 |
+| 0 | 2.0 | 0.9 | 0.657 | 3.16 | 57.5 |
+| **1.0** | 0 | 0 | **0.919** | 1.80 | 40.8 |
+| 1.0 | 2.0 | 0.9 | 0.921 | 1.75 | 39.9 |
+
+`marine` alone buys +0.500. Adding both others to it buys a further **+0.002**.
+The three separately sum to +0.781 and jointly deliver +0.502. In the factorial
+this shows as `fitcap`'s effect on evenness being +0.168 with marine off and
+−0.000 with it on, and `rare`'s +0.070 and +0.003 — and `fitcap × rare` is
+negative too, so even those two partly duplicate each other. The earlier verdict
+that marine is harmful alone was almost certainly taken through the harness that
+ran the ecology fifteen times too slowly, the same one already blamed for three
+wrong readings on `rare`.
+
+The default `marine = 1.00` is therefore right and stays. What is wrong is the
+reason given for it. Its cost is real and large: it halves mean fit and cuts
+mean plant size by a third.
+
+### What surprised
+
+**A short horizon reverses `tries`.** At 20,000 ticks `tries = 2` beat `8` on
+the composite, on within-body variety and on body size. At 45,000 it reverses
+and `8` wins by 0.026. `formula-design.md` records 8 as the measured optimum and
+it is right; the 20,000-tick measurement is the misleading one. Nine thousand
+ticks called affinity modulation a triumph, twenty thousand calls `tries = 2` an
+improvement, and both are the same mistake.
+
+**Affinity modulation is exonerated and load-bearing.** The suspicion recorded
+in `formula-design.md` that it feeds a monoculture does not reproduce at 45,000
+ticks: dominance is flat across `affmod` 1.0 / 1.3 / 2.2 (0.853 / 0.860 /
+0.841). Turning it off collapses specialisation 0.61 → 0.32, drops mean fit to
+1.45, and loses a strategy. Leave it on.
+
+**`ecorate` never bought anything by freezing, so the guard cost nothing.**
+Holding ecology ticks constant makes simulated climate seconds run as
+1/`ecorate`, so raising it buys a calmer planet — the degenerate win the search
+had to refuse. It never materialised: at 45,000 ticks `ecorate` 12, 16, 24 and
+32 all sit inside the noise across a 2.7× range of climate exposure. `ecorate`
+can be chosen on frame-rate grounds.
+
+**A frozen planet is still the most diverse, now measured properly.** At
+135,000 ticks, across a 40× range of climate exposure — 0, 9.8, 19.7 and 39.4
+simulated hours — evenness runs 0.985, 0.961, 0.975, 0.955 and mean fit 2.84,
+2.20, 2.10, 1.86. More weather costs a little diversity and a lot of fit. This
+confirms the `ecorate` note and contradicts this document's opening thesis: a
+wandering climate is not what holds diversity up here. The niche structure and
+the fit ceiling are. Note the frozen arm stops *everything* temporal, seasons
+included — measured, the ice caps swing 6.9–10.3% at ×100 and are pinned to
+7.38% frozen — so it is not a clean control for secular drift alone, and
+separating seasons from drift would need a new dial.
+
+### The spore, and what removing it does not do
+
+`spore` is monotone downward all the way to zero, which is exactly the shape
+that misleads at a boundary, so it was measured at the boundary. At 45,000
+ticks: 0.002 → 0.808, 0.001 → 0.817, 0.0005 → 0.827, **0 → 0.837**. At 135,000,
+zero still leads 0.841 to 0.800, with evenness **rising** 0.957 → 0.972 and all
+twenty strategies occupied.
+
+So "the spore is therefore not optional", recorded above under heartwood, is too
+strong. That was written when heartwood had stopped fragmentation *as well*.
+Wood rotting through still severs bodies into independent plants, and that is
+strictly **local** — it founds new plants without moving anybody's genome across
+the world. Remove only dispersal and reproduction is fine; 910 bodies persist
+at 135,000 ticks with no spores at all.
+
+It is set to 0.001 rather than 0 for a reason the score cannot see: an arrival
+is meant to read as an event, and at zero there are no arrivals, only bodies
+breaking apart where they already stand. 0.001 is inside a seed's noise of zero.
+
+**Spores as experiments.** Don's proposal, built as `sporemut`, `sporefit` and
+`sporeviable`. Mutating a spore harder than an ordinary bifurcation does not
+help at a low rate (0.803 at ×8 against 0.814 at ×1) but clearly helps at the
+old default rate of 0.006: 0.750 → 0.771, and 0.780 with the landing filter
+relaxed too. So the intuition is right — heavy mutation offsets the homogenising
+cost of dispersal — but throwing fewer spores is a bigger lever and the two do
+not stack. Restricting spores to fit nodes also helps (0.830 against 0.814), but
+its mean plant size of 110 is almost exactly what plain `spore = 0.0005` gives
+(109), so the evidence is equally consistent with it helping because it throws
+**fewer** spores rather than better ones. Separating those needs matched
+realised spore counts and has not been done.
+
+### What the score got wrong
+
+Recorded because the scoring was as much under test as the parameters.
+
+- **The still-in-motion term measured the wrong thing and was most of the
+  noise.** It was added to stop a search winning by becalming the climate.
+  Strategy turnover measured *higher* at `ecorate` 32 than at 8 — the opposite —
+  because a world that sees less weather keeps its lineages fitter and evolving
+  faster. Meanwhile its seed sd was 0.208 against no other component above
+  0.060, so at 0.20 weight it carried **84.5%** of the composite's variance.
+  Cut to 0.08; the score's seed sd fell 0.047 → 0.011 and the ranking was
+  unchanged at 0.20, 0.05 and 0.00. The freeze it was meant to catch is
+  arithmetic, not statistical, and is bounded by the search instead.
+- **Mean fit saturates for about a third of runs.** Kept deliberately — fit is a
+  sufficiency check, and rewarding it without limit rewards exactly the runaway
+  `fitcap` exists to prevent — but it means the score cannot rank the top of
+  that range at all.
+- **The score cannot see the thing that matters most.** The single most
+  striking planet measured, `marine = 0`, has plants of 130 nodes and the
+  clearest branching in any image, and it scores 0.603 because it is a sea
+  monoculture with evenness 0.361 and still degenerating. High score and worth
+  looking at are not the same axis, and only one of them is measurable here.
+
 ## Ideas not yet decided
 
 - ~~**The ocean is two-thirds of the arena and currently inert.** Including sea in

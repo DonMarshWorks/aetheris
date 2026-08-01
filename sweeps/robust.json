@@ -1,0 +1,4 @@
+{ "note": "the new defaults at sixteen seeds. minfrag 65 with settle 1000 is the extinction cliff and a screen killed a planet on that pair, so the shipped combination is checked wider than anything else here.",
+  "ticks": 45000, "checkpoints": [15000, 30000, 45000], "defaultEcorate": 16,
+  "seeds": [7,31337,424242,999,88,5,1234,77777,101,222,3003,40404,555,66,7007,80808],
+  "configs": [ { "tag": "newdefaults", "params": {} } ] }

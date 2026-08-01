@@ -502,7 +502,7 @@ const PARAMS = {
                     // chance — and it takes the sharp edge off a cull that
                     // was all-or-nothing at a fixed age, which is what made
                     // raising `minfrag` an extinction cliff.
-  minfrag: 45,      // a severed piece smaller than this is not viable. Wood
+  minfrag: 65,      // a severed piece smaller than this is not viable. Wood
                     // rotting through chops plants up at a fixed rate, so
                     // without a real floor the world silts up with two- and
                     // three-node scraps that count as plants, drown every
@@ -541,7 +541,35 @@ const PARAMS = {
   ecobudget: 4.0,   // milliseconds per frame spent paying that debt
   sweep:   40,      // ticks between one pass of connected-component labelling
   perbody: 0,       // 1 = at most one bud per body per turn, 0 = by frontier
-  spore:   0.006,   // chance a bud is thrown clear instead, founding a body.
+  spore:   0.001,   // chance a bud is thrown clear instead, founding a body.
+                    // Was 0.030, then 0.006, now 0.001, and every step down
+                    // has been an improvement — the effect is monotone all the
+                    // way to zero, which is the shape that misleads at a
+                    // boundary and so was measured AT the boundary. In the
+                    // tuned context, at 45,000 ticks over eight seeds:
+                    // 0.002 -> 0.808, 0.001 -> 0.817, 0.0005 -> 0.827,
+                    // 0 -> 0.837, and at 135,000 ticks zero still leads,
+                    // 0.841 against 0.800, with evenness RISING 0.957 -> 0.972
+                    // and all twenty strategies occupied.
+                    //
+                    // So why not zero. Two reasons, one measured and one not.
+                    // The measured one is that 0.001 is inside a seed's worth
+                    // of noise of zero. The other is that a colonisation
+                    // nobody ever sees is a thing the piece has lost: an
+                    // arrival is meant to read as an event, and at zero there
+                    // are no arrivals at all, only bodies breaking apart where
+                    // they already stand.
+                    //
+                    // The reason lower keeps winning is the one already known:
+                    // a spore is a copy of whatever is winning, flung across
+                    // the planet, so dispersal is homogenising. What was NOT
+                    // known is that removing it does not stop reproduction --
+                    // wood rotting through still severs bodies, and that is
+                    // strictly local, so it founds new plants without moving
+                    // anybody's genome across the world. The claim above that
+                    // the spore is "no longer optional" was written when
+                    // heartwood had stopped fragmentation too; with only one
+                    // of the two removed the population is fine.
                     // It slows specialisation eroding under a moving climate,
                     // because a specialist cannot walk to ground that relocated
                     // but can be thrown to it. But it is *homogenising*, which
@@ -567,7 +595,23 @@ const PARAMS = {
                     // marginal ground that heavy mutation may have made it
                     // fit for, which is the difference between dispersal and
                     // experiment.
-  settle:  2000,    // ticks over which a young body grows into the fragment
+  settle:  1000,    // ticks over which a young body grows into the fragment
+                    // cull. Halved from 2000 alongside minfrag 45 -> 65, and
+                    // THAT PAIR IS THE EXTINCTION CLIFF: a higher bar with
+                    // less time to clear it is exactly how the planet went
+                    // sterile before. It is set here deliberately and not
+                    // casually — 65 with 1000 was run at eight seeds and again
+                    // at sixteen without a single failure, and it is worth
+                    // 0.032 of score over leaving settle at 2000. But a screen
+                    // of 56 mixed configurations DID kill a planet on this
+                    // pair, in a context with marine off and several other
+                    // dials moved, so the margin is real rather than wide.
+                    // If you move anything else that touches how fast a
+                    // founder grows — tries, spore, the step, the angle
+                    // freedom — re-measure this pair before trusting it.
+                    // The conservative fallback is settle 2000 with minfrag
+                    // 65, which keeps 0.069 of the 0.101 total gain and
+                    // cannot fall off the cliff at all.
                     // cull. It was 400, set when a fixed slot table made
                     // growth efficient; once the genome picks its own angles
                     // it wastes far more buds, no founder could reach the
@@ -4633,15 +4677,23 @@ window.__world = {
   /* `ticks` counts *climate* updates, and each one is paid the same number of
      ecology steps the frame loop owes it. Getting this wrong invalidated every
      measurement taken through this hook: it used to run one plant step per
-     climate update, where the frame loop accrues sixty-four of them at x100.
+     climate update, where the frame loop accrues `ecorate` of them.
      The ecology was therefore seeing fifteen times more climate drift per
      generation than the thing anyone actually watches — and drift is exactly
      what this design leans on to hold diversity up, so every sweep flattered
      it. If you change the frame loop's accrual, change this with it. */
   runWorld(ticks, mult, ecoPerTick){
     const spd = mult || 1;
-    const eco = ecoPerTick!==undefined ? (ecoPerTick|0)
-              : Math.max(1, Math.min(64, Math.round(spd)));
+    /* Default to what the frame loop actually accrues, by naming the same
+       constant it does. It used to derive a number from the speed instead —
+       min(64, round(speed)), so 64 at x100 — which stopped being what the
+       frame loop owed the moment ecorate became a parameter and was set to
+       16. Every caller that omitted this argument was therefore measuring an
+       ecology running four times faster against its climate than the shipped
+       piece does, which is a calmer world and a flattering one. verify.js was
+       such a caller. Deriving it from ECORATE means the two cannot drift
+       apart again. */
+    const eco = ecoPerTick!==undefined ? (ecoPerTick|0) : ECORATE;
     for(let i=0;i<(ticks|0);i++){
       const step = Math.min(0.084*spd, 45);
       S.time += step;

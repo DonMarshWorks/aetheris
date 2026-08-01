@@ -1,0 +1,5 @@
+[
+ { "tag": "new",      "seed": 31337, "params": {} },
+ { "tag": "old",      "seed": 31337, "params": { "spore": 0.006, "minfrag": 45, "settle": 2000 } },
+ { "tag": "sporezero","seed": 31337, "params": { "spore": 0 } }
+]

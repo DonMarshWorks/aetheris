@@ -178,12 +178,22 @@ async function homeostasis(browser) {
    objects, which churn every few seconds and would be pure noise.
    ──────────────────────────────────────────────────────────────────────── */
 const DIVERSITY = {
-  ticks:     700,   // climate updates at x100, each paid the 64 ecology steps
-                    // the frame loop owes it — about 45,000 ecology ticks, or
-                    // where erosion became visible in a real session. Counting
-                    // climate updates and running one plant step each, as this
-                    // harness used to, measures a world with fifteen times more
-                    // drift per generation than anyone ever watches.
+  ticks:    2813,   // climate updates at x100, each paid the `ecorate` ecology
+                    // steps the frame loop owes it — about 45,000 ecology
+                    // ticks, or where erosion became visible in a real
+                    // session. Counting climate updates and running one plant
+                    // step each, as this harness once did, measures a world
+                    // with far more drift per generation than anyone watches.
+                    //
+                    // It was 700, which was right only while runWorld defaulted
+                    // to 64 steps per climate update. That default stopped
+                    // matching the frame loop when ecorate became a parameter
+                    // and was set to 16, so this test was quietly checking an
+                    // ecology running four times faster against its climate
+                    // than the shipped piece — a calmer world, and an easier
+                    // one to pass. runWorld now defaults to ECORATE itself, so
+                    // the count here is climate updates and the product is the
+                    // ecology ticks that matter.
   evenness: 0.45,   // niche evenness floor, 0 = one environment holds all life
   largest:  0.50,   // ceiling on the biggest single strategy's share
   strategies:  10,  // of 32 cells, how many must still be occupied
