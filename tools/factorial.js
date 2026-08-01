@@ -41,7 +41,13 @@ for (const r of rows) {
   byTag.get(r.tag).runs.push(scoreRun(r));
 }
 
-const value = (s, resp) => resp === 'score' ? s.score : s.c[resp];
+/* trend responses are read off the interval between the last two readings, so
+   a factor can be asked not only where it leaves the world but which way the
+   world was still moving when the run stopped */
+const value = (s, resp) =>
+  resp === 'score' ? s.score
+  : resp.startsWith('d') && s.trend && resp in s.trend ? s.trend[resp]
+  : s.c[resp];
 
 /* which parameters actually vary across this design */
 const all = [...byTag.values()];
