@@ -1,0 +1,1028 @@
+{
+ "note": "randomised balanced screen, N=56, seed=20260731",
+ "ticks": 15000,
+ "checkpoints": [
+  7500,
+  15000
+ ],
+ "defaultEcorate": 16,
+ "seeds": [
+  7,
+  31337,
+  424242
+ ],
+ "configs": [
+  {
+   "tag": "baseline",
+   "params": {}
+  },
+  {
+   "tag": "r00",
+   "params": {
+    "ecorate": 12,
+    "tries": 16,
+    "settle": 1000,
+    "minfrag": 25,
+    "spore": 0.002,
+    "fitcap": 3,
+    "rare": 0.9,
+    "marine": 1,
+    "affmod": 1,
+    "pmut": 1,
+    "nodemut": 0.02,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r01",
+   "params": {
+    "ecorate": 16,
+    "tries": 8,
+    "settle": 3500,
+    "minfrag": 25,
+    "spore": 0.002,
+    "fitcap": 1.4,
+    "rare": 0,
+    "marine": 0,
+    "affmod": 2.2,
+    "pmut": 3.5,
+    "nodemut": 0.07,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r02",
+   "params": {
+    "ecorate": 24,
+    "tries": 4,
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.006,
+    "fitcap": 3,
+    "rare": 0.7,
+    "marine": 0,
+    "affmod": 1,
+    "pmut": 1,
+    "nodemut": 0.15,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r03",
+   "params": {
+    "ecorate": 8,
+    "tries": 16,
+    "settle": 2000,
+    "minfrag": 65,
+    "spore": 0.006,
+    "fitcap": 0,
+    "rare": 0.4,
+    "marine": 1,
+    "affmod": 1.6,
+    "pmut": 1,
+    "nodemut": 0.02,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r04",
+   "params": {
+    "ecorate": 12,
+    "tries": 8,
+    "settle": 2000,
+    "minfrag": 25,
+    "spore": 0.006,
+    "fitcap": 1.4,
+    "rare": 0.9,
+    "marine": 1,
+    "affmod": 1.3,
+    "pmut": 3.5,
+    "nodemut": 0.07,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r05",
+   "params": {
+    "ecorate": 12,
+    "tries": 8,
+    "settle": 3500,
+    "minfrag": 45,
+    "spore": 0.006,
+    "fitcap": 2,
+    "rare": 0,
+    "marine": 1,
+    "affmod": 1.6,
+    "pmut": 2,
+    "nodemut": 0.02,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r06",
+   "params": {
+    "ecorate": 8,
+    "tries": 2,
+    "settle": 2000,
+    "minfrag": 25,
+    "spore": 0.002,
+    "fitcap": 3,
+    "rare": 0.7,
+    "marine": 1,
+    "affmod": 1.3,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r07",
+   "params": {
+    "ecorate": 12,
+    "tries": 16,
+    "settle": 3500,
+    "minfrag": 25,
+    "spore": 0.015,
+    "fitcap": 0,
+    "rare": 0.7,
+    "marine": 0,
+    "affmod": 1.3,
+    "pmut": 2,
+    "nodemut": 0.02,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r08",
+   "params": {
+    "ecorate": 16,
+    "tries": 4,
+    "settle": 3500,
+    "minfrag": 65,
+    "spore": 0.015,
+    "fitcap": 0,
+    "rare": 0.7,
+    "marine": 0,
+    "affmod": 1,
+    "pmut": 2,
+    "nodemut": 0.15,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r09",
+   "params": {
+    "ecorate": 16,
+    "tries": 8,
+    "settle": 3500,
+    "minfrag": 45,
+    "spore": 0.006,
+    "fitcap": 2,
+    "rare": 0,
+    "marine": 0,
+    "affmod": 1.6,
+    "pmut": 2,
+    "nodemut": 0.15,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r10",
+   "params": {
+    "ecorate": 24,
+    "tries": 8,
+    "settle": 2000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "fitcap": 0,
+    "rare": 0.9,
+    "marine": 0,
+    "affmod": 2.2,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r11",
+   "params": {
+    "ecorate": 12,
+    "tries": 16,
+    "settle": 3500,
+    "minfrag": 45,
+    "spore": 0.006,
+    "fitcap": 3,
+    "rare": 0.7,
+    "marine": 1,
+    "affmod": 2.2,
+    "pmut": 1,
+    "nodemut": 0.07,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r12",
+   "params": {
+    "ecorate": 24,
+    "tries": 2,
+    "settle": 2000,
+    "minfrag": 25,
+    "spore": 0.006,
+    "fitcap": 2,
+    "rare": 0.4,
+    "marine": 0.5,
+    "affmod": 1.6,
+    "pmut": 2,
+    "nodemut": 0.15,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r13",
+   "params": {
+    "ecorate": 16,
+    "tries": 4,
+    "settle": 1000,
+    "minfrag": 25,
+    "spore": 0.002,
+    "fitcap": 1.4,
+    "rare": 0.4,
+    "marine": 0,
+    "affmod": 1.3,
+    "pmut": 1,
+    "nodemut": 0.15,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r14",
+   "params": {
+    "ecorate": 16,
+    "tries": 16,
+    "settle": 2000,
+    "minfrag": 45,
+    "spore": 0.002,
+    "fitcap": 2,
+    "rare": 0,
+    "marine": 0.5,
+    "affmod": 1.6,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r15",
+   "params": {
+    "ecorate": 8,
+    "tries": 2,
+    "settle": 2000,
+    "minfrag": 25,
+    "spore": 0.015,
+    "fitcap": 1.4,
+    "rare": 0.4,
+    "marine": 0,
+    "affmod": 1.3,
+    "pmut": 1,
+    "nodemut": 0.02,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r16",
+   "params": {
+    "ecorate": 16,
+    "tries": 16,
+    "settle": 1000,
+    "minfrag": 45,
+    "spore": 0.015,
+    "fitcap": 1.4,
+    "rare": 0.4,
+    "marine": 0.5,
+    "affmod": 2.2,
+    "pmut": 3.5,
+    "nodemut": 0.02,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r17",
+   "params": {
+    "ecorate": 24,
+    "tries": 4,
+    "settle": 3500,
+    "minfrag": 25,
+    "spore": 0.006,
+    "fitcap": 2,
+    "rare": 0.7,
+    "marine": 0.5,
+    "affmod": 1.6,
+    "pmut": 1,
+    "nodemut": 0.15,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r18",
+   "params": {
+    "ecorate": 8,
+    "tries": 4,
+    "settle": 2000,
+    "minfrag": 65,
+    "spore": 0.015,
+    "fitcap": 1.4,
+    "rare": 0.4,
+    "marine": 1,
+    "affmod": 1,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r19",
+   "params": {
+    "ecorate": 8,
+    "tries": 8,
+    "settle": 2000,
+    "minfrag": 45,
+    "spore": 0.006,
+    "fitcap": 2,
+    "rare": 0.7,
+    "marine": 0.5,
+    "affmod": 1.3,
+    "pmut": 3.5,
+    "nodemut": 0.02,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r20",
+   "params": {
+    "ecorate": 12,
+    "tries": 2,
+    "settle": 2000,
+    "minfrag": 25,
+    "spore": 0.015,
+    "fitcap": 2,
+    "rare": 0,
+    "marine": 0.5,
+    "affmod": 1,
+    "pmut": 1,
+    "nodemut": 0.07,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r21",
+   "params": {
+    "ecorate": 16,
+    "tries": 8,
+    "settle": 2000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "fitcap": 1.4,
+    "rare": 0,
+    "marine": 0.5,
+    "affmod": 1.6,
+    "pmut": 3.5,
+    "nodemut": 0.07,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r22",
+   "params": {
+    "ecorate": 8,
+    "tries": 16,
+    "settle": 2000,
+    "minfrag": 25,
+    "spore": 0.006,
+    "fitcap": 0,
+    "rare": 0.4,
+    "marine": 0.5,
+    "affmod": 1.6,
+    "pmut": 3.5,
+    "nodemut": 0.15,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r23",
+   "params": {
+    "ecorate": 8,
+    "tries": 4,
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.006,
+    "fitcap": 3,
+    "rare": 0.9,
+    "marine": 1,
+    "affmod": 1.3,
+    "pmut": 3.5,
+    "nodemut": 0.07,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r24",
+   "params": {
+    "ecorate": 24,
+    "tries": 8,
+    "settle": 3500,
+    "minfrag": 25,
+    "spore": 0.015,
+    "fitcap": 3,
+    "rare": 0.9,
+    "marine": 1,
+    "affmod": 1,
+    "pmut": 1,
+    "nodemut": 0.02,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r25",
+   "params": {
+    "ecorate": 12,
+    "tries": 2,
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.015,
+    "fitcap": 3,
+    "rare": 0.9,
+    "marine": 0,
+    "affmod": 2.2,
+    "pmut": 1,
+    "nodemut": 0.02,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r26",
+   "params": {
+    "ecorate": 8,
+    "tries": 2,
+    "settle": 1000,
+    "minfrag": 25,
+    "spore": 0.015,
+    "fitcap": 1.4,
+    "rare": 0.4,
+    "marine": 1,
+    "affmod": 2.2,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r27",
+   "params": {
+    "ecorate": 12,
+    "tries": 2,
+    "settle": 2000,
+    "minfrag": 45,
+    "spore": 0.002,
+    "fitcap": 2,
+    "rare": 0.4,
+    "marine": 1,
+    "affmod": 1,
+    "pmut": 3.5,
+    "nodemut": 0.15,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r28",
+   "params": {
+    "ecorate": 16,
+    "tries": 8,
+    "settle": 3500,
+    "minfrag": 65,
+    "spore": 0.002,
+    "fitcap": 0,
+    "rare": 0.9,
+    "marine": 0.5,
+    "affmod": 2.2,
+    "pmut": 3.5,
+    "nodemut": 0.02,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r29",
+   "params": {
+    "ecorate": 8,
+    "tries": 2,
+    "settle": 3500,
+    "minfrag": 45,
+    "spore": 0.006,
+    "fitcap": 0,
+    "rare": 0.9,
+    "marine": 1,
+    "affmod": 1,
+    "pmut": 3.5,
+    "nodemut": 0.15,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r30",
+   "params": {
+    "ecorate": 24,
+    "tries": 4,
+    "settle": 3500,
+    "minfrag": 65,
+    "spore": 0.015,
+    "fitcap": 1.4,
+    "rare": 0.7,
+    "marine": 0,
+    "affmod": 1.6,
+    "pmut": 3.5,
+    "nodemut": 0.07,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r31",
+   "params": {
+    "ecorate": 24,
+    "tries": 2,
+    "settle": 2000,
+    "minfrag": 25,
+    "spore": 0.006,
+    "fitcap": 2,
+    "rare": 0.7,
+    "marine": 0.5,
+    "affmod": 1.3,
+    "pmut": 1,
+    "nodemut": 0.02,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r32",
+   "params": {
+    "ecorate": 16,
+    "tries": 2,
+    "settle": 2000,
+    "minfrag": 65,
+    "spore": 0.006,
+    "fitcap": 0,
+    "rare": 0,
+    "marine": 0.5,
+    "affmod": 2.2,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r33",
+   "params": {
+    "ecorate": 24,
+    "tries": 16,
+    "settle": 3500,
+    "minfrag": 65,
+    "spore": 0.015,
+    "fitcap": 3,
+    "rare": 0.4,
+    "marine": 0,
+    "affmod": 1.6,
+    "pmut": 1,
+    "nodemut": 0.07,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r34",
+   "params": {
+    "ecorate": 24,
+    "tries": 8,
+    "settle": 1000,
+    "minfrag": 25,
+    "spore": 0.006,
+    "fitcap": 1.4,
+    "rare": 0,
+    "marine": 0,
+    "affmod": 1,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r35",
+   "params": {
+    "ecorate": 16,
+    "tries": 16,
+    "settle": 2000,
+    "minfrag": 25,
+    "spore": 0.015,
+    "fitcap": 3,
+    "rare": 0,
+    "marine": 0,
+    "affmod": 1.3,
+    "pmut": 1,
+    "nodemut": 0.07,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r36",
+   "params": {
+    "ecorate": 8,
+    "tries": 2,
+    "settle": 1000,
+    "minfrag": 25,
+    "spore": 0.006,
+    "fitcap": 3,
+    "rare": 0.4,
+    "marine": 1,
+    "affmod": 2.2,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r37",
+   "params": {
+    "ecorate": 16,
+    "tries": 16,
+    "settle": 1000,
+    "minfrag": 45,
+    "spore": 0.002,
+    "fitcap": 2,
+    "rare": 0.7,
+    "marine": 0,
+    "affmod": 1,
+    "pmut": 1,
+    "nodemut": 0.15,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r38",
+   "params": {
+    "ecorate": 8,
+    "tries": 4,
+    "settle": 3500,
+    "minfrag": 45,
+    "spore": 0.006,
+    "fitcap": 1.4,
+    "rare": 0.4,
+    "marine": 0.5,
+    "affmod": 1,
+    "pmut": 1,
+    "nodemut": 0.15,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r39",
+   "params": {
+    "ecorate": 12,
+    "tries": 8,
+    "settle": 2000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "fitcap": 2,
+    "rare": 0,
+    "marine": 0.5,
+    "affmod": 2.2,
+    "pmut": 3.5,
+    "nodemut": 0.15,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r40",
+   "params": {
+    "ecorate": 16,
+    "tries": 16,
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "fitcap": 0,
+    "rare": 0.4,
+    "marine": 0,
+    "affmod": 2.2,
+    "pmut": 3.5,
+    "nodemut": 0.02,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r41",
+   "params": {
+    "ecorate": 24,
+    "tries": 8,
+    "settle": 3500,
+    "minfrag": 45,
+    "spore": 0.015,
+    "fitcap": 1.4,
+    "rare": 0.9,
+    "marine": 0.5,
+    "affmod": 1.3,
+    "pmut": 3.5,
+    "nodemut": 0.02,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r42",
+   "params": {
+    "ecorate": 16,
+    "tries": 8,
+    "settle": 3500,
+    "minfrag": 45,
+    "spore": 0.006,
+    "fitcap": 3,
+    "rare": 0.9,
+    "marine": 0,
+    "affmod": 1.3,
+    "pmut": 1,
+    "nodemut": 0.02,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r43",
+   "params": {
+    "ecorate": 24,
+    "tries": 4,
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.006,
+    "fitcap": 0,
+    "rare": 0,
+    "marine": 0.5,
+    "affmod": 1.3,
+    "pmut": 3.5,
+    "nodemut": 0.02,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r44",
+   "params": {
+    "ecorate": 8,
+    "tries": 4,
+    "settle": 3500,
+    "minfrag": 45,
+    "spore": 0.002,
+    "fitcap": 2,
+    "rare": 0.9,
+    "marine": 1,
+    "affmod": 1.3,
+    "pmut": 2,
+    "nodemut": 0.15,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r45",
+   "params": {
+    "ecorate": 24,
+    "tries": 2,
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "fitcap": 1.4,
+    "rare": 0,
+    "marine": 0,
+    "affmod": 1.6,
+    "pmut": 3.5,
+    "nodemut": 0.02,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r46",
+   "params": {
+    "ecorate": 8,
+    "tries": 8,
+    "settle": 2000,
+    "minfrag": 65,
+    "spore": 0.015,
+    "fitcap": 3,
+    "rare": 0.7,
+    "marine": 0.5,
+    "affmod": 1.6,
+    "pmut": 1,
+    "nodemut": 0.02,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r47",
+   "params": {
+    "ecorate": 24,
+    "tries": 2,
+    "settle": 3500,
+    "minfrag": 45,
+    "spore": 0.015,
+    "fitcap": 0,
+    "rare": 0.7,
+    "marine": 0,
+    "affmod": 2.2,
+    "pmut": 2,
+    "nodemut": 0.02,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r48",
+   "params": {
+    "ecorate": 12,
+    "tries": 4,
+    "settle": 1000,
+    "minfrag": 45,
+    "spore": 0.015,
+    "fitcap": 3,
+    "rare": 0,
+    "marine": 0.5,
+    "affmod": 2.2,
+    "pmut": 3.5,
+    "nodemut": 0.07,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r49",
+   "params": {
+    "ecorate": 12,
+    "tries": 16,
+    "settle": 1000,
+    "minfrag": 45,
+    "spore": 0.002,
+    "fitcap": 0,
+    "rare": 0.9,
+    "marine": 1,
+    "affmod": 1,
+    "pmut": 1,
+    "nodemut": 0.02,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r50",
+   "params": {
+    "ecorate": 24,
+    "tries": 16,
+    "settle": 1000,
+    "minfrag": 45,
+    "spore": 0.002,
+    "fitcap": 0,
+    "rare": 0.7,
+    "marine": 0,
+    "affmod": 1.3,
+    "pmut": 3.5,
+    "nodemut": 0.15,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r51",
+   "params": {
+    "ecorate": 12,
+    "tries": 4,
+    "settle": 1000,
+    "minfrag": 45,
+    "spore": 0.002,
+    "fitcap": 2,
+    "rare": 0,
+    "marine": 1,
+    "affmod": 1,
+    "pmut": 2,
+    "nodemut": 0.15,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r52",
+   "params": {
+    "ecorate": 12,
+    "tries": 4,
+    "settle": 1000,
+    "minfrag": 25,
+    "spore": 0.015,
+    "fitcap": 3,
+    "rare": 0.9,
+    "marine": 1,
+    "affmod": 1,
+    "pmut": 1,
+    "nodemut": 0.15,
+    "hot": 1,
+    "anneal": 0
+   }
+  },
+  {
+   "tag": "r53",
+   "params": {
+    "ecorate": 16,
+    "tries": 16,
+    "settle": 1000,
+    "minfrag": 45,
+    "spore": 0.015,
+    "fitcap": 2,
+    "rare": 0.4,
+    "marine": 0.5,
+    "affmod": 1.6,
+    "pmut": 2,
+    "nodemut": 0.15,
+    "hot": 4,
+    "anneal": 6000
+   }
+  },
+  {
+   "tag": "r54",
+   "params": {
+    "ecorate": 12,
+    "tries": 2,
+    "settle": 3500,
+    "minfrag": 65,
+    "spore": 0.002,
+    "fitcap": 0,
+    "rare": 0.9,
+    "marine": 1,
+    "affmod": 2.2,
+    "pmut": 2,
+    "nodemut": 0.15,
+    "hot": 8,
+    "anneal": 15000
+   }
+  },
+  {
+   "tag": "r55",
+   "params": {
+    "ecorate": 8,
+    "tries": 4,
+    "settle": 2000,
+    "minfrag": 25,
+    "spore": 0.002,
+    "fitcap": 1.4,
+    "rare": 0.7,
+    "marine": 0.5,
+    "affmod": 1.6,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "hot": 4,
+    "anneal": 6000
+   }
+  }
+ ]
+}
