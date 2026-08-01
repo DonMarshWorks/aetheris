@@ -25,6 +25,13 @@ const GATES = { live: 60000, bodies: 300, strategies: 12 };
    picked to be round: they put the default near the middle of its range,
    where a weight can move it either way. */
 const SIZE_HALF = 40;    // mean nodes per plant scoring 0.5
+/* Fit saturates here, and about a third of runs sit at the ceiling. That is
+   deliberate and not a bug to be tuned out: fit is a sufficiency check — are
+   plants living where they stand, or is the world on the hostile floor — and
+   not a thing to be maximised. Rewarding it without limit would reward
+   precisely the runaway `fitcap` exists to prevent, a lineage so well adapted
+   that being adapted everywhere costs it nothing. The discrimination that
+   matters is in the lower range, where measured fit runs from 1.03. */
 const FIT_FULL  = 3.0;   // mean fit scoring 1.0
 const MOTION_FULL = 0.25; // strategy turnover between readings scoring 1.0
 
@@ -42,13 +49,43 @@ const MOTION_FULL = 0.25; // strategy turnover between readings scoring 1.0
 const CLIMATE_PER_TICK = 8.4;  // simulated seconds per climate update at x100
 
 const WEIGHTS = {
-  even:   0.22,  // niche evenness — no environment may own the planet
-  dom:    0.18,  // 1 - largest lineage share
-  mixed:  0.15,  // share of plants holding more than one kind of node
-  size:   0.15,  // mean plant size
+  even:   0.26,  // niche evenness — no environment may own the planet
+  dom:    0.20,  // 1 - largest lineage share
+  mixed:  0.18,  // share of plants holding more than one kind of node
+  size:   0.18,  // mean plant size
   fit:    0.10,  // mean fit over the final interval
-  motion: 0.20,  // still moving: how much of the population changed strategy
+  motion: 0.08,  // still moving: how much of the population changed strategy
 };
+/* motion started at 0.20 and was cut, for two reasons that are both about the
+   measurement rather than about which configuration it favours.
+ *
+ * It does not detect what it was put in for. The worry was a search winning by
+ * becalming the climate, and turnover measured HIGHER at ecorate 32 than at 8
+ * — the opposite of the freeze it was supposed to catch, because a world that
+ * sees less weather keeps its lineages fitter and evolving faster. What it
+ * does catch is the frozen mosaic, which is worth something but is not what
+ * the weight was bought for.
+ *
+ * And it was almost all the noise. Against the replicate seeds of a 64-cell
+ * factorial its sd was 0.208 while no other component exceeded 0.060, so at
+ * 0.20 weight it carried 84.5 per cent of the composite's variance. Cutting it
+ * took the seed sd of the score from 0.047 to 0.011.
+ *
+ * The ranking is unchanged by the cut — the same cells lead under 0.20, 0.05
+ * and 0.00 — which is what makes this a precision gain rather than a thumb on
+ * the scale. It is kept rather than deleted because a stagnant ecology is a
+ * real failure mode and nothing else here would see it. */
+/* The weighting is a judgement and is meant to be argued with, so it can be
+   replaced from the environment without editing anything:
+     AETHERIS_WEIGHTS='{"motion":0.05,"even":0.26}' node tools/score.js ...
+   Any key left out keeps the value above; the set is then renormalised, so
+   only the ratios matter and a partial override cannot silently change the
+   scale of the whole score. */
+if (process.env.AETHERIS_WEIGHTS) {
+  Object.assign(WEIGHTS, JSON.parse(process.env.AETHERIS_WEIGHTS));
+  const t = Object.values(WEIGHTS).reduce((a, b) => a + b, 0);
+  for (const k in WEIGHTS) WEIGHTS[k] /= t;
+}
 
 const evennessOf = niche => {
   const v = Object.values(niche), t = v.reduce((a, b) => a + b, 0);

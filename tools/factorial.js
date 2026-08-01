@@ -28,7 +28,11 @@ const RESPONSES = onIdx === -1
   ? ['score', 'even', 'dom', 'mixed', 'size', 'fit', 'motion']
   : [process.argv[onIdx + 1]];
 
-const rows = load(process.argv.slice(2).filter(a => !a.startsWith('--')));
+/* drop both the flag and the value it takes, or the response name is opened
+   as a results file */
+const files = process.argv.slice(2)
+  .filter((a, i, v) => !a.startsWith('--') && !(i > 0 && v[i - 1] === '--on'));
+const rows = load(files);
 
 /* group the replicate seeds under their configuration */
 const byTag = new Map();
