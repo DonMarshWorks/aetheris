@@ -4182,7 +4182,13 @@ function orbitRate(){
      phone held upright stands two and a half times further off to fit the disc
      into its narrow axis, and for the first half of its zoom range it is the
      distance that closes while the field stays wide. */
-  return Math.max(0.05, CAM.dist-1)*camFov()/h;
+  /* Capped at the framing distance. Past that the planet no longer fills the
+     view, so there is no ground under the finger to follow and the premise
+     stops holding: (dist - 1) goes on growing, the rate grows with it, and
+     pulled all the way out the drag whips the globe round three times faster
+     than at full view. Beyond framing, hold the full-view rate. */
+  const d = Math.min(CAM.dist, fitDist());
+  return Math.max(0.05, d-1)*camFov()/h;
 }
 /* frame the planet so it never touches the edge of the window, whatever
    shape that window is */

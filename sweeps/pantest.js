@@ -12,7 +12,7 @@ const GL=['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshade
     await p.waitForFunction(()=>{const s=document.getElementById('splash');return !s||s.classList.contains('gone');},{timeout:60000});
     // how far does a 100px drag move the view, at each zoom?
     const out=[];
-    for(const z of [1.0,0.50,0.30,0.20,0.11,0.05,0.02]){
+    for(const z of [2.6,1.8,1.0,0.50,0.20,0.05]){
       const r=await p.evaluate(zz=>{
         window.__world.setView(1.42,0.26,zz);
         const c=window.__world.cam(), before=c.tYaw;
