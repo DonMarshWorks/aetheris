@@ -121,7 +121,13 @@
     padding:6px 11px;cursor:pointer;transition:.25s;flex:none;
   }
   #chartclose:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
-  #cgraph{flex:1;min-height:0;width:100%;display:block}
+  /* The canvas scrolls inside this, never the document. The page gaining a
+     scrollbar is the invariant; an overlay that is taller than the phone it is
+     read on is not, and forcing ten charts into one screen is what made them
+     unreadable. */
+  #cscroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;touch-action:pan-y}
+  #cgraph{width:100%;display:block}
 
   .speeds{pointer-events:auto;display:flex;gap:2px;justify-content:flex-end}
   .sp{
@@ -203,7 +209,7 @@
     </div>
     <button id="chartclose" type="button" aria-label="close">close &times;</button>
   </div>
-  <canvas id="cgraph"></canvas>
+  <div id="cscroll"><canvas id="cgraph"></canvas></div>
 </div>
 
 <div id="splash"><div class="t">forming world</div><div class="d"></div></div>
@@ -588,12 +594,31 @@ const PARAMS = {
                     // cull. It is not failing, it is fenced in, and the fence
                     // moves when a neighbour dies.
   cullself: 0,      // if a body's refusals are mostly from ITSELF -- a self
-                    // share above this -- it is culled whatever its size,
-                    // because its own angles and step have boxed it in and it
-                    // will stay boxed in. Careful: a dense mat self-collides
-                    // constantly BY DESIGN, and short-stepping is a real
-                    // strategy this design wants to keep. Setting this too low
-                    // will delete that whole habit and leave one morphology.
+                    // share above this -- it is culled whatever its size.
+                    //
+                    // MEASURED, AND IT STERILISES THE PLANET. Every setting
+                    // tried -- 0.50 and 0.70, with and without sparefenced,
+                    // and with minfrag dropped to 20 -- reached live 0 on
+                    // every seed. Not degraded: extinct.
+                    //
+                    // The reason is structural rather than about strategy. A
+                    // mature plant is SUPPOSED to be mostly self-blocked: once
+                    // a body has grown out to meet its neighbours most of its
+                    // frontier is interior, and interior nodes are boxed in by
+                    // their own children -- the same effect that drove the
+                    // frontier to 92-100% of living nodes when nodes never
+                    // retired. So self share climbs toward one for every
+                    // healthy plant as it matures, and culling on it kills the
+                    // successful. Firing every sweep, that is a one-way
+                    // ratchet, the same shape as the heartwood extinction.
+                    //
+                    // The idea behind it is still good and this is the wrong
+                    // proxy for it: self-collision share measures the
+                    // mechanism and is confounded by maturity. Net node gain
+                    // per opportunity measures the outcome instead -- a
+                    // thriving dense mat still adds nodes, a stuck fragment
+                    // does not -- and is what to build before concluding that
+                    // culling on efficiency cannot work.
   sporemut: 1.00,   // how much harder a spore is mutated than an ordinary
                     // bifurcation. 1 = the same. A founder cannot out-compete
                     // an established neighbour on equal terms, so its only
@@ -4582,6 +4607,7 @@ function m3(a,b){
    which is the outcome worth hoping for and cannot be seen from two numbers. */
 const chartsEl = document.getElementById("charts");
 const cgraph = document.getElementById("cgraph");
+const cscroll = document.getElementById("cscroll");
 const cctx = cgraph.getContext("2d");
 let chartsOn = false, chartTimer = 0;
 
@@ -4602,8 +4628,26 @@ function trendOf(v,n){
 
 function drawCharts(){
   const dprC = Math.min(devicePixelRatio||1, 2);
-  const W = cgraph.clientWidth, H = cgraph.clientHeight;
-  if(W<8 || H<8) return;
+  const W = cscroll.clientWidth, avail = cscroll.clientHeight;
+  if(W<8 || avail<8) return;
+
+  /* as many columns as the width can carry without the labels colliding.
+     A phone in portrait leaves about 340 css pixels here, which used to fall
+     through to a single column: ten charts stacked in one screen, each sixty
+     pixels tall and three hundred wide, which is the wrong aspect ratio for
+     reading a trend and the right one for reading nothing. Two columns halve
+     the rows and double the height. The longest label, BIGGEST LINEAGE SHARE,
+     is about 126 pixels in this font and still fits the 165 a two-column
+     phone gives. */
+  const cols = W>1180 ? 5 : W>860 ? 4 : W>560 ? 3 : W>300 ? 2 : 1;
+  const rows = Math.ceil(HSER.length/cols);
+  const padX=8, padY=6;
+  /* A chart shorter than this says nothing, so the canvas is allowed to grow
+     past the window and the overlay scrolls. The document must still not:
+     that is what the fixed, clipped container is for. */
+  const MINCELL = 92;
+  const H = Math.max(avail, rows*MINCELL + padY*(rows-1));
+  if(cgraph.style.height !== H+"px") cgraph.style.height = H+"px";
   if(cgraph.width!==(W*dprC|0) || cgraph.height!==(H*dprC|0)){
     cgraph.width=W*dprC|0; cgraph.height=H*dprC|0;
   }
@@ -4617,10 +4661,7 @@ function drawCharts(){
     : `${HT[n-1]|0} ecology ticks · ${n} samples · every ${hEvery*(PARAMS.sweep|0)} ticks`;
   if(n<2) return;
 
-  /* as many columns as the width can carry without the labels colliding */
-  const cols = W>1180 ? 5 : W>860 ? 4 : W>560 ? 3 : W>360 ? 2 : 1;
-  const rows = Math.ceil(HSER.length/cols);
-  const padX=8, padY=6, cw=(W-padX*(cols-1))/cols, ch=(H-padY*(rows-1))/rows;
+  const cw=(W-padX*(cols-1))/cols, ch=(H-padY*(rows-1))/rows;
   const t0=HT[0], t1=Math.max(HT[n-1], t0+1);
 
   HSER.forEach((s,idx)=>{
