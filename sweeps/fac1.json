@@ -1,0 +1,1168 @@
+{
+ "note": "2^6 factorial around the defaults: the documented marine/fitcap/rare trio, plus ecorate (top interactor in the screen) and the two strongest remaining main effects",
+ "ticks": 20000,
+ "checkpoints": [
+  10000,
+  20000
+ ],
+ "defaultEcorate": 16,
+ "seeds": [
+  7,
+  31337,
+  424242
+ ],
+ "configs": [
+  {
+   "tag": "mari0_ecor12_rare0_fitc0_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare0_fitc0_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare0_fitc0_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare0_fitc0_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare0_fitc2_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare0_fitc2_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare0_fitc2_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare0_fitc2_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare.9_fitc0_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare.9_fitc0_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare.9_fitc0_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare.9_fitc0_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare.9_fitc2_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare.9_fitc2_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare.9_fitc2_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor12_rare.9_fitc2_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare0_fitc0_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare0_fitc0_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare0_fitc0_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare0_fitc0_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare0_fitc2_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare0_fitc2_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare0_fitc2_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare0_fitc2_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare.9_fitc0_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare.9_fitc0_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare.9_fitc0_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare.9_fitc0_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare.9_fitc2_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare.9_fitc2_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare.9_fitc2_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari0_ecor24_rare.9_fitc2_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 0,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare0_fitc0_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare0_fitc0_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare0_fitc0_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare0_fitc0_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare0_fitc2_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare0_fitc2_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare0_fitc2_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare0_fitc2_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare.9_fitc0_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare.9_fitc0_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare.9_fitc0_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare.9_fitc0_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare.9_fitc2_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare.9_fitc2_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare.9_fitc2_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor12_rare.9_fitc2_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 12,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare0_fitc0_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare0_fitc0_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare0_fitc0_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare0_fitc0_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare0_fitc2_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare0_fitc2_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare0_fitc2_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare0_fitc2_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare.9_fitc0_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare.9_fitc0_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare.9_fitc0_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare.9_fitc0_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 0,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare.9_fitc2_spor.002_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare.9_fitc2_spor.002_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.002,
+    "settle": 2000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare.9_fitc2_spor.006_sett1000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "mari1_ecor24_rare.9_fitc2_spor.006_sett2000",
+   "params": {
+    "minfrag": 45,
+    "tries": 8,
+    "pmut": 2,
+    "nodemut": 0.07,
+    "affmod": 1.6,
+    "hot": 1,
+    "anneal": 0,
+    "marine": 1,
+    "ecorate": 24,
+    "rare": 0.9,
+    "fitcap": 2,
+    "spore": 0.006,
+    "settle": 2000
+   }
+  }
+ ]
+}

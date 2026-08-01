@@ -126,7 +126,12 @@ function interaction(A, B, key) {
   return { A, B, strength: ms / (noise / Math.sqrt(perCell)), ms, cells, noise };
 }
 
-for (const key of ['score']) {
+/* Scanned on the components as well as the composite. A pair can trade one
+   component against another so exactly that the composite barely moves — two
+   dials pulling evenness up and body size down together would cancel in the
+   score and look like nothing at all, when what is actually there is the
+   trade this whole search is about. */
+for (const key of ['score', 'even', 'size', 'fit']) {
   const found = [];
   for (let i = 0; i < FACTORS.length; i++)
     for (let j = i + 1; j < FACTORS.length; j++) {
@@ -141,6 +146,7 @@ for (const key of ['score']) {
     console.log('  ' + `${LABEL[r.A] || r.A} x ${LABEL[r.B] || r.B}`.padEnd(28) +
                 fmt(r.strength, 2).padStart(6) + '      ' + fmt(r.ms, 4));
 
+  if (key !== 'score') continue;
   console.log('\n  cell means for the top four pairs:');
   for (const r of found.slice(0, 4)) {
     console.log(`\n  ${LABEL[r.A] || r.A} x ${LABEL[r.B] || r.B}`);

@@ -1,0 +1,5 @@
+{
+  "ticks": 15000, "checkpoints": [7500, 15000], "defaultEcorate": 16,
+  "seeds": [7, 31337, 424242, 5, 88, 999, 1234, 77777],
+  "configs": [ { "tag": "default", "params": {} } ]
+}
