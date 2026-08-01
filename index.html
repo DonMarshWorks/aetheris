@@ -4202,8 +4202,12 @@ function fitDist(){
    is. Set directly, every tremor of a finger lands on the screen unfiltered,
    and zoomed in that is the whole complaint: the lens magnifies the shake
    along with the ground. */
-const CAM = {yaw:1.42, pitch:0.26, tYaw:1.42, tPitch:0.26, roll:0,
+/* q is the orientation and tq is where a drag has asked it to go. yaw and
+   pitch are derived from q each frame for the readout and the test hooks, and
+   are never read back to rebuild anything. */
+const CAM = {yaw:1.42, pitch:0.26, roll:0, q:[0,0,0,1], tq:[0,0,0,1],
              dist:3.4, tDist:3.4, zoom:1.0, tZoom:1.0};
+qFromYawPitch(1.42, 0.26, CAM.q); qFromYawPitch(1.42, 0.26, CAM.tq);
 let dragging=false, lastX=0, lastY=0;
 let paused=false, speed=1;
 const hud=document.getElementById("hud");
@@ -4298,117 +4302,95 @@ function spread(){
    every quantity well behaved. */
 const PITCH_MAX = Math.PI/2 - 0.02;
 const clampPitch = p => p>PITCH_MAX ? PITCH_MAX : (p<-PITCH_MAX ? -PITCH_MAX : p);
-function camFrame(yaw,pitch,roll,e,u){
-  const cp=Math.cos(pitch);
-  e[0]=cp*Math.sin(yaw); e[1]=Math.sin(pitch); e[2]=cp*Math.cos(yaw);
-  naturalUp(yaw,pitch,_n);
-  const cr=Math.cos(roll), sr=Math.sin(roll);
-  u[0]=_n[0]*cr+(e[1]*_n[2]-e[2]*_n[1])*sr;
-  u[1]=_n[1]*cr+(e[2]*_n[0]-e[0]*_n[2])*sr;
-  u[2]=_n[2]*cr+(e[0]*_n[1]-e[1]*_n[0])*sr;
-}
-function frameToRoll(e,u){
-  naturalUp(Math.atan2(e[0],e[2]),
-            Math.asin(Math.max(-1,Math.min(1,e[1]))), _n);
-  const dx=e[1]*_n[2]-e[2]*_n[1], dy=e[2]*_n[0]-e[0]*_n[2], dz=e[0]*_n[1]-e[1]*_n[0];
-  return Math.atan2(dx*u[0]+dy*u[1]+dz*u[2], _n[0]*u[0]+_n[1]*u[1]+_n[2]*u[2]);
-}
 
-/* Dragging rotates the camera about its OWN axes — sideways about its up,
-   vertically about its right — never about the world's vertical.
- *
- * Yaw and pitch have a singularity at the poles and it is not a rounding
- * problem, it is the chart: turning about the world's vertical while standing
- * over the pole spins the view instead of sliding it, and the sense inverts on
- * crossing. Zoomed in on the ice that is the whole gesture going wrong. In the
- * camera's own frame there is no pole anywhere — sideways is sideways at every
- * latitude — so the fix is to leave the chart, rotate the frame, and convert
- * back once at the end, letting roll absorb whatever the chart cannot hold. */
+/* ---- orientation as a quaternion ------------------------------------------
+   The camera's orientation is a quaternion and nothing else. Yaw and pitch are
+   derived from it for the readout and for the test hooks, and are never read
+   back to rebuild it.
+
+   Two problems went away with the Euler state, and only the first was obvious.
+   A chart of yaw and pitch is singular at the poles, so a sideways drag there
+   came out perpendicular to itself. Less obvious and more annoying: the eased
+   camera interpolated yaw and pitch INDEPENDENTLY, and those are not
+   orthogonal coordinates — a degree of yaw is a hand's breadth of ground at
+   the equator and almost nothing near a pole, so easing both at one rate drags
+   the view along a curved, unevenly paced path. That is the wobble, and it is
+   worst at thirty to forty-five degrees from the pole, where the anisotropy is
+   already severe but the chart has not yet degenerated into something obvious.
+   Interpolating the rotation itself has neither problem: it is the shortest
+   path between two orientations, at constant angular speed, everywhere.
+
+   Post-multiplying rotates about the camera's OWN axes, which is what a drag
+   is; pre-multiplying rotates about a world axis, which is what following the
+   planet's spin is. Both fall out without any frame having to be assembled. */
+function qMul(a,b,o){
+  const ax=a[0],ay=a[1],az=a[2],aw=a[3], bx=b[0],by=b[1],bz=b[2],bw=b[3];
+  o[0]=aw*bx+ax*bw+ay*bz-az*by;
+  o[1]=aw*by-ax*bz+ay*bw+az*bx;
+  o[2]=aw*bz+ax*by-ay*bx+az*bw;
+  o[3]=aw*bw-ax*bx-ay*by-az*bz;
+  return o;
+}
+/* renormalised every frame, so repeated multiplication cannot drift off the
+   unit sphere however long the piece is left running */
+function qNorm(q){
+  const l=Math.hypot(q[0],q[1],q[2],q[3])||1;
+  q[0]/=l; q[1]/=l; q[2]/=l; q[3]/=l; return q;
+}
+function qAxis(x,y,z,a,o){
+  const h=a*0.5, s=Math.sin(h);
+  o[0]=x*s; o[1]=y*s; o[2]=z*s; o[3]=Math.cos(h); return o;
+}
+/* rotate a vector by a quaternion: v + 2w(q x v) + 2 q x (q x v) */
+function qApply(q,v,o){
+  const qx=q[0],qy=q[1],qz=q[2],qw=q[3];
+  const tx=2*(qy*v[2]-qz*v[1]), ty=2*(qz*v[0]-qx*v[2]), tz=2*(qx*v[1]-qy*v[0]);
+  o[0]=v[0]+qw*tx+(qy*tz-qz*ty);
+  o[1]=v[1]+qw*ty+(qz*tx-qx*tz);
+  o[2]=v[2]+qw*tz+(qx*ty-qy*tx);
+  return o;
+}
+/* Normalised lerp rather than slerp. Between two orientations a frame apart
+   the difference is a fraction of a degree, where the two are
+   indistinguishable, and nlerp cannot divide by a vanishing sine. The sign
+   flip is not optional: q and -q are the same orientation, and without it the
+   camera takes the long way round exactly when the two are nearly opposite. */
+function qNlerp(a,b,t,o){
+  let d=a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3];
+  const k = d<0 ? -1 : 1;
+  for(let i=0;i<4;i++) o[i]=a[i]+(b[i]*k-a[i])*t;
+  return qNorm(o);
+}
+/* the orientation whose eye direction is this yaw and pitch, with no roll */
+function qFromYawPitch(y,p,o){
+  const qy=[0,0,0,1], qx=[0,0,0,1];
+  qAxis(0,1,0,y,qy); qAxis(1,0,0,-p,qx);
+  return qNorm(qMul(qy,qx,o));
+}
+const AXIS_Z=[0,0,1], AXIS_Y=[0,1,0], AXIS_X=[1,0,0];
+const _q1=[0,0,0,1], _q2=[0,0,0,1];
+const _e=[0,0,0], _u=[0,0,0];
+
+/* A drag rotates the camera about its own up and its own right. In quaternion
+   terms those are post-multiplications and no frame need be built at all. */
 function orbitBy(dx, dy){
   const r = orbitRate();
-  camFrame(CAM.tYaw, CAM.tPitch, CAM.roll, _e, _u);
-  /* screen right, from the frame rather than from the world */
-  let sx=_u[1]*_e[2]-_u[2]*_e[1], sy=_u[2]*_e[0]-_u[0]*_e[2], sz=_u[0]*_e[1]-_u[1]*_e[0];
-  const il=1/Math.max(1e-9,Math.hypot(sx,sy,sz)); sx*=il; sy*=il; sz*=il;
-  _n[0]=sx; _n[1]=sy; _n[2]=sz;
+  qAxis(0,1,0,-dx*r,_q1); qMul(CAM.tq,_q1,_q2);
+  qAxis(1,0,0,-dy*r,_q1); qMul(_q2,_q1,CAM.tq);
+  qNorm(CAM.tq);
+}
+/* Following the planet's spin is a rotation about a WORLD axis, so it
+   pre-multiplies. Applied to the eased orientation and to its target alike,
+   which is what leaves a drag still in flight untouched: the difference
+   between the two IS the drag, and rotating both preserves it.
 
-  let a=-dx*r, c=Math.cos(a), s=Math.sin(a);
-  rotAbout(_e,_u,c,s,_e2);                      // about up: u is unchanged
-  _e[0]=_e2[0]; _e[1]=_e2[1]; _e[2]=_e2[2];
-
-  a=-dy*r; c=Math.cos(a); s=Math.sin(a);
-  rotAbout(_e,_n,c,s,_e2);                      // about right: carries up with it
-  rotAbout(_u,_n,c,s,_u2);
-
-  setYawTarget(Math.atan2(_e2[0], _e2[2]));
-  CAM.tPitch = clampPitch(Math.asin(Math.max(-1,Math.min(1,_e2[1]))));
-  CAM.roll   = frameToRoll(_e2,_u2);
-}
-/* atan2 comes back in -pi..pi, and the eased yaw would then take the long way
-   round every time a drag crossed the cut — a full spin of the planet for one
-   pixel of finger. Carry the target to the nearest turn instead. */
-function setYawTarget(y){
-  const k = Math.round((CAM.yaw - y)/(Math.PI*2));
-  CAM.tYaw = y + k*Math.PI*2;
-}
-/* Turn the eye about the planet's own axis by `a`, so it stays over the ground
-   it was over. Rodrigues about POLE, then back into the yaw and pitch the rest
-   of the camera is expressed in — the eye direction is
-   (cos p sin y, sin p, cos p cos y), so both fall straight out of it. */
-/* the screen-up direction implied by a yaw and pitch, before any roll: the way
-   the eye moves as pitch increases */
-function naturalUp(y,p,o){
-  const sp=Math.sin(p), cp=Math.cos(p);
-  o[0]=-sp*Math.sin(y); o[1]=cp; o[2]=-sp*Math.cos(y);
-}
-function rotAbout(v,k,c,s,o){
-  const d=(k[0]*v[0]+k[1]*v[1]+k[2]*v[2])*(1-c);
-  o[0]=v[0]*c+(k[1]*v[2]-k[2]*v[1])*s+k[0]*d;
-  o[1]=v[1]*c+(k[2]*v[0]-k[0]*v[2])*s+k[1]*d;
-  o[2]=v[2]*c+(k[0]*v[1]-k[1]*v[0])*s+k[2]*d;
-}
-const _e=[0,0,0], _u=[0,0,0], _e2=[0,0,0], _u2=[0,0,0], _n=[0,0,0];
+   Carrying the whole orientation rather than only where the eye points is
+   also what stops a held view turning underneath itself — the up vector goes
+   round with the ground instead of staying pinned to the world's vertical. */
 function trackSpin(a){
-  const cp=Math.cos(CAM.pitch), sp=Math.sin(CAM.pitch);
-  _e[0]=cp*Math.sin(CAM.yaw); _e[1]=sp; _e[2]=cp*Math.cos(CAM.yaw);
-  /* Carry the WHOLE frame, not just where the eye points. Rotating only the
-     position tracks the ground but lets it turn underneath, because the up
-     vector stays pinned to the world's vertical while the ground turns about
-     the tilted axis — which reads as the view slowly spinning. Transporting
-     the up vector by the same rotation makes the view rigid against the
-     surface, which is what holding a view means. */
-  naturalUp(CAM.yaw, CAM.pitch, _n);
-  const cr=Math.cos(CAM.roll), sr=Math.sin(CAM.roll);
-  _u[0]=_n[0]*cr+(_e[1]*_n[2]-_e[2]*_n[1])*sr;
-  _u[1]=_n[1]*cr+(_e[2]*_n[0]-_e[0]*_n[2])*sr;
-  _u[2]=_n[2]*cr+(_e[0]*_n[1]-_e[1]*_n[0])*sr;
-
-  const c=Math.cos(a), s=Math.sin(a);
-  rotAbout(_e,POLE,c,s,_e2);
-  rotAbout(_u,POLE,c,s,_u2);
-
-  /* the eased pair must stay on the same turn as each other, or a chase that
-     crosses the cut sends the planet the long way round */
-  CAM.yaw  += ((Math.atan2(_e2[0],_e2[2])-CAM.yaw+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
-  CAM.pitch = clampPitch(Math.asin(Math.max(-1,Math.min(1,_e2[1]))));
-  /* The target is carried by the same rotation rather than snapped to the new
-     position. Assigning it here is what stopped dragging working while held:
-     a drag moves the target and the very next frame overwrote it, so the eye
-     was chased back to the ground it had been on and the finger did nothing.
-     Rotating both leaves the difference between them — which is exactly the
-     drag still waiting to be eased in — untouched. */
-  { const tcp=Math.cos(CAM.tPitch);
-    _e[0]=tcp*Math.sin(CAM.tYaw); _e[1]=Math.sin(CAM.tPitch); _e[2]=tcp*Math.cos(CAM.tYaw);
-    rotAbout(_e,POLE,c,s,_u2);
-    setYawTarget(Math.atan2(_u2[0], _u2[2]));
-    CAM.tPitch = clampPitch(Math.asin(Math.max(-1,Math.min(1,_u2[1]))));
-    rotAbout(_u,POLE,c,s,_u2); }
-  /* whatever of the transported up is not explained by the new yaw and pitch
-     is roll, and keeping it is what stops the drift accumulating */
-  naturalUp(CAM.yaw, CAM.pitch, _n);
-  const dx=_e2[1]*_n[2]-_e2[2]*_n[1], dy=_e2[2]*_n[0]-_e2[0]*_n[2], dz=_e2[0]*_n[1]-_e2[1]*_n[0];
-  CAM.roll = Math.atan2(dx*_u2[0]+dy*_u2[1]+dz*_u2[2],
-                        _n[0]*_u2[0]+_n[1]*_u2[1]+_n[2]*_u2[2]);
+  qAxis(POLE[0],POLE[1],POLE[2],a,_q1);
+  qNorm(qMul(_q1,CAM.q,_q2));  CAM.q[0]=_q2[0];  CAM.q[1]=_q2[1];  CAM.q[2]=_q2[2];  CAM.q[3]=_q2[3];
+  qNorm(qMul(_q1,CAM.tq,_q2)); CAM.tq[0]=_q2[0]; CAM.tq[1]=_q2[1]; CAM.tq[2]=_q2[2]; CAM.tq[3]=_q2[3];
 }
 /* called whenever the number of pointers changes */
 function rebase(){
@@ -4767,28 +4749,23 @@ function frame(now){
      attached to the finger. This is what takes the twitch out zoomed in:
      the gain was already scaled by the lens, but a magnified view magnifies
      hand tremor as well, and only smoothing answers that. */
-  const ang = Math.min(1, dt*9.0);
-  CAM.yaw   += (CAM.tYaw-CAM.yaw)*ang;
-  CAM.pitch += (CAM.tPitch-CAM.pitch)*ang;
+  qNlerp(CAM.q, CAM.tq, Math.min(1, dt*9.0), CAM.q);
   /* a very slow breath, so the framing never feels locked off — but it is
      0.028 radians, which is a third of the field at full telephoto, so it
      fades out with the lens along with everything else */
   const bob = 0.028*Math.sin(now*0.000012)*(camFov()/FOVY);
-  const py=CAM.pitch+bob;
-  const eye=[Math.cos(py)*Math.sin(CAM.yaw)*CAM.dist,
-             Math.sin(py)*CAM.dist,
-             Math.cos(py)*Math.cos(CAM.yaw)*CAM.dist];
+  /* the breath is a rotation about the camera's own right, not a number added
+     to a pitch that is no longer the state */
+  qAxis(1,0,0,-bob,_q1); qNorm(qMul(CAM.q,_q1,_q2));
+  qApply(_q2, AXIS_Z, _e); qApply(_q2, AXIS_Y, _u);
+  const eye=[_e[0]*CAM.dist, _e[1]*CAM.dist, _e[2]*CAM.dist];
+  CAM.yaw = Math.atan2(_e[0], _e[2]);
+  CAM.pitch = Math.asin(Math.max(-1,Math.min(1,_e[1])));
   const W=canvas.width, Hh=canvas.height;
   const fovNow = camFov();
   perspective(mProj, fovNow, W/Hh, 0.35, 30);
   /* up carries the roll that holding the view accumulates, or the ground turns
      underneath a held view */
-  naturalUp(CAM.yaw, py, _n);
-  { const ex=eye[0]/CAM.dist, ey=eye[1]/CAM.dist, ez=eye[2]/CAM.dist;
-    const cr=Math.cos(CAM.roll), sr=Math.sin(CAM.roll);
-    _u[0]=_n[0]*cr+(ey*_n[2]-ez*_n[1])*sr;
-    _u[1]=_n[1]*cr+(ez*_n[0]-ex*_n[2])*sr;
-    _u[2]=_n[2]*cr+(ex*_n[1]-ey*_n[0])*sr; }
   lookAt(mView, eye,[0,0,0],_u);
   mul(mVP,mProj,mView); invert(mInvVP,mVP);
 
@@ -5128,7 +5105,8 @@ window.__world = {
   setSpeed(v){ speed=v; },
   debug(v){ DEBUG=v|0; },
   freeze(v){ spin=v; frozen=true; },
-  setView(y,pi,z){ CAM.yaw=CAM.tYaw=y; CAM.pitch=CAM.tPitch=clampPitch(pi); CAM.roll=0;
+  setView(y,pi,z){ CAM.yaw=y; CAM.pitch=clampPitch(pi); CAM.roll=0;
+                   qFromYawPitch(y, CAM.pitch, CAM.q); qFromYawPitch(y, CAM.pitch, CAM.tq);
                    if(z){CAM.zoom=CAM.tZoom=z;} CAM.dist=CAM.tDist=camDistOf(CAM.zoom); },
   sunDir(){ return [SUN[0],SUN[1],SUN[2]]; },
   cam(){ return CAM; },

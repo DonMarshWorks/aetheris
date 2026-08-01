@@ -21,9 +21,10 @@ const GL=['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshade
     cv.dispatchEvent(mk('pointerdown',195,420));
     for(let k=1;k<=6;k++) window.dispatchEvent(mk('pointermove',195+k*10,420));
     window.dispatchEvent(mk('pointerup',255,420));
-    // read the TARGET frame, which is where the drag landed
-    const cp2=Math.cos(c.tPitch);
-    const after=[cp2*Math.sin(c.tYaw),Math.sin(c.tPitch),cp2*Math.cos(c.tYaw)];
+    // read the TARGET orientation, which is where the drag landed
+    const qa=(q,v)=>{const tx=2*(q[1]*v[2]-q[2]*v[1]),ty=2*(q[2]*v[0]-q[0]*v[2]),tz=2*(q[0]*v[1]-q[1]*v[0]);
+      return [v[0]+q[3]*tx+(q[1]*tz-q[2]*ty), v[1]+q[3]*ty+(q[2]*tx-q[0]*tz), v[2]+q[3]*tz+(q[0]*ty-q[1]*tx)];};
+    const after=qa(c.tq,[0,0,1]);
     // decompose the motion into the pre-drag screen right / up
     const upN=(y,q)=>{const s=Math.sin(q);return [-s*Math.sin(y),Math.cos(q),-s*Math.cos(y)];};
     const n=upN(c.yaw,c.pitch), e=before;
@@ -37,7 +38,7 @@ const GL=['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshade
   },pitch);
   console.log('drag 60px RIGHT — motion of the eye, resolved in the screen frame');
   console.log(' pitch(deg)   along screen-right   across (should be ~0)');
-  for(const pi of [0, 1.1, 1.40, 1.50, 1.54, 1.5707]){
+  for(const pi of [-1.5707, -1.54, -1.50, -1.40, -1.1, 0, 1.1, 1.40, 1.50, 1.54, 1.5707]){
     const r=await probe(pi);
     console.log('  '+(pi*180/Math.PI).toFixed(1).padStart(7),
                 String(r.along).padStart(18), String(r.across).padStart(20));
