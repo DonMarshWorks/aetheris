@@ -1,0 +1,66 @@
+{
+ "note": "does the spore have a floor below which it stops being dispersal and starts being the absence of reproduction? The trend through 0.015/0.006/0.002 is monotone downward, which is exactly the shape that misleads at a boundary. plants-design.md records the planet going extinct by tick 6,000 when nothing founded new bodies, so zero may be a different regime rather than a lower level.",
+ "ticks": 45000,
+ "checkpoints": [
+  15000,
+  30000,
+  45000
+ ],
+ "defaultEcorate": 16,
+ "seeds": [
+  7,
+  31337,
+  424242,
+  999,
+  88,
+  5,
+  1234,
+  77777
+ ],
+ "configs": [
+  {
+   "tag": "sp0-min",
+   "params": {
+    "spore": 0,
+    "settle": 1000,
+    "minfrag": 65
+   }
+  },
+  {
+   "tag": "sp0005-min",
+   "params": {
+    "spore": 0.0005,
+    "settle": 1000,
+    "minfrag": 65
+   }
+  },
+  {
+   "tag": "sp001-min",
+   "params": {
+    "spore": 0.001,
+    "settle": 1000,
+    "minfrag": 65
+   }
+  },
+  {
+   "tag": "sp002-min",
+   "params": {
+    "spore": 0.002,
+    "settle": 1000,
+    "minfrag": 65
+   }
+  },
+  {
+   "tag": "sp0-stock",
+   "params": {
+    "spore": 0
+   }
+  },
+  {
+   "tag": "sp002-stock",
+   "params": {
+    "spore": 0.002
+   }
+  }
+ ]
+}

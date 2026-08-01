@@ -1,0 +1,83 @@
+{
+ "note": "does a changing planet promote diversity in the long run, and does that depend on dispersal? Climate change per generation is 1/ecorate at fixed ecology ticks, so ecorate 8 is four times the weather of ecorate 32 for the same number of plant generations. The frozen arm runs the climate at mult 0.001 -- effectively static -- as the control the ecorate comment claims is the MOST diverse.",
+ "ticks": 135000,
+ "checkpoints": [
+  45000,
+  90000,
+  135000
+ ],
+ "defaultEcorate": 16,
+ "seeds": [
+  7,
+  31337,
+  424242,
+  999
+ ],
+ "configs": [
+  {
+   "tag": "sp0-frozen",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0,
+    "ecorate": 16
+   },
+   "mult": 0.001
+  },
+  {
+   "tag": "sp0-eco8",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0,
+    "ecorate": 8
+   }
+  },
+  {
+   "tag": "sp0-eco16",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0,
+    "ecorate": 16
+   }
+  },
+  {
+   "tag": "sp0-eco32",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0,
+    "ecorate": 32
+   }
+  },
+  {
+   "tag": "sp002-frozen",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "ecorate": 16
+   },
+   "mult": 0.001
+  },
+  {
+   "tag": "sp002-eco8",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "ecorate": 8
+   }
+  },
+  {
+   "tag": "sp002-eco32",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "ecorate": 32
+   }
+  }
+ ]
+}

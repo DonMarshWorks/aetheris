@@ -84,6 +84,8 @@ async function runJob(browser, job, plan) {
   page.on('console', m => { if (m.type() === 'error') errs.push(m.text().slice(0, 200)); });
 
   const out = { tag: job.tag, params: job.params, seed: job.seed, checkpoints: [] };
+  out.mult = job.mult !== undefined ? job.mult
+           : (plan.mult !== undefined ? plan.mult : 100);
   try {
     await page.goto('file://' + PAGE + hashOf(job.params, job.seed));
     await page.waitForFunction(() => window.__world && window.__world.S.epoch0 > 0,
@@ -97,6 +99,12 @@ async function runJob(browser, job, plan) {
 
     const eco = job.params.ecorate !== undefined
       ? job.params.ecorate : plan.defaultEcorate;
+    /* How fast the climate runs against the ecology. 100 is the time-lapse the
+       piece offers and what every sweep here uses; a value near zero freezes
+       the planet, which is the control arm for whether a wandering climate
+       helps diversity or costs it. Note runWorld reads `mult || 1`, so a
+       literal 0 would silently become 1 — hence a small positive number. */
+    const mult = job.mult !== undefined ? job.mult : (plan.mult !== undefined ? plan.mult : 100);
     let done = 0;
     for (const mark of plan.checkpoints) {
       /* climate updates that owe exactly the ecology steps still wanted */
@@ -106,7 +114,7 @@ async function runJob(browser, job, plan) {
       let left = want;
       while (left > 0) {
         const chunk = Math.min(left, 400);
-        await page.evaluate(([n, e]) => window.__world.runWorld(n, 100, e), [chunk, eco]);
+        await page.evaluate(([n, m, e]) => window.__world.runWorld(n, m, e), [chunk, mult, eco]);
         left -= chunk;
       }
       done += want * eco;
@@ -132,7 +140,7 @@ async function runJob(browser, job, plan) {
   const jobs = [];
   for (const c of plan.configs)
     for (const seed of plan.seeds)
-      jobs.push({ tag: c.tag, params: c.params, seed });
+      jobs.push({ tag: c.tag, params: c.params, seed, mult: c.mult });
 
   const nJobs = Math.min(+arg('jobs', 12), jobs.length);
   const stream = fs.createWriteStream(outPath, { flags: 'a' });

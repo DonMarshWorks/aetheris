@@ -550,6 +550,23 @@ const PARAMS = {
                     // winning, flung across the planet, so a high rate is the
                     // current champion reseeding itself everywhere. Dropping
                     // 0.030 -> 0.006 took niche evenness from 0.56 to 0.86.
+  sporemut: 1.00,   // how much harder a spore is mutated than an ordinary
+                    // bifurcation. 1 = the same. A founder cannot out-compete
+                    // an established neighbour on equal terms, so its only
+                    // opening is to arrive different enough to hold ground
+                    // nobody else wants — and the standing complaint against
+                    // dispersal is that it is homogenising, a copy of whatever
+                    // is winning posted elsewhere. Mutating harder attacks
+                    // that without cutting the rate, which is the lever that
+                    // costs body size.
+  sporefit: 0,      // fit a node must have before it may throw a spore.
+                    // 0 = any node may. See the comment at the call site for
+                    // which way this is expected to cut, and why.
+  sporeviable: -1,  // ground a spore will accept, overriding `viable`.
+                    // -1 = use `viable`. Lower lets a spore gamble on
+                    // marginal ground that heavy mutation may have made it
+                    // fit for, which is the difference between dispersal and
+                    // experiment.
   settle:  2000,    // ticks over which a young body grows into the fragment
                     // cull. It was 400, set when a fixed slot table made
                     // growth efficient; once the genome picks its own angles
@@ -2233,10 +2250,17 @@ function bud(ni){
    own right — a new body, carrying its parent's colour */
 function spore(ni){
   const go = ni*G;
+  /* A founder cannot out-compete an established neighbour on equal terms; its
+     only opening is to arrive different enough to hold ground nobody else
+     wants. So the ground it will accept can be loosened separately from the
+     ground ordinary growth accepts, and what it carries can be mutated harder
+     than an ordinary bifurcation — dispersal as experiment rather than as a
+     copy of the incumbent posted elsewhere. */
+  const need = PARAMS.sporeviable >= 0 ? PARAMS.sporeviable : PARAMS.viable;
   for(let a=0;a<24;a++){
     const u=prnd()*2-1, ph=prnd()*Math.PI*2, r=Math.sqrt(Math.max(0,1-u*u));
     const x=r*Math.cos(ph), y=u, z=r*Math.sin(ph);
-    if(fitAt(x,y,z,go) < PARAMS.viable) continue;
+    if(fitAt(x,y,z,go) < need) continue;
     if(occupied(x,y,z)) continue;
     let ax=-Math.sin(ph), ay=0, az=Math.cos(ph);
     const bx=y*az-z*ay, by=z*ax-x*az, bz=x*ay-y*ax;
@@ -2244,7 +2268,7 @@ function spore(ni){
     let hx=ax*cc+bx*ss, hy=ay*cc+by*ss, hz=az*cc+bz*ss;
     const dp=hx*x+hy*y+hz*z; hx-=x*dp; hy-=y*dp; hz-=z*dp;
     const l=1/Math.hypot(hx,hy,hz);
-    addNode(x,y,z,hx*l,hy*l,hz*l,ni,-1,PARAMS.mut,PARAMS.step);
+    addNode(x,y,z,hx*l,hy*l,hz*l,ni,-1,PARAMS.mut*PARAMS.sporemut,PARAMS.step);
     return true;
   }
   return false;
@@ -2493,7 +2517,16 @@ function plantsStep(){
        apart. Now that nothing falls apart, nothing is founded either, and the
        population can only decline — so the spore the brief asked for is no
        longer optional. Rare enough that an arrival still reads as an event. */
-    if(prnd() < PARAMS.spore){ spore(best); continue; }
+    /* Optionally only the thriving get to throw one. Note which way this is
+       expected to cut: fit is affinity against local ground, so the fittest
+       nodes are those matched to the COMMONEST terrain, and the commonest
+       terrain is the sea. Selecting spore parents by fit therefore flings sea
+       specialists across the planet preferentially, which is the documented
+       route to monoculture — the same homogenising the rate itself was cut to
+       weaken. Measured rather than assumed, but that is the prior. */
+    if(prnd() < PARAMS.spore && (PARAMS.sporefit<=0 || NFIT[best]>=PARAMS.sporefit)){
+      spore(best); continue;
+    }
     /* Retiring by index is only safe if that index still holds this node: the
        draws above may have swapped the array about while cleaning stale
        entries. If it has moved, leave it — the next draw that finds it full

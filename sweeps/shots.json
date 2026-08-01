@@ -1,0 +1,6 @@
+[
+ { "tag": "minimal",  "seed": 31337, "params": { "spore": 0.002, "settle": 1000, "minfrag": 65 } },
+ { "tag": "besttries8","seed": 31337, "params": { "marine":1.0,"spore":0.002,"settle":1000,"minfrag":65,"tries":8,"pmut":3.5,"affmod":2.2,"hot":8,"anneal":15000,"ecorate":24,"fitcap":2.0,"rare":0.7,"nodemut":0.07 } },
+ { "tag": "big",      "seed": 31337, "params": { "marine":0,"fitcap":0,"rare":0,"spore":0.002,"settle":1000,"minfrag":65,"tries":2,"pmut":3.5,"affmod":1.6,"ecorate":24,"hot":1,"anneal":0 } },
+ { "tag": "baseline", "seed": 31337, "params": {} }
+]

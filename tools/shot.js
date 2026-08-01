@@ -41,13 +41,20 @@ const SIZE = +arg('size', 900);
  * and a fixed yaw therefore points at whatever happens to be underneath after
  * 45,000 ticks — the first close-up taken here landed on open ocean. These are
  * contact sheets to choose from, not a considered composition. */
+/* Angles are given as offsets from the sun rather than as absolute yaw and
+   pitch. The eye sits at (cos p sin y, sin p, cos p cos y), so putting it on
+   the sun vector looks straight down the light at the sub-solar point; a
+   small offset from there is guaranteed to be daylit with some modelling in
+   it. Fixed angles cannot do that — the surface turns as the world runs, so
+   which ground is under a given yaw depends on the tick count, and half the
+   first contact sheet came back black because it was pointed at midnight. */
 const VIEWS = [
-  { name: 'planet-a', yaw: 1.42, pitch: 0.26, zoom: 1.00 },
-  { name: 'planet-b', yaw: 3.60, pitch: -0.30, zoom: 1.00 },
-  { name: 'close-a',  yaw: 1.42, pitch: 0.26, zoom: 0.13 },
-  { name: 'close-b',  yaw: 2.60, pitch: 0.55, zoom: 0.13 },
-  { name: 'close-c',  yaw: 0.60, pitch: -0.35, zoom: 0.20 },
-  { name: 'close-d',  yaw: 4.90, pitch: 0.10, zoom: 0.20 },
+  { name: 'planet-a', dYaw:  0.45, dPitch:  0.15, zoom: 1.00 },
+  { name: 'planet-b', dYaw: -0.85, dPitch: -0.25, zoom: 1.00 },
+  { name: 'close-a',  dYaw:  0.30, dPitch:  0.20, zoom: 0.13 },
+  { name: 'close-b',  dYaw: -0.35, dPitch: -0.30, zoom: 0.13 },
+  { name: 'close-c',  dYaw:  0.75, dPitch:  0.45, zoom: 0.20 },
+  { name: 'close-d',  dYaw: -0.10, dPitch: -0.05, zoom: 0.20 },
 ];
 
 (async () => {
@@ -89,8 +96,18 @@ const VIEWS = [
       window.__world.setSpeed(0);
     });
 
+    const sun = await page.evaluate(() => window.__world.sunDir());
+    const sunYaw = Math.atan2(sun[0], sun[2]);
+    const sunPitch = Math.asin(Math.max(-1, Math.min(1, sun[1])));
+
     for (const v of VIEWS) {
-      await page.evaluate(vv => window.__world.setView(vv.yaw, vv.pitch, vv.zoom), v);
+      const yaw = sunYaw + v.dYaw;
+      /* the orbit clamps pitch, and near a solstice the sub-solar point is far
+         enough off the equator that an offset could otherwise ask for more
+         than the camera will give */
+      const pitch = Math.max(-1.35, Math.min(1.35, sunPitch * 0.7 + v.dPitch));
+      await page.evaluate(vv => window.__world.setView(vv.yaw, vv.pitch, vv.zoom),
+        { yaw, pitch, zoom: v.zoom });
       /* the camera eases toward its target and the detail patch redraws on a
          later frame, so a shot taken immediately catches neither */
       await page.waitForTimeout(2500);

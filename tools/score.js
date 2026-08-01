@@ -161,7 +161,8 @@ function scoreRun(r) {
     /* how much weather this population actually lived through, per the note on
        CLIMATE_PER_TICK. Two configs at the same ecology ticks and different
        ecorate are not the same experiment, and this is the column that says so. */
-    climate: CLIMATE_PER_TICK * end.eco / (r.params.ecorate || 16) / 3600,
+    climate: CLIMATE_PER_TICK * (r.mult === undefined ? 100 : r.mult) / 100
+             * end.eco / (r.params.ecorate || 16) / 3600,
   };
 }
 

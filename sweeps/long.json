@@ -1,0 +1,34 @@
+{
+ "note": "the long run. spore 0 measures best at 45,000 ticks and flat in trajectory, but the objection to it is about erosion over time: without dispersal a lineage that loses its ground cannot recolonise elsewhere, and only fragmentation founds bodies, always adjacent to the parent. 135,000 ticks is three times the confirmation horizon.",
+ "ticks": 135000,
+ "checkpoints": [
+  45000,
+  90000,
+  135000
+ ],
+ "defaultEcorate": 16,
+ "seeds": [
+  7,
+  31337,
+  424242,
+  999
+ ],
+ "configs": [
+  {
+   "tag": "long-sp0",
+   "params": {
+    "spore": 0,
+    "settle": 1000,
+    "minfrag": 65
+   }
+  },
+  {
+   "tag": "long-sp002",
+   "params": {
+    "spore": 0.002,
+    "settle": 1000,
+    "minfrag": 65
+   }
+  }
+ ]
+}

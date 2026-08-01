@@ -1,0 +1,8 @@
+{ "ticks": 6000, "checkpoints": [3000, 6000], "defaultEcorate": 16, "seeds": [31337],
+  "configs": [
+    { "tag": "sm-default",   "params": {} },
+    { "tag": "sm-sporemut4", "params": { "sporemut": 4 } },
+    { "tag": "sm-sporefit2", "params": { "sporefit": 2.0 } },
+    { "tag": "sm-sporevi1",  "params": { "sporeviable": 0.1, "sporemut": 4 } },
+    { "tag": "sm-frozen",    "params": {}, "mult": 0.001 }
+  ] }

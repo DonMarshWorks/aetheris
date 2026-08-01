@@ -1,0 +1,117 @@
+{
+ "note": "Don proposals: spores as heavily mutated experiments, and spores only from the healthy. The prize case is spore 0.006 with heavy mutation -- if mutating hard removes the homogenising cost of dispersal, a HIGH rate could become good, which would be a far more interesting ecology than simply turning dispersal off.",
+ "ticks": 45000,
+ "checkpoints": [
+  15000,
+  30000,
+  45000
+ ],
+ "defaultEcorate": 16,
+ "seeds": [
+  7,
+  31337,
+  424242,
+  999
+ ],
+ "configs": [
+  {
+   "tag": "x-base",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.002
+   }
+  },
+  {
+   "tag": "x-mut3",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "sporemut": 3
+   }
+  },
+  {
+   "tag": "x-mut8",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "sporemut": 8
+   }
+  },
+  {
+   "tag": "x-mut3-vi",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "sporemut": 3,
+    "sporeviable": 0.1
+   }
+  },
+  {
+   "tag": "x-fit20",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "sporefit": 2
+   }
+  },
+  {
+   "tag": "x-fit25",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "sporefit": 2.5
+   }
+  },
+  {
+   "tag": "x-mut8-fit20",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.002,
+    "sporemut": 8,
+    "sporefit": 2
+   }
+  },
+  {
+   "tag": "x-hi-base",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.006
+   }
+  },
+  {
+   "tag": "x-hi-mut8",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.006,
+    "sporemut": 8
+   }
+  },
+  {
+   "tag": "x-hi-mut8-vi",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0.006,
+    "sporemut": 8,
+    "sporeviable": 0.1
+   }
+  },
+  {
+   "tag": "x-sp0",
+   "params": {
+    "settle": 1000,
+    "minfrag": 65,
+    "spore": 0
+   }
+  }
+ ]
+}

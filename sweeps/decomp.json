@@ -1,0 +1,74 @@
+{
+ "note": "decompose the three-parameter win into its parts, and test the cliff-free variant. minfrag up with settle down is the documented extinction cliff and the screen hit it, so a version that leaves settle alone must be measured before the pair becomes a default.",
+ "ticks": 45000,
+ "checkpoints": [
+  15000,
+  30000,
+  45000
+ ],
+ "defaultEcorate": 16,
+ "seeds": [
+  7,
+  31337,
+  424242,
+  999,
+  88,
+  5,
+  1234,
+  77777
+ ],
+ "configs": [
+  {
+   "tag": "baseline",
+   "params": {}
+  },
+  {
+   "tag": "minimal",
+   "params": {
+    "spore": 0.002,
+    "settle": 1000,
+    "minfrag": 65
+   }
+  },
+  {
+   "tag": "m-settle2000",
+   "params": {
+    "spore": 0.002,
+    "minfrag": 65
+   }
+  },
+  {
+   "tag": "m-minfrag45",
+   "params": {
+    "spore": 0.002,
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "m-spore-only",
+   "params": {
+    "spore": 0.002
+   }
+  },
+  {
+   "tag": "m-minfrag-only",
+   "params": {
+    "minfrag": 65
+   }
+  },
+  {
+   "tag": "m-settle-only",
+   "params": {
+    "settle": 1000
+   }
+  },
+  {
+   "tag": "m-spore001",
+   "params": {
+    "spore": 0.001,
+    "settle": 1000,
+    "minfrag": 65
+   }
+  }
+ ]
+}
