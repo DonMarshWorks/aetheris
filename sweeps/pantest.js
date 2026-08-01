@@ -12,7 +12,7 @@ const GL=['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshade
     await p.waitForFunction(()=>{const s=document.getElementById('splash');return !s||s.classList.contains('gone');},{timeout:60000});
     // how far does a 100px drag move the view, at each zoom?
     const out=[];
-    for(const z of [1.0,0.30,0.11,0.02]){
+    for(const z of [1.0,0.50,0.30,0.20,0.11,0.05,0.02]){
       const r=await p.evaluate(zz=>{
         window.__world.setView(1.42,0.26,zz);
         const c=window.__world.cam(), before=c.tYaw;
@@ -21,9 +21,10 @@ const GL=['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshade
         cv.dispatchEvent(mk('pointerdown',200,400));
         for(let k=1;k<=10;k++) window.dispatchEvent(mk('pointermove',200+k*10,400));
         window.dispatchEvent(mk('pointerup',300,400));
-        return {dYaw:Math.abs(window.__world.cam().tYaw-before)};
+        const c2=window.__world.cam();
+        return {dYaw:Math.abs(c2.tYaw-before), dist:c2.dist};
       },z);
-      out.push(z+':'+r.dYaw.toFixed(4));
+      out.push(z+':'+r.dYaw.toFixed(4)+' ('+(100*r.dYaw/(2*Math.PI)).toFixed(1)+'% of a turn)');
     }
     console.log(name,'yaw radians per 100px drag —',out.join('  '),' errors:',errs.length?errs[0]:'none');
     // does panning work while locked?

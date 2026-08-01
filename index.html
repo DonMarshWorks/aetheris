@@ -4171,8 +4171,18 @@ function camFov(){
  * familiar feel at full view untouched. */
 function orbitRate(){
   const h = Math.max(1, canvas.clientHeight || innerHeight || 800);
-  const f = camFov();
-  return (f/h)*(1 + 5*(f/FOVY));
+  /* One screen height subtends the field of view, and the ground under the
+     middle of it is (dist - 1) away, so this many radians of orbit is exactly
+     one pixel of ground: drag and the surface follows the finger. Nothing is
+     tuned. Two previous attempts multiplied a constant by some falling factor,
+     which is guesswork wearing arithmetic's clothes — and both were still
+     three times too fast in the middle of the range, where the zoom actually
+     gets used, while being right only at an extreme nobody reaches.
+     It corrects for distance as well as for the lens, which matters because a
+     phone held upright stands two and a half times further off to fit the disc
+     into its narrow axis, and for the first half of its zoom range it is the
+     distance that closes while the field stays wide. */
+  return Math.max(0.05, CAM.dist-1)*camFov()/h;
 }
 /* frame the planet so it never touches the edge of the window, whatever
    shape that window is */
