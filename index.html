@@ -78,14 +78,19 @@
 
   .clockrow{display:flex;align-items:center;gap:14px}
   .clock{font-size:26px;font-weight:200;letter-spacing:.06em;font-variant-numeric:tabular-nums;line-height:1}
-  #playpause{
+  /* the round controls, wherever they sit */
+  .rbtn{
     pointer-events:auto;flex:0 0 34px;width:34px;height:34px;padding:0;
     display:flex;align-items:center;justify-content:center;
     background:transparent;border:1px solid var(--faint);border-radius:50%;
-    color:var(--ink);cursor:pointer;transition:.25s;
+    color:var(--ink);cursor:pointer;transition:.25s;font:inherit;
   }
-  #playpause:hover{border-color:rgba(233,240,255,.60);background:rgba(233,240,255,.10)}
-  #playpause svg{width:12px;height:12px;display:block}
+  .rbtn:hover{border-color:rgba(233,240,255,.60);background:rgba(233,240,255,.10)}
+  .rbtn svg{width:12px;height:12px;display:block}
+  /* held down reads as a state, not a hover */
+  .rbtn.on{border-color:rgba(233,240,255,.72);background:rgba(233,240,255,.16)}
+  #info{font-size:15px;font-weight:700;line-height:1}
+  .ctrls{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
   .clocklabel{margin-top:8px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
 
   .bars{margin-top:16px;display:flex;gap:9px;align-items:flex-end}
@@ -97,12 +102,6 @@
   .scales{margin-top:15px;font-size:10px;letter-spacing:.13em;text-transform:uppercase;
     color:rgba(233,240,255,.56);font-variant-numeric:tabular-nums;line-height:1.85}
 
-  #chartlink{
-    pointer-events:auto;font:inherit;font-size:inherit;letter-spacing:inherit;
-    text-transform:inherit;color:rgba(233,240,255,.56);background:none;border:0;
-    padding:0;margin-top:3px;cursor:pointer;transition:color .25s;
-  }
-  #chartlink:hover{color:var(--ink)}
   /* Fixed and clipped: the page itself must never gain a scrollbar, and an
      overlay is the easiest way to give it one by accident. */
   #charts{
@@ -121,7 +120,13 @@
     padding:6px 11px;cursor:pointer;transition:.25s;flex:none;
   }
   #chartclose:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
-  #cgraph{flex:1;min-height:0;width:100%;display:block}
+  /* The canvas scrolls inside this, never the document. The page gaining a
+     scrollbar is the invariant; an overlay that is taller than the phone it is
+     read on is not, and forcing ten charts into one screen is what made them
+     unreadable. */
+  #cscroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;touch-action:pan-y}
+  #cgraph{width:100%;display:block}
 
   .speeds{pointer-events:auto;display:flex;gap:2px;justify-content:flex-end}
   .sp{
@@ -150,7 +155,9 @@
     .sub{font-size:9.5px;margin-top:5px}
     .clock{font-size:21px}
     .clockrow{gap:11px}
-    #playpause{flex:0 0 30px;width:30px;height:30px}
+    .rbtn{flex:0 0 30px;width:30px;height:30px}
+    .ctrls{gap:7px;margin-top:10px}
+    #info{font-size:13px}
     .clocklabel{font-size:9.5px;letter-spacing:.13em;margin-top:6px}
     .bars{gap:6px;margin-top:12px}
     .bar{width:44px}
@@ -179,18 +186,21 @@
       <button class="sp" data-s="20">&times;20</button>
       <button class="sp" data-s="100">&times;100</button>
     </div>
+    <div class="ctrls">
+      <button id="playpause" class="rbtn" type="button" aria-label="pause" title="pause"></button>
+      <button id="lock" class="rbtn" type="button" aria-label="hold the view" title="hold the view" aria-pressed="false"></button>
+      <button id="info" class="rbtn" type="button" aria-label="the life of it" title="the life of it">i</button>
+    </div>
   </div>
 
   <div class="corner bl">
     <div class="clockrow">
-      <button id="playpause" type="button" aria-label="pause" title="pause"></button>
       <div class="clock" id="clock">0:00:00</div>
     </div>
     <div class="clocklabel" id="clocklabel">elapsed</div>
     <div class="bars" id="bars"></div>
     <div class="scales" id="scales">
       <div id="sc1"></div><div id="sc2"></div><div id="sc3"></div>
-      <div><button id="chartlink" type="button">the life of it &rsaquo;</button></div>
     </div>
   </div>
 </div>
@@ -203,7 +213,7 @@
     </div>
     <button id="chartclose" type="button" aria-label="close">close &times;</button>
   </div>
-  <canvas id="cgraph"></canvas>
+  <div id="cscroll"><canvas id="cgraph"></canvas></div>
 </div>
 
 <div id="splash"><div class="t">forming world</div><div class="d"></div></div>
@@ -502,7 +512,7 @@ const PARAMS = {
                     // chance — and it takes the sharp edge off a cull that
                     // was all-or-nothing at a fixed age, which is what made
                     // raising `minfrag` an extinction cliff.
-  minfrag: 45,      // a severed piece smaller than this is not viable. Wood
+  minfrag: 65,      // a severed piece smaller than this is not viable. Wood
                     // rotting through chops plants up at a fixed rate, so
                     // without a real floor the world silts up with two- and
                     // three-node scraps that count as plants, drown every
@@ -541,7 +551,35 @@ const PARAMS = {
   ecobudget: 4.0,   // milliseconds per frame spent paying that debt
   sweep:   40,      // ticks between one pass of connected-component labelling
   perbody: 0,       // 1 = at most one bud per body per turn, 0 = by frontier
-  spore:   0.006,   // chance a bud is thrown clear instead, founding a body.
+  spore:   0.001,   // chance a bud is thrown clear instead, founding a body.
+                    // Was 0.030, then 0.006, now 0.001, and every step down
+                    // has been an improvement — the effect is monotone all the
+                    // way to zero, which is the shape that misleads at a
+                    // boundary and so was measured AT the boundary. In the
+                    // tuned context, at 45,000 ticks over eight seeds:
+                    // 0.002 -> 0.808, 0.001 -> 0.817, 0.0005 -> 0.827,
+                    // 0 -> 0.837, and at 135,000 ticks zero still leads,
+                    // 0.841 against 0.800, with evenness RISING 0.957 -> 0.972
+                    // and all twenty strategies occupied.
+                    //
+                    // So why not zero. Two reasons, one measured and one not.
+                    // The measured one is that 0.001 is inside a seed's worth
+                    // of noise of zero. The other is that a colonisation
+                    // nobody ever sees is a thing the piece has lost: an
+                    // arrival is meant to read as an event, and at zero there
+                    // are no arrivals at all, only bodies breaking apart where
+                    // they already stand.
+                    //
+                    // The reason lower keeps winning is the one already known:
+                    // a spore is a copy of whatever is winning, flung across
+                    // the planet, so dispersal is homogenising. What was NOT
+                    // known is that removing it does not stop reproduction --
+                    // wood rotting through still severs bodies, and that is
+                    // strictly local, so it founds new plants without moving
+                    // anybody's genome across the world. The claim above that
+                    // the spore is "no longer optional" was written when
+                    // heartwood had stopped fragmentation too; with only one
+                    // of the two removed the population is fine.
                     // It slows specialisation eroding under a moving climate,
                     // because a specialist cannot walk to ground that relocated
                     // but can be thrown to it. But it is *homogenising*, which
@@ -550,7 +588,75 @@ const PARAMS = {
                     // winning, flung across the planet, so a high rate is the
                     // current champion reseeding itself everywhere. Dropping
                     // 0.030 -> 0.006 took niche evenness from 0.56 to 0.86.
-  settle:  2000,    // ticks over which a young body grows into the fragment
+  cullmin: 0,       // bud attempts a body must have had before either of the
+                    // two rules below may judge it. 0 turns both off. Don's
+                    // objection to the size cull, and it is right: a fragment
+                    // in a crowded neighbourhood is culled for being small
+                    // when its smallness belongs to the neighbours.
+  sparefenced: 0,   // if a body's refusals are mostly from OTHER plants -- a
+                    // self share below this -- it is exempt from the size
+                    // cull. It is not failing, it is fenced in, and the fence
+                    // moves when a neighbour dies.
+  cullself: 0,      // if a body's refusals are mostly from ITSELF -- a self
+                    // share above this -- it is culled whatever its size.
+                    //
+                    // MEASURED, AND IT STERILISES THE PLANET. Every setting
+                    // tried -- 0.50 and 0.70, with and without sparefenced,
+                    // and with minfrag dropped to 20 -- reached live 0 on
+                    // every seed. Not degraded: extinct.
+                    //
+                    // The reason is structural rather than about strategy. A
+                    // mature plant is SUPPOSED to be mostly self-blocked: once
+                    // a body has grown out to meet its neighbours most of its
+                    // frontier is interior, and interior nodes are boxed in by
+                    // their own children -- the same effect that drove the
+                    // frontier to 92-100% of living nodes when nodes never
+                    // retired. So self share climbs toward one for every
+                    // healthy plant as it matures, and culling on it kills the
+                    // successful. Firing every sweep, that is a one-way
+                    // ratchet, the same shape as the heartwood extinction.
+                    //
+                    // The idea behind it is still good and this is the wrong
+                    // proxy for it: self-collision share measures the
+                    // mechanism and is confounded by maturity. Net node gain
+                    // per opportunity measures the outcome instead -- a
+                    // thriving dense mat still adds nodes, a stuck fragment
+                    // does not -- and is what to build before concluding that
+                    // culling on efficiency cannot work.
+  sporemut: 1.00,   // how much harder a spore is mutated than an ordinary
+                    // bifurcation. 1 = the same. A founder cannot out-compete
+                    // an established neighbour on equal terms, so its only
+                    // opening is to arrive different enough to hold ground
+                    // nobody else wants — and the standing complaint against
+                    // dispersal is that it is homogenising, a copy of whatever
+                    // is winning posted elsewhere. Mutating harder attacks
+                    // that without cutting the rate, which is the lever that
+                    // costs body size.
+  sporefit: 0,      // fit a node must have before it may throw a spore.
+                    // 0 = any node may. See the comment at the call site for
+                    // which way this is expected to cut, and why.
+  sporeviable: -1,  // ground a spore will accept, overriding `viable`.
+                    // -1 = use `viable`. Lower lets a spore gamble on
+                    // marginal ground that heavy mutation may have made it
+                    // fit for, which is the difference between dispersal and
+                    // experiment.
+  settle:  1000,    // ticks over which a young body grows into the fragment
+                    // cull. Halved from 2000 alongside minfrag 45 -> 65, and
+                    // THAT PAIR IS THE EXTINCTION CLIFF: a higher bar with
+                    // less time to clear it is exactly how the planet went
+                    // sterile before. It is set here deliberately and not
+                    // casually — 65 with 1000 was run at eight seeds and again
+                    // at sixteen without a single failure, and it is worth
+                    // 0.032 of score over leaving settle at 2000. But a screen
+                    // of 56 mixed configurations DID kill a planet on this
+                    // pair, in a context with marine off and several other
+                    // dials moved, so the margin is real rather than wide.
+                    // If you move anything else that touches how fast a
+                    // founder grows — tries, spore, the step, the angle
+                    // freedom — re-measure this pair before trusting it.
+                    // The conservative fallback is settle 2000 with minfrag
+                    // 65, which keeps 0.069 of the 0.101 total gain and
+                    // cannot fall off the cliff at all.
                     // cull. It was 400, set when a fixed slot table made
                     // growth efficient; once the genome picks its own angles
                     // it wastes far more buds, no founder could reach the
@@ -1622,7 +1728,7 @@ function binOf(x,y,z){
   const k=Math.min(PGRID-1,Math.max(0,((z+1)*0.5*PGRID)|0));
   return (i*PGRID+j)*PGRID+k;
 }
-function occupied(x,y,z){
+function blockedBy(x,y,z){
   const i=Math.min(PGRID-1,Math.max(0,((x+1)*0.5*PGRID)|0));
   const j=Math.min(PGRID-1,Math.max(0,((y+1)*0.5*PGRID)|0));
   const k=Math.min(PGRID-1,Math.max(0,((z+1)*0.5*PGRID)|0));
@@ -1638,13 +1744,22 @@ function occupied(x,y,z){
         for(let n=0;n<list.length;n++){
           const t=list[n];
           const dx=NPX[t]-x, dy=NPY[t]-y, dz=NPZ[t]-z;
-          if(dx*dx+dy*dy+dz*dz < r2) return true;
+          if(dx*dx+dy*dy+dz*dz < r2) return t;
         }
       }
     }
   }
-  return false;
+  return -1;
 }
+/* Which node refused a placement, not merely that one did. A bud blocked by
+   the plant's own body is a fact about its genome — its angles and its step
+   have boxed it in, and it will stay boxed in. A bud blocked by a stranger is
+   a fact about its neighbourhood, which will change when the neighbour dies.
+   The fragment cull cannot tell those apart while it only knows size, so a
+   good plant wedged between two large ones is culled for being small when its
+   smallness belongs to the neighbours. Same test, same cost — the caller now
+   gets to ask whose fault it was. */
+function occupied(x,y,z){ return blockedBy(x,y,z) >= 0; }
 
 function unbin(i){
   const list = pbins.get(NBIN[i]);
@@ -2215,7 +2330,22 @@ function bud(ni){
   l=1/Math.hypot(ex,ey,ez); ex*=l; ey*=l; ez*=l;
 
   if(fitAt(nx,ny,nz,go) < PARAMS.viable) return false;
-  if(occupied(nx,ny,nz)){ angBlocked++; return false; }
+  const hit = blockedBy(nx,ny,nz);
+  if(hit >= 0){
+    angBlocked++;
+    /* Charge the refusal to the body, and record whose fault it was. Kept as
+       two decaying counters rather than a ring of the last hundred attempts:
+       bodies churn constantly here and per-plant state has to be cheap to
+       create, so a hundred slots each is not affordable and an exponential
+       memory answers the same question. */
+    const r = PROOT[ni];
+    if(r >= 0){
+      BTRY[r]++;
+      if(PROOT[hit] === r) BSELF[r]++;
+    }
+    return false;
+  }
+  { const r = PROOT[ni]; if(r >= 0) BTRY[r]++; }
   /* The first child continues the sector on its parent's genome exactly; the
      second and later are true bifurcations and mint a mutated one. Mutating
      every node instead would let drift inside one body swamp the differences
@@ -2233,10 +2363,17 @@ function bud(ni){
    own right — a new body, carrying its parent's colour */
 function spore(ni){
   const go = ni*G;
+  /* A founder cannot out-compete an established neighbour on equal terms; its
+     only opening is to arrive different enough to hold ground nobody else
+     wants. So the ground it will accept can be loosened separately from the
+     ground ordinary growth accepts, and what it carries can be mutated harder
+     than an ordinary bifurcation — dispersal as experiment rather than as a
+     copy of the incumbent posted elsewhere. */
+  const need = PARAMS.sporeviable >= 0 ? PARAMS.sporeviable : PARAMS.viable;
   for(let a=0;a<24;a++){
     const u=prnd()*2-1, ph=prnd()*Math.PI*2, r=Math.sqrt(Math.max(0,1-u*u));
     const x=r*Math.cos(ph), y=u, z=r*Math.sin(ph);
-    if(fitAt(x,y,z,go) < PARAMS.viable) continue;
+    if(fitAt(x,y,z,go) < need) continue;
     if(occupied(x,y,z)) continue;
     let ax=-Math.sin(ph), ay=0, az=Math.cos(ph);
     const bx=y*az-z*ay, by=z*ax-x*az, bz=x*ay-y*ax;
@@ -2244,7 +2381,7 @@ function spore(ni){
     let hx=ax*cc+bx*ss, hy=ay*cc+by*ss, hz=az*cc+bz*ss;
     const dp=hx*x+hy*y+hz*z; hx-=x*dp; hy-=y*dp; hz-=z*dp;
     const l=1/Math.hypot(hx,hy,hz);
-    addNode(x,y,z,hx*l,hy*l,hz*l,ni,-1,PARAMS.mut,PARAMS.step);
+    addNode(x,y,z,hx*l,hy*l,hz*l,ni,-1,PARAMS.mut*PARAMS.sporemut,PARAMS.step);
     return true;
   }
   return false;
@@ -2258,6 +2395,11 @@ function spore(ni){
    fragment onto a stranger. */
 const PROOT=new Int32Array(PMAX), PSIZE=new Int32Array(PMAX), PSTK=new Int32Array(PMAX);
 const BTOP=new Uint8Array(PMAX); const SIZES=[];   // the largest plants, ringed
+/* bud attempts charged to a body, and how many of those its own body refused.
+   Halved on every cull pass, so they are an exponential memory of recent
+   effort rather than a lifetime tally — a plant that was boxed in long ago and
+   has since broken out should not be answering for it. */
+const BTRY=new Int32Array(PMAX), BSELF=new Int32Array(PMAX);
 const BX=new Float32Array(PMAX), BY=new Float32Array(PMAX), BZ=new Float32Array(PMAX);
 
 /* ---- history, so stasis can be seen rather than guessed at ----
@@ -2419,10 +2561,30 @@ function pruneFragments(){
          its grace, then the bar climbs to full by the end of it. */
       let a=((ptick-NBORN[r])/settle - yf)/Math.max(1e-3,1-yf);
       a = a<0?0:(a>1?1:a);
-      const need=minf*a*a*(3-2*a);
+      let need=minf*a*a*(3-2*a);
+      /* Size is a proxy for viability and a poor one, because a body wedged
+         between two large neighbours is small on account of the neighbours.
+         Where the refusals came from says which it is. Both rules below are
+         off by default and each is the other's opposite: one spares a plant
+         the size bar because it is fenced in, the other kills a plant that
+         clears the size bar because it has boxed itself in. */
+      const tries=BTRY[r];
+      if(tries >= (PARAMS.cullmin|0) && (PARAMS.cullmin|0) > 0){
+        const selfShare = BSELF[r]/tries;
+        if(PARAMS.sparefenced>0 && selfShare < PARAMS.sparefenced) need=0;
+        if(PARAMS.cullself>0 && selfShare > PARAMS.cullself) need=Infinity;
+      }
       if(PSIZE[r] < need) killNode(i);
     }
     else if(NLIVE[i]===2 && PSIZE[PROOT[i]]===0) freeNode(i);
+  }
+  /* Halve the effort counters. A body that has broken out of a corner should
+     stop answering for the corner, and a body whose root index has just been
+     recycled to a stranger must not inherit its record — the same identity
+     hazard that put a generation on the frontier entries. */
+  for(let r=0;r<nodeHigh;r++){
+    if(PROOT[r]!==r || PSIZE[r]===0){ BTRY[r]=0; BSELF[r]=0; }
+    else { BTRY[r]>>=1; BSELF[r]>>=1; }
   }
 }
 
@@ -2493,7 +2655,16 @@ function plantsStep(){
        apart. Now that nothing falls apart, nothing is founded either, and the
        population can only decline — so the spore the brief asked for is no
        longer optional. Rare enough that an arrival still reads as an event. */
-    if(prnd() < PARAMS.spore){ spore(best); continue; }
+    /* Optionally only the thriving get to throw one. Note which way this is
+       expected to cut: fit is affinity against local ground, so the fittest
+       nodes are those matched to the COMMONEST terrain, and the commonest
+       terrain is the sea. Selecting spore parents by fit therefore flings sea
+       specialists across the planet preferentially, which is the documented
+       route to monoculture — the same homogenising the rate itself was cut to
+       weaken. Measured rather than assumed, but that is the prior. */
+    if(prnd() < PARAMS.spore && (PARAMS.sporefit<=0 || NFIT[best]>=PARAMS.sporefit)){
+      spore(best); continue;
+    }
     /* Retiring by index is only safe if that index still holds this node: the
        draws above may have swapped the array about while cleaning stale
        entries. If it has moved, leave it — the next draw that finds it full
@@ -3851,9 +4022,33 @@ const FOVY = 42*Math.PI/180;
    closer would put the eye inside the planet — the surface is at radius 1 and
    the old floor of 0.44 already sat at about 1.06 — so the only way to get down
    to a couple of plants is a longer lens, not a shorter distance. */
-const ZTELE = 0.44, ZMIN = 0.11;
-function camFov(){ return FOVY*Math.max(0.13, Math.min(1, CAM.zoom/ZTELE)); }
-function camDistOf(z){ return fitDist()*Math.max(ZTELE, z); }
+/* The floor has to be an absolute DISTANCE, not a fraction of the framing
+   distance, and this was wrong for as long as it has existed. fitDist depends
+   on the window's shape — about 3.4 on a landscape desktop and about 7.0 on a
+   phone held upright, because a tall narrow window has to stand further off to
+   fit a disc inside its short axis. Flooring the zoom *fraction* at 0.44
+   therefore stopped the desktop eye at 1.5 radii and the phone eye at 3.1, so
+   the phone could never get close: the clouds, which fade on absolute distance
+   between 2.50 and 1.55, never even began to thin, and the detail patch never
+   engaged. Two complaints with one cause. Floor the distance instead and every
+   window shape arrives at the same place. */
+const DMIN = 1.50;                    // closest the eye may come; surface is at 1
+const FOVMIN = 5.5*Math.PI/180;       // and past that the lens narrows, to here
+const ZMIN = 0.02;                    // low enough that any window can reach FOVMIN
+function camDistOf(z){ return Math.max(DMIN, fitDist()*z); }
+/* Once the eye stops approaching, the lens narrows instead — by exactly the
+   factor the approach was denied, so magnification carries on smoothly through
+   the transition and lands on the same angle whatever the window shape. */
+function camFov(){
+  const want = fitDist()*CAM.zoom;
+  return Math.max(FOVMIN, FOVY*Math.min(1, want/Math.max(DMIN, want)));
+}
+/* How much of the visible field a pixel of drag is worth. At full zoom the
+   field is 42 degrees and at full telephoto 5.5, so a fixed radians-per-pixel
+   rate sweeps eight times more of what can actually be seen when zoomed in,
+   which is what makes it twitchy. Scaling by the lens keeps the ground moving
+   at a constant rate across the screen. */
+function orbitRate(){ return 0.0055*(camFov()/FOVY); }
 /* frame the planet so it never touches the edge of the window, whatever
    shape that window is */
 function fitDist(){
@@ -3884,6 +4079,45 @@ function setPaused(v){
 setPaused(false);
 ppBtn.addEventListener("click", e=>{ e.stopPropagation(); setPaused(!paused); });
 
+/* Hold the view. The surface turns once every two and a half minutes, so a
+   plant you have found drifts off the limb long before it has done anything
+   worth watching — which is the one thing this whole feature exists to let
+   you see.
+
+   The camera chases the ground; the world is not stopped. Stopping the spin
+   was the first attempt and it reads as the whole planet freezing, which is
+   both alarming and a lie — the point is to watch something grow, and a
+   halted world suggests nothing is growing. Everything keeps running: the
+   spin, the orbit, the seasons, the ecology. Only the eye moves to stay over
+   the same ground.
+
+   Exactly, too, rather than by advancing the yaw at the spin rate. A surface
+   point's velocity is POLE x p — the daily turn is about the tilted axis, not
+   about the world's vertical — so a yaw-only chase tracks the equator and
+   slides everywhere else. Rotating the eye about POLE itself tracks any
+   latitude, and dragging still works because it simply moves the eye that the
+   chase then carries on carrying.
+
+   And it hides the clouds, because at this range a deck of them is a shutter
+   over the very thing being watched. */
+const ICON_LOCK  ='<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.4" y="5.3" width="7.2" height="5.4" rx="1" fill="currentColor"/><path d="M4.1 5.3 V3.7 a1.9 1.9 0 0 1 3.8 0 V5.3" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>';
+const ICON_OPEN  ='<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.4" y="5.3" width="7.2" height="5.4" rx="1" fill="currentColor"/><path d="M4.1 5.3 V3.7 a1.9 1.9 0 0 1 3.8 -0.4" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>';
+const lockBtn = document.getElementById("lock");
+let viewLock = false;
+function setLock(v){
+  viewLock = v;
+  lockBtn.innerHTML = viewLock ? ICON_LOCK : ICON_OPEN;
+  lockBtn.classList.toggle("on", viewLock);
+  lockBtn.setAttribute("aria-pressed", viewLock ? "true" : "false");
+  lockBtn.title = viewLock ? "release the view" : "hold the view";
+  lockBtn.setAttribute("aria-label", lockBtn.title);
+}
+setLock(false);
+lockBtn.addEventListener("click", e=>{ e.stopPropagation(); setLock(!viewLock); });
+document.getElementById("info").addEventListener("click", e=>{
+  e.stopPropagation(); setCharts(true);
+});
+
 /* ── input ─────────────────────────────────────────────────────────────
    One pointer orbits, two pinch to zoom. Every transition between those
    states re-baselines the deltas, because reusing a stale baseline when a
@@ -3907,8 +4141,24 @@ function spread(){
   return Math.hypot(a[0].x-a[1].x, a[0].y-a[1].y);
 }
 function orbitBy(dx, dy){
-  CAM.yaw   -= dx*0.0055;
-  CAM.pitch  = clamp(CAM.pitch + dy*0.0055, -1.35, 1.35);
+  const r = orbitRate();
+  CAM.yaw   -= dx*r;
+  CAM.pitch  = clamp(CAM.pitch + dy*r, -1.35, 1.35);
+}
+/* Turn the eye about the planet's own axis by `a`, so it stays over the ground
+   it was over. Rodrigues about POLE, then back into the yaw and pitch the rest
+   of the camera is expressed in — the eye direction is
+   (cos p sin y, sin p, cos p cos y), so both fall straight out of it. */
+function trackSpin(a){
+  const cp=Math.cos(CAM.pitch), sp=Math.sin(CAM.pitch);
+  const vx=cp*Math.sin(CAM.yaw), vy=sp, vz=cp*Math.cos(CAM.yaw);
+  const kx=POLE[0], ky=POLE[1], kz=POLE[2];
+  const c=Math.cos(a), s=Math.sin(a), k=(kx*vx+ky*vy+kz*vz)*(1-c);
+  const rx=vx*c+(ky*vz-kz*vy)*s+kx*k;
+  const ry=vy*c+(kz*vx-kx*vz)*s+ky*k;
+  const rz=vz*c+(kx*vy-ky*vx)*s+kz*k;
+  CAM.yaw   = Math.atan2(rx, rz);
+  CAM.pitch = clamp(Math.asin(Math.max(-1,Math.min(1,ry))), -1.35, 1.35);
 }
 /* called whenever the number of pointers changes */
 function rebase(){
@@ -4166,7 +4416,9 @@ function resize(){
 }
 function relayout(){
   dpr=Math.min(devicePixelRatio||1,2); resize();
-  CAM.tDist = fitDist()*CAM.zoom;
+  /* through camDistOf, or a resize while zoomed in re-derives the distance
+     without the floor and puts the eye inside the planet */
+  CAM.tDist = camDistOf(CAM.zoom);
 }
 addEventListener("resize", relayout);
 addEventListener("orientationchange", ()=>setTimeout(relayout,220));
@@ -4190,8 +4442,12 @@ function frame(now){
   }
 
   if(!paused && !frozen){
-    spin += dt*(Math.PI*2/DAY);
-    cloudDrift += dt*(Math.PI*2/DAY)*0.06;
+    const dSpin = dt*(Math.PI*2/DAY);
+    spin += dSpin;
+    cloudDrift += dSpin*0.06;
+    /* carry the eye with the ground it is over, about the axis the ground
+       actually turns about */
+    if(viewLock) trackSpin(dSpin);
   }
   if(!paused) simAccum += dt;
   if(paused){ rateT0 = 0; }
@@ -4282,9 +4538,12 @@ function frame(now){
      camera is looking at, sized to what is genuinely on screen. Faded in
      rather than switched on, or the plants would sharpen at a threshold. */
   {
+    /* keyed off the lens now that the distance floors absolutely: once the eye
+       has stopped approaching, distance says nothing more about how close the
+       view really is, and only the narrowing lens still says it */
     const amt = PARAMS.detail<=0 ? 0
               : Math.max(1.0 - smoothstep(1.70, 2.55, CAM.dist),
-                         1.0 - smoothstep(0.55, 1.00, CAM.zoom/ZTELE));
+                         1.0 - smoothstep(0.55, 1.00, camFov()/FOVY));
     detailOn = amt;
     if(amt > 0.002){
       /* the sub-camera point, taken back into the planet's own frame */
@@ -4376,9 +4635,11 @@ function frame(now){
   gl.bindVertexArray(sphVAO);
   gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
 
-  /* clouds */
+  /* clouds — not while the view is held: at that range the deck is a shutter
+     over the one thing being watched */
   gl.depthMask(false); gl.enable(gl.BLEND);
   gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+  if(!viewLock){
   gl.useProgram(cloudProg);
   gl.uniform1i(cloudProg.u.uData,0);
   gl.uniformMatrix4fv(cloudProg.u.uVP,false,mVP);
@@ -4392,6 +4653,7 @@ function frame(now){
   gl.uniform3fv(cloudProg.u.uRingN, POLE);
   gl.uniform1f(cloudProg.u.uRingFade, ringFade);
   gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
+  }
 
   /* Ring. Same blend and culling the clouds just left set, and the depth the
      planet wrote already hides the far half. */
@@ -4440,6 +4702,7 @@ function m3(a,b){
    which is the outcome worth hoping for and cannot be seen from two numbers. */
 const chartsEl = document.getElementById("charts");
 const cgraph = document.getElementById("cgraph");
+const cscroll = document.getElementById("cscroll");
 const cctx = cgraph.getContext("2d");
 let chartsOn = false, chartTimer = 0;
 
@@ -4460,8 +4723,26 @@ function trendOf(v,n){
 
 function drawCharts(){
   const dprC = Math.min(devicePixelRatio||1, 2);
-  const W = cgraph.clientWidth, H = cgraph.clientHeight;
-  if(W<8 || H<8) return;
+  const W = cscroll.clientWidth, avail = cscroll.clientHeight;
+  if(W<8 || avail<8) return;
+
+  /* as many columns as the width can carry without the labels colliding.
+     A phone in portrait leaves about 340 css pixels here, which used to fall
+     through to a single column: ten charts stacked in one screen, each sixty
+     pixels tall and three hundred wide, which is the wrong aspect ratio for
+     reading a trend and the right one for reading nothing. Two columns halve
+     the rows and double the height. The longest label, BIGGEST LINEAGE SHARE,
+     is about 126 pixels in this font and still fits the 165 a two-column
+     phone gives. */
+  const cols = W>1180 ? 5 : W>860 ? 4 : W>560 ? 3 : W>300 ? 2 : 1;
+  const rows = Math.ceil(HSER.length/cols);
+  const padX=8, padY=6;
+  /* A chart shorter than this says nothing, so the canvas is allowed to grow
+     past the window and the overlay scrolls. The document must still not:
+     that is what the fixed, clipped container is for. */
+  const MINCELL = 92;
+  const H = Math.max(avail, rows*MINCELL + padY*(rows-1));
+  if(cgraph.style.height !== H+"px") cgraph.style.height = H+"px";
   if(cgraph.width!==(W*dprC|0) || cgraph.height!==(H*dprC|0)){
     cgraph.width=W*dprC|0; cgraph.height=H*dprC|0;
   }
@@ -4475,10 +4756,7 @@ function drawCharts(){
     : `${HT[n-1]|0} ecology ticks · ${n} samples · every ${hEvery*(PARAMS.sweep|0)} ticks`;
   if(n<2) return;
 
-  /* as many columns as the width can carry without the labels colliding */
-  const cols = W>1180 ? 5 : W>860 ? 4 : W>560 ? 3 : W>360 ? 2 : 1;
-  const rows = Math.ceil(HSER.length/cols);
-  const padX=8, padY=6, cw=(W-padX*(cols-1))/cols, ch=(H-padY*(rows-1))/rows;
+  const cw=(W-padX*(cols-1))/cols, ch=(H-padY*(rows-1))/rows;
   const t0=HT[0], t1=Math.max(HT[n-1], t0+1);
 
   HSER.forEach((s,idx)=>{
@@ -4546,9 +4824,6 @@ function setCharts(on){
   clearInterval(chartTimer);
   if(on){ drawCharts(); chartTimer=setInterval(drawCharts,1000); }
 }
-document.getElementById("chartlink").addEventListener("click",e=>{
-  e.stopPropagation(); setCharts(true);
-});
 document.getElementById("chartclose").addEventListener("click",e=>{
   e.stopPropagation(); setCharts(false);
 });
@@ -4600,15 +4875,23 @@ window.__world = {
   /* `ticks` counts *climate* updates, and each one is paid the same number of
      ecology steps the frame loop owes it. Getting this wrong invalidated every
      measurement taken through this hook: it used to run one plant step per
-     climate update, where the frame loop accrues sixty-four of them at x100.
+     climate update, where the frame loop accrues `ecorate` of them.
      The ecology was therefore seeing fifteen times more climate drift per
      generation than the thing anyone actually watches — and drift is exactly
      what this design leans on to hold diversity up, so every sweep flattered
      it. If you change the frame loop's accrual, change this with it. */
   runWorld(ticks, mult, ecoPerTick){
     const spd = mult || 1;
-    const eco = ecoPerTick!==undefined ? (ecoPerTick|0)
-              : Math.max(1, Math.min(64, Math.round(spd)));
+    /* Default to what the frame loop actually accrues, by naming the same
+       constant it does. It used to derive a number from the speed instead —
+       min(64, round(speed)), so 64 at x100 — which stopped being what the
+       frame loop owed the moment ecorate became a parameter and was set to
+       16. Every caller that omitted this argument was therefore measuring an
+       ecology running four times faster against its climate than the shipped
+       piece does, which is a calmer world and a flattering one. verify.js was
+       such a caller. Deriving it from ECORATE means the two cannot drift
+       apart again. */
+    const eco = ecoPerTick!==undefined ? (ecoPerTick|0) : ECORATE;
     for(let i=0;i<(ticks|0);i++){
       const step = Math.min(0.084*spd, 45);
       S.time += step;
