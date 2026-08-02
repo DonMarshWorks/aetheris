@@ -4756,11 +4756,17 @@ function frame(now){
   const bob = 0.028*Math.sin(now*0.000012)*(camFov()/FOVY);
   /* the breath is a rotation about the camera's own right, not a number added
      to a pitch that is no longer the state */
+  /* Reported from the orientation ITSELF, before the breath is added. The
+     breath is a cosmetic oscillation of the framing, so folding it into the
+     reported yaw and pitch makes the camera appear to rotate on its own — and
+     it does so between any two readings, which is indistinguishable from the
+     rotation jumping when a second finger lands. */
+  qApply(CAM.q, AXIS_Z, _e);
+  CAM.yaw = Math.atan2(_e[0], _e[2]);
+  CAM.pitch = Math.asin(Math.max(-1,Math.min(1,_e[1])));
   qAxis(1,0,0,-bob,_q1); qNorm(qMul(CAM.q,_q1,_q2));
   qApply(_q2, AXIS_Z, _e); qApply(_q2, AXIS_Y, _u);
   const eye=[_e[0]*CAM.dist, _e[1]*CAM.dist, _e[2]*CAM.dist];
-  CAM.yaw = Math.atan2(_e[0], _e[2]);
-  CAM.pitch = Math.asin(Math.max(-1,Math.min(1,_e[1])));
   const W=canvas.width, Hh=canvas.height;
   const fovNow = camFov();
   perspective(mProj, fovNow, W/Hh, 0.35, 30);
