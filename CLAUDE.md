@@ -168,11 +168,19 @@ modelled — don't claim otherwise in the README.
 ## Next feature
 
 Evolving plants competing for exclusive area — branching growth in continuous
-position, not a grid mosaic. Lives on the `plants` branch, not yet merged. See
-`docs/plants-design.md` for the model, the build order and what has been
-measured; `docs/formula-design.md` for the formula genome that replaced the
-scalar one, and for the four of its claims that measurement overturned. Read
-both before touching it.
+position, not a grid mosaic. Lives on the `plants` branch, not yet merged.
+Three documents, and they are split by what you need:
+
+- `docs/plants-design.md` — the model as it now stands, the build order, the
+  invariants. Start here.
+- `docs/plants-measured.md` — the evidence. Every claim that was tested and
+  what the testing said, including the several it destroyed. **Read this
+  before trying an idea that sounds obvious**: ocean nutrient limitation was
+  judged harmful twice and is now the default, frequency dependence failed
+  twice on two different questions, and a retry allowance measured optimal at
+  two different values without the constant changing.
+- `docs/formula-design.md` — the formula genome that replaced the scalar one,
+  and the four of its claims that measurement overturned.
 
 **The harness is what breaks.** Four times now the thing reporting the
 measurement has been wrong rather than the thing measured: a stale `fitAt`
