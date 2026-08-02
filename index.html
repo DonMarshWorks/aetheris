@@ -2708,7 +2708,16 @@ const BSIGX=new Float32Array(PMAX);
    old one. Zero is reserved for "nothing selected", so an untouched node
    never matches. */
 const NSEL=new Uint32Array(PMAX);
-let selId=0, selCount=0, selHold=false, selReleasedAt=0, selPaintT=0;
+/* selSeq only ever goes up; selId is which mark is being SHOWN, or 0 for none.
+   Keeping the two apart is not tidiness, it was a bug: selId was reset to 0
+   when a fade finished and incremented on the next selection, which handed out
+   the id 1 all over again — so every node still carrying 1 from the first
+   selection of the session lit up with it. A press showed its own plant plus
+   the ghosts of plants chosen earlier, anywhere on the planet, and which
+   ghosts appeared depended on the selection history, so it never reproduced
+   the same way twice. Measured before the fix: pressing five plants in turn
+   showed 1, then 2, then 3 distinct bodies. Marks are never reused now. */
+let selSeq=0, selId=0, selCount=0, selHold=false, selReleasedAt=0, selPaintT=0;
 const SEL_FADE_MS=3000;
 /* Read off the clock rather than counted down a frame at a time. A frame that
    takes a long time would otherwise stretch the fade with it, and the fade is
@@ -4726,7 +4735,7 @@ function selectAt(px,py){
   /* Every selection raises the id, so whatever was held lets go in the same
      instant and two plants are never red at once — including the case of
      pressing bare ground, which is simply a selection of nothing. */
-  selId++; selHold=true; selReleasedAt=0;
+  selId=++selSeq; selHold=true; selReleasedAt=0;
   if(r<0){ selId=0; selHold=false; selCount=0;
            selBadge.style.transition='none'; selBadge.style.opacity=0; }
   else {
@@ -4752,7 +4761,11 @@ function selectAt(px,py){
 /* A press that stays put is a question about what is under it; a press that
    moves is a drag. Long enough not to fire while somebody is deciding where
    to start a drag, short enough to feel like an answer. */
-const HOLD_MS = 150, HOLD_SLOP = 16;
+/* A press only asks a question if it stays put. Both a straight departure
+   from where it landed and a restless total are counted: a finger that
+   wanders eight pixels out and back has still moved, and taking only the
+   straight-line distance would call that stillness. */
+const HOLD_MS = 150, HOLD_SLOP = 8, HOLD_TRAVEL = 14;
 let holdTimer = 0, holdFired = false;
 function cancelHold(){ if(holdTimer){ clearTimeout(holdTimer); holdTimer=0; } }
 
@@ -4781,7 +4794,8 @@ addEventListener("pointermove",e=>{
     travel += Math.abs(e.clientX-lastX) + Math.abs(e.clientY-lastY);
     /* only while the press is still deciding — once it has taken a plant, the
        finger is free to move and the plant stays held */
-    if(holdTimer && Math.hypot(e.clientX-downX, e.clientY-downY) > HOLD_SLOP) cancelHold();
+    if(holdTimer && (Math.hypot(e.clientX-downX, e.clientY-downY) > HOLD_SLOP
+                     || travel > HOLD_TRAVEL)) cancelHold();
     orbitBy(e.clientX-lastX, e.clientY-lastY);
     lastX = e.clientX; lastY = e.clientY;
   } else if(mode === 2){
@@ -5521,6 +5535,16 @@ window.__world = {
      every link in the tree should be about that long. A link that is not means
      something has been joined that never grew together — and that, not a big
      plant, would be why one press lights up two places. */
+  /* how many distinct bodies carry the mark currently being shown. Anything
+     but one means a stale mark has come back from the dead. */
+  holdState(){ return {armed:holdTimer!==0, fired:holdFired, mode, travel,
+                       dist:+Math.hypot(lastX-downX,lastY-downY).toFixed(1),
+                       ptrs:ptrs.size}; },
+  markedBodies(){
+    const set=new Set(); let n=0;
+    for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0 && selId>0 && NSEL[i]===selId){ set.add(PROOT[i]); n++; }
+    return {bodies:set.size, nodes:n};
+  },
   hopScan(){
     let worst=0, worstI=-1, over=0, n=0;
     const lim=PARAMS.step*PARAMS.sphi*1.5;
