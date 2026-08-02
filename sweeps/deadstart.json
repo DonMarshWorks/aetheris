@@ -1,0 +1,7 @@
+{ "ticks": 30000, "checkpoints": [2000,8000,30000], "defaultEcorate": 16,
+  "seeds": [7,999],
+  "configs": [
+    { "tag": "empty-noreseed", "params": { "seeds": 0, "spore": 0, "reseed": 0 } },
+    { "tag": "empty-reseed.20","params": { "seeds": 0, "spore": 0, "reseed": 0.20 } },
+    { "tag": "empty-spore-only","params": { "seeds": 0, "spore": 0.001, "reseed": 0 } }
+  ] }

@@ -1,0 +1,6 @@
+{ "ticks": 15000, "checkpoints": [15000], "defaultEcorate": 16, "seeds": [7],
+  "configs": [
+    { "tag": "A-plain",  "params": { "spore": 0 } },
+    { "tag": "B-plain",  "params": { "spore": 0 } },
+    { "tag": "C-reseed0","params": { "spore": 0, "reseed": 0 } }
+  ] }

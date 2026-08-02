@@ -73,10 +73,6 @@ function distil(p) {
     geoDiff:  p.geo ? p.geo.differentiation : null,
     geoEven:  p.geo ? p.geo.withinEven : null,
     geoBoxes: p.geo ? p.geo.provinces : null,
-    sigListens: p.signal ? p.signal.listens : null,
-    sigSpeaks:  p.signal ? p.signal.speaks  : null,
-    sigBoth:    p.signal ? p.signal.both    : null,
-    sigLevel:   p.signal ? p.signal.level   : null,
     budShare: p.draws.budShare, eligibleShare: p.draws.eligibleShare,
     transferTook: p.transfer.tookShare,
     angleSpread: p.outputs.angle.spreadWithinNode,
@@ -94,15 +90,26 @@ async function runJob(browser, job, plan) {
   out.mult = job.mult !== undefined ? job.mult
            : (plan.mult !== undefined ? plan.mult : 100);
   try {
+    /* Retire the frame loop BEFORE the page has run a line of its own, not
+       after waiting for the world to be ready. Stubbing it afterwards left an
+       indeterminate number of frames between boot and the stub, each
+       advancing the world by a wall-clock-dependent amount — so the same seed
+       and the same parameters gave slightly different worlds from run to run,
+       and comparing two sweeps meant comparing two accidents. Measured: the
+       same configuration's live count moved by up to four per cent.
+
+       The world is booted from inside a requestAnimationFrame callback, so it
+       cannot simply be removed. The first call is allowed through — that is
+       the boot, which schedules the frame loop as its last act — and every
+       call after it is dropped, so the loop never runs at all. */
+    await page.addInitScript(() => {
+      const raf = window.requestAnimationFrame.bind(window);
+      let n = 0;
+      window.requestAnimationFrame = cb => (n++ === 0 ? raf(cb) : 0);
+    });
     await page.goto('file://' + PAGE + hashOf(job.params, job.seed));
     await page.waitForFunction(() => window.__world && window.__world.S.epoch0 > 0,
       { timeout: 180000 });
-    /* Stop the frame loop. It re-registers itself every call, so replacing the
-       scheduler retires it after the frame in flight; nothing this script does
-       needs a rendered pixel, and a running loop would advance the world by an
-       amount no result records. */
-    await page.evaluate(() => { window.requestAnimationFrame = () => 0; });
-    await page.waitForTimeout(60);
 
     const eco = job.params.ecorate !== undefined
       ? job.params.ecorate : plan.defaultEcorate;

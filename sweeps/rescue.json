@@ -1,0 +1,7 @@
+{ "ticks": 45000, "checkpoints": [5000,15000,45000], "defaultEcorate": 16,
+  "seeds": [999],
+  "configs": [
+    { "tag": "spore0-noreseed",  "params": { "spore": 0, "reseed": 0 } },
+    { "tag": "spore0-reseed.05", "params": { "spore": 0, "reseed": 0.05 } },
+    { "tag": "spore0-reseed.20", "params": { "spore": 0, "reseed": 0.20 } }
+  ] }

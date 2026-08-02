@@ -1,0 +1,2 @@
+{ "ticks": 15000, "checkpoints": [5000,15000], "defaultEcorate": 16, "seeds": [7],
+  "configs": [ { "tag": "two-checkpoints", "params": { "spore": 0 } } ] }
