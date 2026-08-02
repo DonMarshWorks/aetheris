@@ -167,6 +167,23 @@
     .sp{padding:7px 12px;font-size:11px}
   }
 
+  /* the count, over the world, by the finger. Pointer-transparent so it can
+     never eat a drag, and positioned once when the plant is taken rather than
+     tracked: the world can be dragged to bring the pair back into view, and a
+     number that chased the plant would be one more thing moving. */
+  #selbadge{
+    position:fixed;left:0;top:0;z-index:30;pointer-events:none;opacity:0;
+    min-width:58px;height:58px;padding:0 9px;border-radius:29px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(150,26,32,.82);border:1px solid rgba(255,150,150,.55);
+    transition:opacity 3s linear;
+    color:#fff;font-variant-numeric:tabular-nums;line-height:1;
+    box-shadow:0 2px 14px rgba(0,0,0,.45);
+  }
+  #selbadge .n{font-size:17px;font-weight:600;letter-spacing:.02em}
+  #selbadge .u{font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;
+    opacity:.82;margin-top:3px}
+
   #fail{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
     text-align:center;padding:40px;font-size:14px;line-height:1.7;color:var(--dim);z-index:20}
 </style>
@@ -217,6 +234,7 @@
   <div id="cscroll"><canvas id="cgraph"></canvas></div>
 </div>
 
+<div id="selbadge" aria-hidden="true"></div>
 <div id="splash"><div class="t">forming world</div><div class="d"></div></div>
 <div id="fail">This world needs WebGL2, which this browser isn&rsquo;t providing.<br>Try a recent Chrome, Edge, Firefox or Safari with hardware acceleration enabled.</div>
 
@@ -2023,9 +2041,12 @@ function emitNode(i, pass, w){
        hue the palette never makes, for the same reason the size rings are
        magenta. Value is kept, so the body's own structure still reads through
        it: wood stays dark, tips stay bright. */
-    if(SELROOT>=0 && PROOT[i]===SELROOT){
-      const lum=(0.30*r+0.59*g+0.11*b)/255;
-      r=90+165*lum; g=26*lum; b=32*lum;
+    if(selId>0 && NSEL[i]===selId){
+      const f=SELFADE;
+      if(f>0){
+        const lum=(0.30*r+0.59*g+0.11*b)/255;
+        r+=( (90+165*lum) -r)*f; g+=(26*lum-g)*f; b+=(32*lum-b)*f;
+      }
     }
     /* Dead wood is not black. Black would swamp hue, which is the channel
        carrying niche, and half the standing structure would go to it — the
@@ -2267,6 +2288,10 @@ function addNode(x,y,z,hx,hy,hz,src,par,amt,stepUsed){
   NPX[i]=x; NPY[i]=y; NPZ[i]=z;
   NHX[i]=hx; NHY[i]=hy; NHZ[i]=hz;
   NKID[i]=0; NSLOT[i]=0; NLIVE[i]=1; NSTEP[i]=stepUsed; NCAP[i]=1;
+  /* growth off a highlighted plant stays highlighted, so the body does not
+     appear to stop at a line; and a recycled slot never keeps a stale mark,
+     which would light up a stranger born into a dead node's place */
+  NSEL[i] = (src>=0 && selId>0 && NSEL[src]===selId) ? selId : 0;
   if(src<0) randomGenome(i);
   else if(amt>0){
     inheritMutated(src,i,amt);
@@ -2520,11 +2545,27 @@ const BSIG=new Float32Array(PMAX), BSIGR=new Float32Array(PMAX);
 const BSIGN=new Int32Array(PMAX), SIGT=new Int32Array(PMAX);
 /* the loudest thing said this tick, kept signed, for the max combiner */
 const BSIGX=new Float32Array(PMAX);
-/* Which body is being shown in red, and the generation its root held when it
-   was picked. An array index is not an identity here — a freed slot goes
-   straight to the next birth — so without the stamp the highlight would
-   silently move to whichever stranger moved in. */
-let SELROOT=-1, SELGEN=-1;
+/* The highlight marks NODES, not a body, and that is the whole design.
+   A body is its root index, and a root index is not durable: bodies split
+   when wood rots through, and the severed half is re-rooted somewhere else
+   entirely — so a highlight keyed to a root would go out halfway through a
+   plant at the very moment the interesting thing happened. Stamping each node
+   with the id of the selection it belonged to survives every split, because
+   the nodes do not move between plants, the plants move between nodes.
+
+   It also makes clearing free. Selecting anything raises the id, and every
+   node still carrying the old one stops matching in the same instant — so
+   there is never a moment with two red plants, without a pass to clear the
+   old one. Zero is reserved for "nothing selected", so an untouched node
+   never matches. */
+const NSEL=new Uint32Array(PMAX);
+let selId=0, selCount=0, selHold=false, selReleasedAt=0, selPaintT=0;
+const SEL_FADE_MS=3000;
+/* Read off the clock rather than counted down a frame at a time. A frame that
+   takes a long time would otherwise stretch the fade with it, and the fade is
+   a promise about seconds, not about frames. */
+const selFade = () => selHold ? 1
+  : (selReleasedAt ? Math.max(0, 1-(performance.now()-selReleasedAt)/SEL_FADE_MS) : 0);
 const SIGSTAMP=new Int32Array(PMAX).fill(-1), SIGTOUCH=new Int32Array(PMAX);
 let sigTouchN=0;
 const BX=new Float32Array(PMAX), BY=new Float32Array(PMAX), BZ=new Float32Array(PMAX);
@@ -3411,7 +3452,11 @@ function renderDetail(){
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
 }
 
+/* Sampled once per rebuild rather than per node, so every part of a plant is
+   at the same point in its fade and the body cannot come back in stripes. */
+let SELFADE=0;
 function renderPlants(){
+  SELFADE=selFade();
   /* Two different clocks. The planet-wide sheet only changes when the
      simulation does; the detail patch has to follow the camera, but it can
      reuse the instances already uploaded — no rebuild, no mipmap. Redrawing
@@ -4501,22 +4546,49 @@ function pickBody(px,py){
   }
   return best<0 ? -1 : PROOT[best];
 }
+const selBadge = document.getElementById("selbadge");
+function placeBadge(px,py){
+  /* Offset clear of the fingertip, then held inside the window. Clamped once
+     and not tracked afterwards: near an edge the offset alone would put it
+     off-screen, and the world can be dragged to bring the plant back to the
+     number rather than the number chasing the plant. */
+  const w=selBadge.offsetWidth||58, h=selBadge.offsetHeight||58, m=10;
+  const x=Math.min(Math.max(px+34-w*0.5, m), innerWidth -w-m);
+  const y=Math.min(Math.max(py-52-h*0.5, m), innerHeight-h-m);
+  selBadge.style.transform="translate("+Math.round(x)+"px,"+Math.round(y)+"px)";
+}
 function selectAt(px,py){
   const r = pickBody(px,py);
-  /* Whatever is under the finger, or nothing if there is nothing there.
-     Deliberately not a toggle on the same body: root indices churn as plants
-     split and rot through, so "press it again to let go" would sometimes
-     re-select instead, which is worse than having no way to clear at all.
-     Pressing bare ground or open sea clears it, which is unambiguous. */
-  if(r<0){ SELROOT=-1; SELGEN=-1; }
-  else { SELROOT=r; SELGEN=NGEN[r]; }
+  /* Every selection raises the id, so whatever was held lets go in the same
+     instant and two plants are never red at once — including the case of
+     pressing bare ground, which is simply a selection of nothing. */
+  selId++; selHold=true; selReleasedAt=0;
+  if(r<0){ selId=0; selHold=false; selCount=0;
+           selBadge.style.transition='none'; selBadge.style.opacity=0; }
+  else {
+    /* mark the body as it stands. One pass, once per press. */
+    let n=0;
+    for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0 && PROOT[i]===r){ NSEL[i]=selId; if(NLIVE[i]===1) n++; }
+    selCount=n;
+    selBadge.innerHTML='<div class="n">'+n+'</div><div class="u">nodes</div>';
+    placeBadge(px,py);
+    /* held at full while the finger is down: the transition is switched off
+       for the step up and back on for the fade, so the badge keeps its own
+       time and does not depend on how often the world happens to redraw */
+    selBadge.style.transition='none';
+    selBadge.style.opacity=1;
+    /* read a layout property back, or the two style writes are coalesced and
+       the browser transitions from nothing to nothing — the badge would snap
+       off instead of fading */
+    void selBadge.offsetHeight;
+  }
   plantsDirty=true;
   updateHUD();
 }
 /* A press that stays put is a question about what is under it; a press that
    moves is a drag. Long enough not to fire while somebody is deciding where
    to start a drag, short enough to feel like an answer. */
-const HOLD_MS = 550, HOLD_SLOP = 10;
+const HOLD_MS = 250, HOLD_SLOP = 16;
 let holdTimer = 0, holdFired = false;
 function cancelHold(){ if(holdTimer){ clearTimeout(holdTimer); holdTimer=0; } }
 
@@ -4543,6 +4615,8 @@ addEventListener("pointermove",e=>{
 
   if(mode === 1){
     travel += Math.abs(e.clientX-lastX) + Math.abs(e.clientY-lastY);
+    /* only while the press is still deciding — once it has taken a plant, the
+       finger is free to move and the plant stays held */
     if(holdTimer && Math.hypot(e.clientX-downX, e.clientY-downY) > HOLD_SLOP) cancelHold();
     orbitBy(e.clientX-lastX, e.clientY-lastY);
     lastX = e.clientX; lastY = e.clientY;
@@ -4588,6 +4662,11 @@ function liftPointer(e){
   const rec = ptrs.get(e.pointerId);
   if(!rec) return;
   cancelHold();
+  if(selHold && ptrs.size<=1){
+    selHold=false; selReleasedAt=performance.now(); selPaintT=0;
+    selBadge.style.transition='opacity '+(SEL_FADE_MS/1000)+'s linear';
+    selBadge.style.opacity=0;
+  }
   ptrs.delete(e.pointerId);
   const wasLast = ptrs.size === 0;
   rebase();
@@ -4698,10 +4777,10 @@ function updateHUD(){
      exists to answer — the colour shows the extent, this counts it. The
      generation is checked, not assumed: a freed root index goes straight to
      the next birth, and the count would otherwise be a stranger's. */
+  /* keyed off the fade rather than the id, so the line goes when the colour
+     does even if no frame has run to retire the selection */
   { const el=document.getElementById("selinfo");
-    if(SELROOT>=0 && NGEN[SELROOT]===SELGEN && PSIZE[SELROOT]>0)
-      el.textContent = "this plant · "+PSIZE[SELROOT]+" nodes";
-    else { el.textContent=""; if(SELROOT>=0 && NGEN[SELROOT]!==SELGEN){ SELROOT=-1; SELGEN=-1; } }
+    el.textContent = (selId>0 && selFade()>0) ? "this plant · "+selCount+" nodes" : "";
   }
   BARDEF.forEach(b=>{
     const v=(S.stats[b.k]||0);
@@ -4795,8 +4874,10 @@ if(window.visualViewport){
   visualViewport.addEventListener("resize", relayout);
 }
 
+let frameTick=0;
 function frame(now){
   requestAnimationFrame(frame);
+  frameTick++;
   let dt=(now-last)/1000; last=now;
   if(dt>0.25) dt=0.25;
 
@@ -4880,6 +4961,19 @@ function frame(now){
      the gain was already scaled by the lens, but a magnified view magnifies
      hand tremor as well, and only smoothing answers that. */
   qNlerp(CAM.q, CAM.tq, Math.min(1, dt*9.0), CAM.q);
+  /* the held plant letting go. The sheet has to be rebuilt while it fades —
+     it is rebuilt constantly anyway whenever the world is running, so this
+     only costs anything at all when the world is paused. */
+  if(!selHold && selId>0 && selReleasedAt){
+    /* The sheet is a quarter of a million instances and rebuilding it every
+       frame for three seconds costs more than everything else in the piece put
+       together — measured, it collapsed the frame rate to nothing. Twenty-odd
+       steps is a smooth enough fade and a twentieth of the work; and while the
+       world is running the simulation is dirtying the sheet anyway, so this
+       only does anything at all when it is paused. */
+    if(now - selPaintT > 120){ selPaintT = now; plantsDirty=true; }
+    if(selFade() <= 0){ selId=0; selCount=0; selReleasedAt=0; plantsDirty=true; updateHUD(); }
+  }
   /* a very slow breath, so the framing never feels locked off — but it is
      0.028 radians, which is a third of the field at full telephoto, so it
      fades out with the lens along with everything else */
@@ -5251,7 +5345,7 @@ window.__world = {
   params(){ return PARAMS; },
   /* picking, so the gesture can be tested without dispatching one */
   pick(x,y){ return pickBody(x,y); },
-  selected(){ return {root:SELROOT, size:SELROOT>=0?PSIZE[SELROOT]:0}; },
+  selected(){ return {id:selId, size:selCount, fade:+selFade().toFixed(3), held:selHold, frames:frameTick}; },
   /* pass true to zero the sampling accumulators, so the next reading covers
      only the interval since this one */
   plants(reset){ return plantStats(reset); },

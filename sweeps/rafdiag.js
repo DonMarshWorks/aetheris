@@ -1,0 +1,23 @@
+const path=require('path'); const {chromium}=require('playwright');
+const PAGE=path.resolve(__dirname,'..','index.html');
+const GL=['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--enable-webgl'];
+(async()=>{
+  const b=await chromium.launch({args:GL});
+  const ctx=await b.newContext({viewport:{width:390,height:844},deviceScaleFactor:2,isMobile:true,hasTouch:true});
+  const p=await ctx.newPage(); p.setDefaultTimeout(300000);
+  const errs=[]; p.on('pageerror',e=>errs.push(String(e.message).slice(0,200)));
+  p.on('console',m=>{if(m.type()==='error')errs.push(m.text().slice(0,200));});
+  await p.goto('file://'+PAGE+'#seed=31337');
+  await p.waitForFunction(()=>window.__world&&window.__world.S.epoch0>0,{timeout:180000});
+  await p.waitForFunction(()=>{const s=document.getElementById('splash');return !s||s.classList.contains('gone');},{timeout:60000});
+  const f=()=>p.evaluate(()=>window.__world.selected().frames);
+  const a=await f(); await p.waitForTimeout(1500); const b2=await f();
+  console.log('before runWorld: frames advanced', b2-a, 'in 1.5s');
+  await p.evaluate(()=>window.__world.runWorld(600,100,16));
+  const c=await f(); await p.waitForTimeout(1500); const d=await f();
+  console.log('after  runWorld: frames advanced', d-c, 'in 1.5s');
+  await p.waitForTimeout(3000); const e2=await f();
+  console.log('another 3s later: frames advanced', e2-d);
+  console.log('errors:', errs.length?errs.slice(0,2).join(' | '):'none');
+  await b.close();
+})();
