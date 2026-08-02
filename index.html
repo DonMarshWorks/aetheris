@@ -201,6 +201,7 @@
     <div class="bars" id="bars"></div>
     <div class="scales" id="scales">
       <div id="sc1"></div><div id="sc2"></div><div id="sc3"></div>
+      <div id="selinfo"></div>
     </div>
   </div>
 </div>
@@ -599,6 +600,14 @@ const PARAMS = {
                     // alarm any other node can hear, and the listener is one
                     // output-address mutation away from existing, which is
                     // what decides whether a behaviour is reachable at all.
+  sigmode: 0,       // how several nodes' emissions combine into the one value
+                    // the body carries. 0 = mean, 1 = loudest wins.
+                    // Don's question, and it exposes a real flaw in the mean:
+                    // for an alarm it is plainly wrong, because one node in
+                    // distress among five hundred healthy ones is averaged to
+                    // nothing. A sum would be worse still -- a big plant would
+                    // be loud purely for being big -- but a max is one node's
+                    // voice and cannot be inflated by size.
   sigdecay: 0.90,   // how fast the signal fades per tick. Decay is what makes
                     // it a signal rather than a running total; averaged over
                     // the body as well, or a large plant would be loud purely
@@ -1267,6 +1276,7 @@ function emitInto(i){
   let e=Math.tanh(OUTV[O_EMIT]*0.25);
   if(!isFinite(e)) e=0;
   BSIG[r]+=e; BSIGN[r]++;
+  if(Math.abs(e) > Math.abs(BSIGX[r])) BSIGX[r]=e;
   if(SIGSTAMP[r]!==ptick){ SIGSTAMP[r]=ptick; if(sigTouchN<PMAX) SIGTOUCH[sigTouchN++]=r; }
 }
 /* End of tick: fold what was said into what may be heard next tick. Bodies
@@ -1289,9 +1299,15 @@ function settleSignals(){
     const r=SIGTOUCH[n];
     const gap=ptick-SIGT[r]; SIGT[r]=ptick;
     const d = gap>=64 ? 0 : Math.pow(k,gap);
-    const mean = BSIGN[r] ? BSIG[r]/BSIGN[r] : 0;
-    BSIGR[r] = BSIGR[r]*d*k + mean*(1-k);
-    BSIG[r]=0; BSIGN[r]=0;
+    /* mean, or loudest-wins. For an ALARM the mean is plainly wrong: one node
+       in distress among five hundred healthy ones is averaged to nothing,
+       which is the opposite of what a distress signal should do. Max keeps it
+       — and cannot be gamed into loudness by sheer size the way a sum could,
+       because it is still one node's voice. */
+    const heard = PARAMS.sigmode>0 ? BSIGX[r]
+                : (BSIGN[r] ? BSIG[r]/BSIGN[r] : 0);
+    BSIGR[r] = BSIGR[r]*d*k + heard*(1-k);
+    BSIG[r]=0; BSIGN[r]=0; BSIGX[r]=0;
   }
   sigTouchN=0;
 }
@@ -1999,6 +2015,18 @@ function emitNode(i, pass, w){
     geneColour(go, NPACE[i], GC);
     const young=1-grow;
     let r=GC[0]+young*44, g=GC[1]+young*40, b=GC[2]+young*34;
+    /* The selected body, shown whole. A plant's colour carries its niche and
+       its commitment, and a lineage that spans two terrains legitimately
+       changes colour across itself — so the eye cannot tell one large plant
+       from several touching ones, which is exactly the question worth asking
+       of a thing whose whole point is how much ground it holds. Red is the one
+       hue the palette never makes, for the same reason the size rings are
+       magenta. Value is kept, so the body's own structure still reads through
+       it: wood stays dark, tips stay bright. */
+    if(SELROOT>=0 && PROOT[i]===SELROOT){
+      const lum=(0.30*r+0.59*g+0.11*b)/255;
+      r=90+165*lum; g=26*lum; b=32*lum;
+    }
     /* Dead wood is not black. Black would swamp hue, which is the channel
        carrying niche, and half the standing structure would go to it — the
        planet would read as scorched. Keep the lineage's hue, take the colour
@@ -2490,6 +2518,13 @@ const BTRY=new Int32Array(PMAX), BSELF=new Int32Array(PMAX);
    by having more nodes and the signal would be a size counter. */
 const BSIG=new Float32Array(PMAX), BSIGR=new Float32Array(PMAX);
 const BSIGN=new Int32Array(PMAX), SIGT=new Int32Array(PMAX);
+/* the loudest thing said this tick, kept signed, for the max combiner */
+const BSIGX=new Float32Array(PMAX);
+/* Which body is being shown in red, and the generation its root held when it
+   was picked. An array index is not an identity here — a freed slot goes
+   straight to the next birth — so without the stamp the highlight would
+   silently move to whichever stranger moved in. */
+let SELROOT=-1, SELGEN=-1;
 const SIGSTAMP=new Int32Array(PMAX).fill(-1), SIGTOUCH=new Int32Array(PMAX);
 let sigTouchN=0;
 const BX=new Float32Array(PMAX), BY=new Float32Array(PMAX), BZ=new Float32Array(PMAX);
@@ -4410,13 +4445,93 @@ function rebase(){
   canvas.classList.toggle("dragging", dragging);
 }
 
+/* ---- picking a plant ------------------------------------------------------
+   Unproject the press into a ray, meet the sphere, take the hit back into the
+   planet's own turning frame, and ask the collision bins which node is
+   nearest. The bins are already sized for exactly this question, so it costs
+   the same nine-cell walk a bud does. */
+const _pick=[0,0,0];
+function pickBody(px,py){
+  const rect = canvas.getBoundingClientRect();
+  const nx = 2*(px-rect.left)/Math.max(1,rect.width) - 1;
+  const ny = 1 - 2*(py-rect.top)/Math.max(1,rect.height);
+  /* a point on the far plane, dragged back through the inverse view-projection */
+  const p=[nx,ny,1,1], o=[0,0,0,0];
+  for(let r=0;r<4;r++) o[r]=mInvVP[r]*p[0]+mInvVP[4+r]*p[1]+mInvVP[8+r]*p[2]+mInvVP[12+r]*p[3];
+  if(!o[3]) return -1;
+  const fx=o[0]/o[3], fy=o[1]/o[3], fz=o[2]/o[3];
+  const ex=camEye[0], ey=camEye[1], ez=camEye[2];
+  let dx=fx-ex, dy=fy-ey, dz=fz-ez;
+  const dl=Math.hypot(dx,dy,dz); if(!(dl>1e-9)) return -1;
+  dx/=dl; dy/=dl; dz/=dl;
+  /* nearest hit on the unit sphere */
+  const b = ex*dx+ey*dy+ez*dz, c = ex*ex+ey*ey+ez*ez - 1;
+  const disc = b*b-c;
+  if(disc < 0) return -1;                     // the press missed the planet
+  const t = -b-Math.sqrt(disc);
+  if(t <= 0) return -1;
+  const wx=ex+dx*t, wy=ey+dy*t, wz=ez+dz*t;
+  /* into the planet's frame: rot3 is a rotation, so its inverse is the
+     transpose, and the nodes live in the frame it turns from */
+  const ox=rot3[0]*wx+rot3[1]*wy+rot3[2]*wz;
+  const oy=rot3[3]*wx+rot3[4]*wy+rot3[5]*wz;
+  const oz=rot3[6]*wx+rot3[7]*wy+rot3[8]*wz;
+  /* nearest living node, within a couple of steps of the press */
+  const i=Math.min(PGRID-1,Math.max(0,((ox+1)*0.5*PGRID)|0));
+  const j=Math.min(PGRID-1,Math.max(0,((oy+1)*0.5*PGRID)|0));
+  const k=Math.min(PGRID-1,Math.max(0,((oz+1)*0.5*PGRID)|0));
+  let best=-1, bd=PARAMS.step*PARAMS.step*36;
+  for(let a=-1;a<=1;a++){
+    const ia=i+a; if(ia<0||ia>=PGRID) continue;
+    for(let bb=-1;bb<=1;bb++){
+      const jb=j+bb; if(jb<0||jb>=PGRID) continue;
+      for(let cc=-1;cc<=1;cc++){
+        const kc=k+cc; if(kc<0||kc>=PGRID) continue;
+        const list=pbins.get((ia*PGRID+jb)*PGRID+kc);
+        if(!list) continue;
+        for(let n=0;n<list.length;n++){
+          const q=list[n];
+          if(NLIVE[q]===0) continue;
+          const ex2=NPX[q]-ox, ey2=NPY[q]-oy, ez2=NPZ[q]-oz;
+          const d2=ex2*ex2+ey2*ey2+ez2*ez2;
+          if(d2<bd){ bd=d2; best=q; }
+        }
+      }
+    }
+  }
+  return best<0 ? -1 : PROOT[best];
+}
+function selectAt(px,py){
+  const r = pickBody(px,py);
+  /* Whatever is under the finger, or nothing if there is nothing there.
+     Deliberately not a toggle on the same body: root indices churn as plants
+     split and rot through, so "press it again to let go" would sometimes
+     re-select instead, which is worse than having no way to clear at all.
+     Pressing bare ground or open sea clears it, which is unambiguous. */
+  if(r<0){ SELROOT=-1; SELGEN=-1; }
+  else { SELROOT=r; SELGEN=NGEN[r]; }
+  plantsDirty=true;
+  updateHUD();
+}
+/* A press that stays put is a question about what is under it; a press that
+   moves is a drag. Long enough not to fire while somebody is deciding where
+   to start a drag, short enough to feel like an answer. */
+const HOLD_MS = 550, HOLD_SLOP = 10;
+let holdTimer = 0, holdFired = false;
+function cancelHold(){ if(holdTimer){ clearTimeout(holdTimer); holdTimer=0; } }
+
 canvas.addEventListener("pointerdown",e=>{
   if(ptrs.size === 0){
     downX=e.clientX; downY=e.clientY; downT=performance.now();
     travel=0; didPinch=false;
+    const hx=e.clientX, hy=e.clientY;
+    cancelHold();
+    holdFired=false;
+    if(!overControl(hx,hy))
+      holdTimer=setTimeout(()=>{ holdTimer=0; holdFired=true; selectAt(hx,hy); }, HOLD_MS);
   }
   ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
-  if(ptrs.size >= 2) didPinch = true;
+  if(ptrs.size >= 2){ didPinch = true; cancelHold(); }
   rebase();
   e.preventDefault();
 },{passive:false});
@@ -4428,6 +4543,7 @@ addEventListener("pointermove",e=>{
 
   if(mode === 1){
     travel += Math.abs(e.clientX-lastX) + Math.abs(e.clientY-lastY);
+    if(holdTimer && Math.hypot(e.clientX-downX, e.clientY-downY) > HOLD_SLOP) cancelHold();
     orbitBy(e.clientX-lastX, e.clientY-lastY);
     lastX = e.clientX; lastY = e.clientY;
   } else if(mode === 2){
@@ -4471,6 +4587,7 @@ function overControl(x,y){
 function liftPointer(e){
   const rec = ptrs.get(e.pointerId);
   if(!rec) return;
+  cancelHold();
   ptrs.delete(e.pointerId);
   const wasLast = ptrs.size === 0;
   rebase();
@@ -4478,7 +4595,8 @@ function liftPointer(e){
      on the release event: some touch stacks report those as zero. Movement
      is the real test of tap-versus-drag; the time limit is generous so that
      a slow device cannot turn a tap into a non-event. */
-  if(wasLast && !didPinch && !chartsOn
+  /* a press that has already answered a question is not also a tap */
+  if(wasLast && !didPinch && !chartsOn && !holdFired
      && performance.now()-downT < 1500
      && Math.hypot(rec.x-downX, rec.y-downY) < 12 && travel < 18
      && !overControl(downX, downY)){
@@ -4576,6 +4694,15 @@ function updateHUD(){
   document.getElementById("sc2").textContent = "a year is "+dur(YEAR/rate);
   document.getElementById("sc3").textContent = "continents change in "+dur(2400/rate)
     + (speed>1 && rate < speed*0.75 ? "   (ecology-limited)" : "");
+  /* how big the held plant actually is, which is the question the highlight
+     exists to answer — the colour shows the extent, this counts it. The
+     generation is checked, not assumed: a freed root index goes straight to
+     the next birth, and the count would otherwise be a stranger's. */
+  { const el=document.getElementById("selinfo");
+    if(SELROOT>=0 && NGEN[SELROOT]===SELGEN && PSIZE[SELROOT]>0)
+      el.textContent = "this plant · "+PSIZE[SELROOT]+" nodes";
+    else { el.textContent=""; if(SELROOT>=0 && NGEN[SELROOT]!==SELGEN){ SELROOT=-1; SELGEN=-1; } }
+  }
   BARDEF.forEach(b=>{
     const v=(S.stats[b.k]||0);
     b.el.querySelector(".fill").style.width=Math.min(100,v*100/0.7)+"%";
@@ -4615,6 +4742,9 @@ function seedWorld(){
    7.  frame loop
    ══════════════════════════════════════════════════════════════════════ */
 const mVP=M4(), mProj=M4(), mView=M4(), mInvVP=M4();
+/* the eye where picking can reach it: a press has to be unprojected against
+   the same camera the frame was drawn with */
+const camEye=[0,0,0];
 const rot3=new Float32Array(9);
 /* The planet's axis is fixed in space. Seasons come from the sun riding up
    and down across the equator through the year — which gives the same
@@ -4767,6 +4897,7 @@ function frame(now){
   qAxis(1,0,0,-bob,_q1); qNorm(qMul(CAM.q,_q1,_q2));
   qApply(_q2, AXIS_Z, _e); qApply(_q2, AXIS_Y, _u);
   const eye=[_e[0]*CAM.dist, _e[1]*CAM.dist, _e[2]*CAM.dist];
+  camEye[0]=eye[0]; camEye[1]=eye[1]; camEye[2]=eye[2];
   const W=canvas.width, Hh=canvas.height;
   const fovNow = camFov();
   perspective(mProj, fovNow, W/Hh, 0.35, 30);
@@ -5118,6 +5249,9 @@ window.__world = {
   cam(){ return CAM; },
   pointerCount(){ return ptrs.size; },
   params(){ return PARAMS; },
+  /* picking, so the gesture can be tested without dispatching one */
+  pick(x,y){ return pickBody(x,y); },
+  selected(){ return {root:SELROOT, size:SELROOT>=0?PSIZE[SELROOT]:0}; },
   /* pass true to zero the sampling accumulators, so the next reading covers
      only the interval since this one */
   plants(reset){ return plantStats(reset); },
