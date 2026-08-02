@@ -1,0 +1,10 @@
+{ "note":"the shipped defaults re-measured on the fixed harness and the 14-input genome, against the settings this project had before the search, and against Don's reseeding",
+  "ticks": 45000, "checkpoints": [15000,45000], "defaultEcorate": 16,
+  "seeds": [7,31337,424242,999,88,5],
+  "configs": [
+    { "tag": "shipped",          "params": {} },
+    { "tag": "pre-search",       "params": { "spore": 0.006, "minfrag": 45, "settle": 2000 } },
+    { "tag": "shipped+reseed.10","params": { "reseed": 0.10 } },
+    { "tag": "shipped+reseed.30","params": { "reseed": 0.30 } },
+    { "tag": "nospore+reseed.30","params": { "spore": 0, "reseed": 0.30 } }
+  ] }

@@ -174,6 +174,20 @@ measured; `docs/formula-design.md` for the formula genome that replaced the
 scalar one, and for the four of its claims that measurement overturned. Read
 both before touching it.
 
+**The harness is what breaks.** Four times now the thing reporting the
+measurement has been wrong rather than the thing measured: a stale `fitAt`
+shadowing its replacement, `runWorld` paying one ecology step per climate tick,
+`runWorld`'s default drifting away from the frame loop's accrual, and
+`sweep.js` stopping the frame loop a moment too late and so measuring a
+different world every run. A harness is code nobody tests, reporting on code
+everybody tests. The counters that catch it are the ones asserting something
+that *must* be true — that two identical runs are identical, that a metric
+which must be 1.000 is. Assert those first.
+
+And use `tools/score.js`. It refuses to average a dead planet into a mean; a
+second analysis path written in a hurry does not, and one that did cost two
+hours chasing a build difference that never existed.
+
 **Measure, do not reason, and build the counter before the mechanism.** Every
 finding on this branch came from `window.__world.plants()` and none from
 argument; two settled design decisions were wrong and one of them cost an order

@@ -700,6 +700,106 @@ Recorded because the scoring was as much under test as the parameters.
   monoculture with evenness 0.361 and still degenerating. High score and worth
   looking at are not the same axis, and only one of them is measurable here.
 
+### And then the harness turned out to be lying
+
+Everything above was measured through `tools/sweep.js`, and after it was all
+written the harness was found to be non-deterministic. It stopped the frame
+loop *after* waiting for the world to be ready, so an indeterminate number of
+frames ran between boot and the stub, each advancing the world by a
+wall-clock-dependent amount. Same seed, same parameters, slightly different
+world; and two sweeps compared were two accidents compared. It now replaces
+`requestAnimationFrame` before the page runs a line, letting through exactly
+the one call that boots the world — the boot lives inside a frame callback and
+schedules the loop as its last act — and dropping every call after it.
+Verified identical across repeated runs.
+
+This is the fourth time on this project that a measurement harness, rather than
+the thing measured, was the thing that was wrong: the stale `fitAt`, the
+one-step-per-climate-tick `runWorld`, the `runWorld` default that stopped
+matching the frame loop, and now this. The pattern is worth naming. **A harness
+is code that nobody tests, reporting on code that everybody tests.** The
+counters that catch it are the ones that assert a thing which *must* be true —
+that two identical runs are identical, that a metric which must be 1.000 is.
+
+How much does it change? The effects reported above are far larger than the
+drift — the three-parameter result is about 0.10 of composite score against a
+seed sd of 0.011 — so the direction of every finding stands. The exact figures
+carry a wobble they should not, and anything quoted to three decimals above is
+really two.
+
+A second and more embarrassing failure sits next to it. One seed went extinct
+in a sweep and an *ad-hoc* analysis script averaged the corpse in as a zero,
+which turned 81 occupied provinces into 62 and sent two hours into chasing a
+build difference that was never there. `tools/score.js` refuses exactly this —
+gate failures are reported as a rate and never folded into a mean — and the
+script that got it wrong was one written in a hurry that bypassed it. **Do not
+write a second analysis path.**
+
+### Provinces: the diversity number that was missing
+
+Every diversity measure here was global — niche evenness, largest lineage,
+strategies occupied — and a global number cannot tell a planet of distinct
+provinces from a planet uniformly mixed. Both have the same strategies present
+in the same proportions. That is precisely the difference dispersal erases, so
+it was precisely the thing that could not be seen.
+
+`provinces()` cuts the sphere into equal-area boxes and compares the strategy
+mixture between them. `differentiation` is the mean total-variation distance
+between two boxes drawn at random: 0 means every province holds the same
+mixture and geography has stopped meaning anything.
+
+Measured, it says what Don predicted and what the global numbers could not:
+**differentiation falls monotonically as the spore rate rises** — 0.716 at
+0.001, 0.694 at 0.006, 0.616 at 0.030. Dispersal homogenises, and now there is
+a number for it.
+
+### Extinction is absorbing, and nothing in the old design could reverse it
+
+Measured directly, on a planet started with no plants at all: with no
+reseeding it sits at zero for thirty thousand ticks, **and so does a spore rate
+of 0.001**. A spore is thrown *by* a plant, and fragmentation only divides
+bodies that already exist, so before `reseed` there was nothing in the
+simulation that could create a body not descended from the opening seeding.
+There was no stop condition because there was nothing left to condition on.
+
+`reseed` puts a founder with a fresh random genome into any province holding
+almost nothing, on the cull pass. It brings the same dead planet back to 97,175
+nodes across 71 provinces. That is a better argument for it than the diversity
+one it was built for: it is the only thing that makes the world recoverable.
+
+Two decisions in it are Don's and both are right. The founder's genome owes
+nothing to any incumbent, which is what fills empty ground without spreading
+whoever is winning — `seedmut` above zero makes it a heavily mutated copy
+instead, for anyone who wants the opposite trade. And a seed is planted
+**without regard to the ground**: it finds itself somewhere it can live or it
+adapts. Refusing to plant on unsuitable terrain, which is what the first
+version did, quietly made every founder a specialist for wherever it landed.
+
+### The body signal: built, instrumented, measured, removed
+
+Don asked whether nodes could coordinate — a tree that is attacked telling its
+branches. The cheapest mechanism that could work is not messages but a **shared
+input**: one float per body that any node may add to through an `emit` output
+and any node may read as an input. No traversal, no per-node storage, and both
+halves are one output-address mutation from existing, which is what decides
+whether a behaviour is reachable at all.
+
+It was built, and it was never adopted. Genomes wired the signal into a live
+output at 0.49–0.53 against a control whose register was **dead** at 0.53–0.56 —
+indistinguishable, and not climbing. Don's own criticism of the combiner was
+right in principle: a mean dilutes exactly the message worth sending, since one
+node in distress among five hundred averages to nothing. Loudest-wins was built
+and measured too. It made plants audibly louder — signal level 0.086 against
+0.058 — and changed adoption not at all.
+
+So the combiner was not the binding constraint. **Nothing here happens where a
+node cannot see it.** A signal is only worth hearing when something occurs
+somewhere you are not, and in this world nothing does; a node's own local
+inputs already tell it everything that affects its prospects. It is removed
+rather than left dormant, because an unused input still costs an address every
+program can reference by accident. If herbivory or disturbance ever lands, the
+mechanism is forty lines and the counters that judge it are in this section.
+
 ## Ideas not yet decided
 
 - ~~**The ocean is two-thirds of the arena and currently inert.** Including sea in
