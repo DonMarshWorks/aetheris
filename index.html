@@ -182,6 +182,19 @@
   .setbtns button:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
   #setrestart{color:rgba(240,190,120,.95);border-color:rgba(240,190,120,.35)}
   /* the list scrolls, never the document — same rule the graphs follow */
+  /* The address bar already holds the whole world -- seed plus parameters
+     determine it completely -- but on a phone the address bar is hidden or
+     truncated, so the one place the feature is most useful is the one place
+     it is invisible. Put it where it can be seen and copied. */
+  #setshare{flex:none;padding:2px 0 6px}
+  .sharelab{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+    color:rgba(233,240,255,.45);margin-bottom:5px}
+  #setlink{
+    width:100%;font:inherit;font-size:11px;color:rgba(233,240,255,.80);
+    background:rgba(233,240,255,.05);border:1px solid var(--faint);
+    padding:8px 10px;border-radius:2px;
+  }
+  #setlink:focus{outline:none;border-color:rgba(233,240,255,.42)}
   #setlist{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
     -webkit-overflow-scrolling:touch;touch-action:pan-y;padding-right:4px}
   .setgroup{font-size:10px;letter-spacing:.24em;text-transform:uppercase;
@@ -293,10 +306,15 @@
       <div class="csub">change the world, then let it run &mdash; or start it again</div>
     </div>
     <div class="setbtns">
+      <button id="setcopy" type="button">copy link</button>
       <button id="setreset" type="button">defaults</button>
       <button id="setrestart" type="button">restart world</button>
       <button id="setclose" type="button" aria-label="close">close &times;</button>
     </div>
+  </div>
+  <div id="setshare">
+    <div class="sharelab">this world, as a link</div>
+    <input id="setlink" type="text" readonly spellcheck="false">
   </div>
   <div id="setlist"></div>
 </div>
@@ -5574,14 +5592,20 @@ const setEl = document.getElementById("settings");
 const setList = document.getElementById("setlist");
 const DEFAULTS = Object.assign({}, PARAMS);
 
+const setLink = document.getElementById("setlink");
 function writeHash(){
   const bits=[];
   const m=/seed=(\d+)/.exec(location.hash||"");
-  if(m) bits.push("seed="+m[1]);
+  /* Always name the seed in a shared link, even when the visitor arrived
+     without one. Without it the recipient gets a random planet wearing these
+     settings, which is not the world that was worth sending. */
+  bits.push("seed="+(m ? m[1] : SEED));
   for(const k in PARAMS) if(PARAMS[k]!==DEFAULTS[k]) bits.push(k+"="+PARAMS[k]);
   /* replaceState, not location.hash — assigning the hash fires the reload
      listener, and a slider would restart the world on every pixel of travel */
-  history.replaceState(null,"", bits.length ? "#"+bits.join("&") : location.pathname);
+  const hash = "#"+bits.join("&");
+  history.replaceState(null,"", hash);
+  if(setLink) setLink.value = location.origin+location.pathname+hash;
 }
 function applyLive(){ plantsDirty=true; updateHUD(); }
 
@@ -5646,9 +5670,21 @@ function setSettings(on){
   setEl.classList.toggle("on",on);
   document.getElementById("hud").classList.toggle("behind",on);
   setEl.setAttribute("aria-hidden",on?"false":"true");
-  if(on) buildSettings();
+  if(on){ buildSettings(); writeHash(); }
 }
 document.getElementById("gear").addEventListener("click",e=>{ e.stopPropagation(); setSettings(true); });
+document.getElementById("setcopy").addEventListener("click",async e=>{
+  e.stopPropagation();
+  const btn=e.currentTarget, was=btn.textContent;
+  setLink.select();
+  /* the clipboard API is unavailable over file:// and on older Safari, and
+     the selection is the fallback that always works — the link is selected
+     either way, so the gesture is never a dead end */
+  let ok=false;
+  try{ await navigator.clipboard.writeText(setLink.value); ok=true; }catch(_){ }
+  btn.textContent = ok ? "copied" : "press to copy";
+  setTimeout(()=>{ btn.textContent=was; }, 1600);
+});
 document.getElementById("setclose").addEventListener("click",e=>{ e.stopPropagation(); setSettings(false); });
 document.getElementById("setreset").addEventListener("click",e=>{
   e.stopPropagation(); Object.assign(PARAMS,DEFAULTS); writeHash(); buildSettings(); applyLive();
@@ -5730,6 +5766,49 @@ window.__world = {
     const set=new Set(); let n=0;
     for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0 && selId>0 && NSEL[i]===selId){ set.add(PROOT[i]); n++; }
     return {bodies:set.size, nodes:n};
+  },
+  /* Does exclusion actually hold? Every bud is refused within `collide` of any
+     existing node, so no two LIVING nodes should ever be closer than that.
+     Asserting the invariant beats inferring it from a picture: overlap in a
+     render can equally be two nodes a legal distance apart whose painted
+     footprints are simply wider than the gap, which is a drawing question and
+     not an exclusion one. This separates them. */
+  overlapScan(){
+    const r = PARAMS.collide*PARAMS.step, r2 = r*r;
+    let pairs=0, worst=0, live=0, sampled=0;
+    for(let i=0;i<nodeHigh;i++){
+      if(NLIVE[i]!==1) continue;
+      live++;
+      if(i%7) continue;                      /* every seventh, for cost */
+      sampled++;
+      const x=NPX[i], y=NPY[i], z=NPZ[i];
+      const bi=Math.min(PGRID-1,Math.max(0,((x+1)*0.5*PGRID)|0));
+      const bj=Math.min(PGRID-1,Math.max(0,((y+1)*0.5*PGRID)|0));
+      const bk=Math.min(PGRID-1,Math.max(0,((z+1)*0.5*PGRID)|0));
+      for(let a=-1;a<=1;a++) for(let b=-1;b<=1;b++) for(let c=-1;c<=1;c++){
+        const ia=bi+a, jb=bj+b, kc=bk+c;
+        if(ia<0||ia>=PGRID||jb<0||jb>=PGRID||kc<0||kc>=PGRID) continue;
+        const list=pbins.get((ia*PGRID+jb)*PGRID+kc);
+        if(!list) continue;
+        for(let n=0;n<list.length;n++){
+          const q=list[n];
+          if(q===i || NLIVE[q]!==1) continue;
+          const dx=NPX[q]-x, dy=NPY[q]-y, dz=NPZ[q]-z;
+          const d2=dx*dx+dy*dy+dz*dz;
+          if(d2 < r2*0.9801){                /* 1% tolerance for float noise */
+            pairs++;
+            const over=1-Math.sqrt(d2)/r;
+            if(over>worst) worst=over;
+          }
+        }
+      }
+    }
+    return { live, sampled, tooClosePairs:pairs,
+             worstOverlapPct:+(100*worst).toFixed(1),
+             radiusDeg:+(r*180/Math.PI).toFixed(3),
+             /* how wide the paint is next to how far apart the nodes are: if
+                this exceeds 1 the picture overlaps whatever exclusion does */
+             paintOverStep:+((PARAMS.fathi)*2).toFixed(2) };
   },
   hopScan(){
     let worst=0, worstI=-1, over=0, n=0;
