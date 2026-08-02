@@ -703,8 +703,10 @@ const PARAMS = {
                     // plant never has to adapt to ground that changed under
                     // it; at 2 the world is twice as restless. Read once at
                     // startup, because the octaves are built from it.
-  fatlo:   0.00,    // the smallest and largest painted leaf, per step actually
-  fathi:   0.33,    // taken. The four node forms are spread evenly across the
+  fatlo:   0.18,    // the smallest and largest painted leaf, per step actually
+  fathi:   0.36,    // taken. These two reproduce exactly what the single `fat`
+                    // of 0.25 used to draw across the four node forms, so the
+                    // default look is unchanged and the range is what is new. The four node forms are spread evenly across the
                     // range, so the two together decide how much ground and
                     // how much branching structure the foliage hides. A low
                     // knob at zero lets the smallest forms vanish entirely.
