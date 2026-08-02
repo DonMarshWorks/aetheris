@@ -665,6 +665,15 @@ const PARAMS = {
                     // thriving dense mat still adds nodes, a stuck fragment
                     // does not -- and is what to build before concluding that
                     // culling on efficiency cannot work.
+  reseed:  0,       // chance per EMPTY province, per sweep pass, that a new
+                    // founder with a fresh random genome appears in it.
+                    // Dispersal fills the planet and spreads the incumbent at
+                    // the same time, and those pull opposite ways: regional
+                    // differentiation falls as the spore rate rises, but at
+                    // zero a quarter of the provinces are never colonised,
+                    // because a plant can only reach what it can walk to.
+                    // This does the first job without the second.
+  reseedmin: 25,    // living nodes below which a province counts as empty
   sporemut: 1.00,   // how much harder a spore is mutated than an ordinary
                     // bifurcation. 1 = the same. A founder cannot out-compete
                     // an established neighbour on equal terms, so its only
@@ -1763,20 +1772,34 @@ let inN = 0;
    province is on average, so the two together separate "everywhere the same
    and varied" from "everywhere different and uniform". */
 const GEOLAT = 8;                       // bands of equal area, pole to pole
+function geoBands(bi){
+  const lo=-1+2*bi/GEOLAT, hi=-1+2*(bi+1)/GEOLAT;
+  const mid=(lo+hi)*0.5, cw=Math.sqrt(Math.max(1e-6,1-mid*mid));
+  return { lo, hi, nlon:Math.max(1, Math.round(2*GEOLAT*cw)) };
+}
+/* equal-area: the band index is linear in sin(latitude), and each band is cut
+   into as many boxes as its width can carry, so every box holds about the same
+   area — a polar box holding four nodes would otherwise swamp any average. */
+function boxOf(x,y,z){
+  let bi=Math.floor((y+1)*0.5*GEOLAT); if(bi<0)bi=0; if(bi>=GEOLAT)bi=GEOLAT-1;
+  const nlon=geoBands(bi).nlon;
+  let li=Math.floor((Math.atan2(z,x)+Math.PI)/(Math.PI*2)*nlon);
+  if(li<0)li=0; if(li>=nlon)li=nlon-1;
+  return bi*1000+li;
+}
+/* the total number of boxes, and a point drawn uniformly inside one of them */
+function boxCount(){ let n=0; for(let bi=0;bi<GEOLAT;bi++) n+=geoBands(bi).nlon; return n; }
+function boxKeys(out){ out.length=0;
+  for(let bi=0;bi<GEOLAT;bi++){ const nl=geoBands(bi).nlon;
+    for(let li=0;li<nl;li++) out.push(bi*1000+li); } return out; }
+function boxPoint(key,o){
+  const bi=(key/1000)|0, li=key%1000, g=geoBands(bi);
+  const y=g.lo+(g.hi-g.lo)*prnd();
+  const lon=-Math.PI+(Math.PI*2)*((li+prnd())/g.nlon);
+  const r=Math.sqrt(Math.max(0,1-y*y));
+  o[0]=r*Math.cos(lon); o[1]=y; o[2]=r*Math.sin(lon);
+}
 function provinces(){
-  const H=[], N=[];
-  const boxOf = (x,y,z)=>{
-    /* equal-area: the band index is linear in sin(latitude) */
-    let bi=Math.floor((y+1)*0.5*GEOLAT); if(bi<0)bi=0; if(bi>=GEOLAT)bi=GEOLAT-1;
-    /* and each band is cut into as many boxes as its width can carry, so all
-       boxes hold about the same area */
-    const lo=-1+2*bi/GEOLAT, hi=-1+2*(bi+1)/GEOLAT;
-    const mid=(lo+hi)*0.5, cw=Math.sqrt(Math.max(1e-6,1-mid*mid));
-    const nlon=Math.max(1, Math.round(2*GEOLAT*cw));
-    let li=Math.floor((Math.atan2(z,x)+Math.PI)/(Math.PI*2)*nlon);
-    if(li<0)li=0; if(li>=nlon)li=nlon-1;
-    return bi*1000+li;
-  };
   const map=new Map();
   for(let i=0;i<nodeHigh;i++){
     if(NLIVE[i]!==1) continue;
@@ -1799,6 +1822,63 @@ function provinces(){
   return { provinces:norm.length,
            differentiation:+(d/Math.max(1,n)).toFixed(4),
            withinEven:+(ev/norm.length).toFixed(4) };
+}
+/* ---- reseeding the empty ---------------------------------------------
+   Dispersal does two jobs at once and they pull opposite ways: it fills the
+   planet, and it spreads whoever is already winning. Measured, the second
+   costs what the first buys — regional differentiation falls monotonically as
+   the spore rate rises, while turning dispersal off entirely leaves a quarter
+   of the provinces never colonised at all, because a plant can only reach
+   what it can walk to.
+
+   Don's separation: fill the empty places, but not with copies of the
+   incumbent. A founder here carries a NEW random genome, tipped toward one of
+   the five the way the opening seeding is, so it owes nothing to whatever is
+   succeeding elsewhere. The argument in the brief against de-novo seeding —
+   that a random genome dropped into a mature ecosystem is unfit and dies — is
+   about seeding into occupied ground. In an empty province there is nothing
+   to lose to, which is exactly why it is worth trying there and nowhere
+   else. */
+const RESEEDK=[];
+const _seedP=[0,0,0];
+function reseedEmpty(){
+  const rate=PARAMS.reseed;
+  if(rate<=0) return;
+  const need=PARAMS.reseedmin|0;
+  const count=new Map();
+  for(let i=0;i<nodeHigh;i++) if(NLIVE[i]===1){
+    const k=boxOf(NPX[i],NPY[i],NPZ[i]);
+    count.set(k,(count.get(k)||0)+1);
+  }
+  boxKeys(RESEEDK);
+  for(let n=0;n<RESEEDK.length;n++){
+    const k=RESEEDK[n];
+    if((count.get(k)||0) >= need) continue;
+    if(prnd() >= rate) continue;
+    /* a few tries: most of a province may be ground this genome cannot hold,
+       and an unfit founder is not worth planting */
+    for(let a=0;a<10;a++){
+      boxPoint(k,_seedP);
+      const x=_seedP[0], y=_seedP[1], z=_seedP[2];
+      if(occupied(x,y,z)) continue;
+      let ax=-z, ay=0, az=x;
+      const hl=Math.hypot(ax,ay,az); if(!(hl>1e-6)) continue;
+      ax/=hl; az/=hl;
+      const th=prnd()*Math.PI*2, cc=Math.cos(th), ss=Math.sin(th);
+      const bx=y*az-z*ay, by=z*ax-x*az, bz=x*ay-y*ax;
+      let hx=ax*cc+bx*ss, hy=ay*cc+by*ss, hz=az*cc+bz*ss;
+      const dp=hx*x+hy*y+hz*z; hx-=x*dp; hy-=y*dp; hz-=z*dp;
+      const l=1/Math.hypot(hx,hy,hz);
+      const i=addNode(x,y,z,hx*l,hy*l,hz*l,-1,-1,0,PARAMS.step);
+      const o=i*G, fav=(prnd()*5)|0;
+      for(let g=0;g<5;g++) GENE[o+g]=0.25+prnd()*0.5;
+      GENE[o+fav]+=2.2+prnd()*1.6;
+      normalise(o);
+      if(refreshEnv(i) < PARAMS.viable){ killNode(i); continue; }
+      readBirthOutputs(i);
+      break;
+    }
+  }
 }
 function resetStats(){
   CAPHIST.fill(0); OUTHIST.fill(0); OUTRAW.fill(0); outN=0; angN=0;
@@ -2835,7 +2915,7 @@ function plantsStep(){
   admitMature();
   reap();
   /* census first: pruneFragments samples the history and reads it */
-  if(PARAMS.sweep>0 && ptick%(PARAMS.sweep|0)===0){ census(); pruneFragments(); }
+  if(PARAMS.sweep>0 && ptick%(PARAMS.sweep|0)===0){ census(); pruneFragments(); reseedEmpty(); }
 
   /* Attempts used to be drawn from one global frontier, which made a form's
      growth proportional to how much of the world it already held — so the
@@ -4672,7 +4752,7 @@ function selectAt(px,py){
 /* A press that stays put is a question about what is under it; a press that
    moves is a drag. Long enough not to fire while somebody is deciding where
    to start a drag, short enough to feel like an answer. */
-const HOLD_MS = 250, HOLD_SLOP = 16;
+const HOLD_MS = 150, HOLD_SLOP = 16;
 let holdTimer = 0, holdFired = false;
 function cancelHold(){ if(holdTimer){ clearTimeout(holdTimer); holdTimer=0; } }
 
@@ -5434,6 +5514,57 @@ window.__world = {
      the eye sees. Where they disagree, wood is holding two visible patches
      together and the highlight is telling the truth about a plant that does
      not look like one plant. */
+  /* How far across the planet does one body reach? A plant grows a step at a
+     time, so a body spanning tens of degrees has been joined by something
+     other than growth, and that is a bug rather than a fact about plants. */
+  /* The decisive test. A parent and its child are placed one step apart, so
+     every link in the tree should be about that long. A link that is not means
+     something has been joined that never grew together — and that, not a big
+     plant, would be why one press lights up two places. */
+  hopScan(){
+    let worst=0, worstI=-1, over=0, n=0;
+    const lim=PARAMS.step*PARAMS.sphi*1.5;
+    for(let i=0;i<nodeHigh;i++){
+      if(NLIVE[i]===0) continue;
+      const q=NPAR[i];
+      if(q<0 || NLIVE[q]===0 || NGEN[q]!==NPGEN[i]) continue;
+      const d=Math.acos(Math.max(-1,Math.min(1,NPX[i]*NPX[q]+NPY[i]*NPY[q]+NPZ[i]*NPZ[q])));
+      n++;
+      if(d>lim) over++;
+      if(d>worst){ worst=d; worstI=i; }
+    }
+    return { links:n, longestDeg:+(worst*180/Math.PI).toFixed(3),
+             stepDeg:+(PARAMS.step*180/Math.PI).toFixed(3),
+             legalMaxDeg:+(lim*180/Math.PI).toFixed(3), overLimit:over, at:worstI };
+  },
+  bodySpan(n){
+    const sz=new Map();
+    for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0) sz.set(PROOT[i],(sz.get(PROOT[i])||0)+1);
+    const roots=[...sz.entries()].sort((a,b)=>b[1]-a[1]).slice(0,n|0);
+    const out=[];
+    for(const [r,cnt] of roots){
+      const ns=[];
+      for(let i=0;i<nodeHigh && ns.length<400;i++) if(NLIVE[i]!==0 && PROOT[i]===r) ns.push(i);
+      let mx=0, pa=-1, pb=-1;
+      for(let a=0;a<ns.length;a++) for(let b2=a+1;b2<ns.length;b2++){
+        const i=ns[a], j=ns[b2];
+        const d=NPX[i]*NPX[j]+NPY[i]*NPY[j]+NPZ[i]*NPZ[j];
+        const ang=Math.acos(Math.max(-1,Math.min(1,d)));
+        if(ang>mx){ mx=ang; pa=i; pb=j; }
+      }
+      /* is the widest pair actually joined by parent links inside this body? */
+      let hops=-1;
+      if(pa>=0){
+        const seen=new Set([pa]); let cur=pa, n2=0;
+        while(rooted(cur) && n2<100000){ cur=NPAR[cur]; seen.add(cur); n2++; }
+        let cur2=pb, m=0, meet=false;
+        while(m<100000){ if(seen.has(cur2)){ meet=true; break; } if(!rooted(cur2)) break; cur2=NPAR[cur2]; m++; }
+        hops = meet ? m : -1;
+      }
+      out.push({root:r, nodes:cnt, spanDeg:+(mx*180/Math.PI).toFixed(1), joined:hops>=0});
+    }
+    return out;
+  },
   bodyDiag(n){
     const sz=new Map();
     for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0) sz.set(PROOT[i],(sz.get(PROOT[i])||0)+1);
