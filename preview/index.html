@@ -167,6 +167,55 @@
     .sp{padding:7px 12px;font-size:11px}
   }
 
+  #settings{
+    position:fixed;inset:0;z-index:41;display:none;overflow:hidden;
+    background:rgba(6,9,14,.975);padding:22px 26px;
+    flex-direction:column;gap:12px;
+  }
+  #settings.on{display:flex}
+  .setbtns{display:flex;gap:8px;align-items:flex-start;flex:none}
+  .setbtns button{
+    font:inherit;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--dim);background:transparent;border:1px solid var(--faint);
+    padding:6px 11px;cursor:pointer;transition:.25s;white-space:nowrap;
+  }
+  .setbtns button:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
+  #setrestart{color:rgba(240,190,120,.95);border-color:rgba(240,190,120,.35)}
+  /* the list scrolls, never the document — same rule the graphs follow */
+  #setlist{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;touch-action:pan-y;padding-right:4px}
+  .setgroup{font-size:10px;letter-spacing:.24em;text-transform:uppercase;
+    color:rgba(233,240,255,.5);margin:20px 0 10px;padding-bottom:6px;
+    border-bottom:1px solid rgba(233,240,255,.10)}
+  .setgroup:first-child{margin-top:2px}
+  .setrow{padding:12px 0;border-bottom:1px solid rgba(233,240,255,.055)}
+  .setname{font-size:12px;letter-spacing:.06em;color:var(--ink);
+    display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+  .setval{font-size:11px;color:rgba(233,240,255,.62);font-variant-numeric:tabular-nums;
+    white-space:nowrap}
+  .setwhy{font-size:11px;line-height:1.6;color:rgba(233,240,255,.52);margin:6px 0 10px;
+    max-width:62ch}
+  .setrow input[type=range]{width:100%;accent-color:#7fb4dd;height:22px}
+  .setpair{display:flex;flex-direction:column;gap:2px}
+  .setchoice{display:flex;gap:6px;flex-wrap:wrap}
+  .setchoice button{
+    font:inherit;font-size:11px;letter-spacing:.06em;color:var(--dim);
+    background:transparent;border:1px solid var(--faint);padding:6px 12px;
+    cursor:pointer;transition:.2s;
+  }
+  .setchoice button.on{color:var(--ink);border-color:rgba(233,240,255,.55);
+    background:rgba(233,240,255,.10)}
+  .setnote{font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:rgba(240,190,120,.75);margin-top:7px}
+  @media (max-width: 620px){
+    #settings{padding:15px 17px}
+    .setwhy{font-size:10.5px}
+    /* the three header buttons and the title do not fit across a phone, and
+       the one that fell off the right edge was close */
+    #settings .chead{flex-direction:column;align-items:stretch;gap:10px}
+    .setbtns{justify-content:flex-start;flex-wrap:wrap}
+  }
+
   /* the count, over the world, by the finger. Pointer-transparent so it can
      never eat a drag, and positioned once when the plant is taken rather than
      tracked: the world can be dragged to bring the pair back into view, and a
@@ -206,6 +255,9 @@
     <div class="ctrls">
       <button id="playpause" class="rbtn" type="button" aria-label="pause" title="pause"></button>
       <button id="lock" class="rbtn" type="button" aria-label="hold the view" title="hold the view" aria-pressed="false"></button>
+      <button id="gear" class="rbtn" type="button" aria-label="settings" title="settings">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 5.4A2.6 2.6 0 1 0 8 10.6 2.6 2.6 0 0 0 8 5.4zm0 1.5a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2z"/><path fill="currentColor" d="M7.1 1h1.8l.25 1.62c.35.11.68.25.99.43l1.33-.95 1.27 1.27-.95 1.33c.18.31.32.64.43.99L13.82 6v1.8l-1.62.25c-.11.35-.25.68-.43.99l.95 1.33-1.27 1.27-1.33-.95c-.31.18-.64.32-.99.43L8.9 12.8H7.1l-.25-1.62a4.4 4.4 0 0 1-.99-.43l-1.33.95-1.27-1.27.95-1.33a4.4 4.4 0 0 1-.43-.99L2.18 7.8V6l1.6-.31c.11-.35.25-.68.43-.99l-.95-1.33 1.27-1.27 1.33.95c.31-.18.64-.32.99-.43z" opacity=".55"/></svg>
+      </button>
       <button id="info" class="rbtn" type="button" aria-label="the life of it" title="the life of it">i</button>
     </div>
   </div>
@@ -232,6 +284,21 @@
     <button id="chartclose" type="button" aria-label="close">close &times;</button>
   </div>
   <div id="cscroll"><canvas id="cgraph"></canvas></div>
+</div>
+
+<div id="settings" aria-hidden="true">
+  <div class="chead">
+    <div>
+      <div class="ctitle">settings</div>
+      <div class="csub">change the world, then let it run &mdash; or start it again</div>
+    </div>
+    <div class="setbtns">
+      <button id="setreset" type="button">defaults</button>
+      <button id="setrestart" type="button">restart world</button>
+      <button id="setclose" type="button" aria-label="close">close &times;</button>
+    </div>
+  </div>
+  <div id="setlist"></div>
 </div>
 
 <div id="selbadge" aria-hidden="true"></div>
@@ -416,19 +483,6 @@ const PARAMS = {
                     // parent, per step. 0 draws none. Without it a plant is a
                     // scatter of disconnected blobs and the branching — the
                     // whole structure of the thing — is invisible.
-  fat:     0.25,    // painted footprint radius, per step actually taken. Well
-                    // under the step, so the ground shows between nodes: at
-                    // 0.80 the planet vanished under its own vegetation and
-                    // there was nothing left to be alive *on*.
-  soft:    0.20,    // how soft the footprint edge is, 0..1. This is the
-                    // leaf's anti-aliasing and nothing more; larger values
-                    // read as translucency at high zoom.
-  alpha:   0.80,    // how much of the ground a mature node hides. Nearly opaque, and
-                    // the nodes made small enough to leave gaps instead: a
-                    // translucent mark laid over its neighbours averages into
-                    // haze and you cannot see the shape of anything, whereas
-                    // small solid marks with ground between them read as
-                    // structure. Coverage is bought with `fat`, not opacity.
   mature:  90,      // reference ticks from bud to maturity, scaled by pace
   life:    1500,    // ticks per unit of fit; a pure specialist at home gets 5x
   seafit:  1.00,    // a flat multiplier on how habitable the sea is at all.
@@ -642,6 +696,23 @@ const PARAMS = {
                     // thriving dense mat still adds nodes, a stuck fragment
                     // does not -- and is what to build before concluding that
                     // culling on efficiency cannot work.
+  churn:   1.00,    // how fast the terrain itself moves. One multiplier on
+                    // every drift the six noise octaves do — their turning and
+                    // their breathing — plus the ridge and the temperature and
+                    // moisture anomalies. At 0 the coastlines never move and a
+                    // plant never has to adapt to ground that changed under
+                    // it; at 2 the world is twice as restless. Read once at
+                    // startup, because the octaves are built from it.
+  fatlo:   0.00,    // the smallest and largest painted leaf, per step actually
+  fathi:   0.33,    // taken. The four node forms are spread evenly across the
+                    // range, so the two together decide how much ground and
+                    // how much branching structure the foliage hides. A low
+                    // knob at zero lets the smallest forms vanish entirely.
+  seedmut: 0,       // where a reseeded founder's genome comes from. 0 = a new
+                    // random one, owing nothing to anybody, which is what
+                    // fills empty ground without spreading the incumbent.
+                    // Above 0 = a copy of somebody already living, mutated
+                    // this many times as hard as an ordinary bifurcation.
   reseed:  0,       // chance per EMPTY province, per sweep pass, that a new
                     // founder with a fresh random genome appears in it.
                     // Dispersal fills the planet and spreads the incumbent at
@@ -787,17 +858,21 @@ const oAxis = [], oSpin = [], oBreathA = [], oBreathW = [], oBreathP = [];
   for(let o=0;o<OCT;o++){
     let x=rnd()*2-1,y=rnd()*2-1,z=rnd()*2-1;
     const l=1/Math.hypot(x,y,z); oAxis.push([x*l,y*l,z*l]);
-    oSpin.push(4.6e-5 * (1 + o*0.62) * (rnd()<0.5?-1:1));
+    oSpin.push(4.6e-5 * (1 + o*0.62) * (rnd()<0.5?-1:1) * PARAMS.churn);
     /* low octaves breathe gently (they set the land/sea balance);
        high octaves breathe hard (they reshape coasts) */
     oBreathA.push(0.15 + 0.12*o);
-    oBreathW.push(2*Math.PI/(3000 + rnd()*7000));
+    oBreathW.push(2*Math.PI/(3000 + rnd()*7000) * PARAMS.churn);
     oBreathP.push(rnd()*Math.PI*2);
   }
 })();
-const ridgeAxis=[0.31,0.82,-0.48], ridgeSpin=2.4e-5;
-const tnAxis=[0.77,-0.31,0.56], tnSpin=5.5e-5;
-const mnAxis=[-0.42,0.61,0.67], mnSpin=6.5e-5;
+/* Every drift the terrain does is scaled by `churn`, so one dial takes the
+   world from restless to fixed. At zero the octaves stop turning and stop
+   breathing: the coastlines never move, and a plant never has to adapt to
+   ground that has changed under it. */
+const ridgeAxis=[0.31,0.82,-0.48], ridgeSpin=2.4e-5*PARAMS.churn;
+const tnAxis=[0.77,-0.31,0.56], tnSpin=5.5e-5*PARAMS.churn;
+const mnAxis=[-0.42,0.61,0.67], mnSpin=6.5e-5*PARAMS.churn;
 
 const S = {
   time: 0,            // simulated seconds
@@ -1060,7 +1135,8 @@ let plantsOn = PARAMS.plants > 0;
 const PW = 2048, PH = 1024;
 const FADE = 52;                            // ticks a dead node takes to go
 /* a few discrete node forms, so lineages are distinguishable at a glance */
-const FORMSZ  = [0.72, 0.92, 1.15, 1.45];
+/* the four node forms, as fractions of the leaf-size range */
+const FORMSZ  = [0.00, 0.34, 0.68, 1.00];
 const FORMASP = [1.0, 1.0, 1.55, 0.72];
 
 const PMAX  = PARAMS.budget|0;
@@ -1773,12 +1849,29 @@ function reseedEmpty(){
       let hx=ax*cc+bx*ss, hy=ay*cc+by*ss, hz=az*cc+bz*ss;
       const dp=hx*x+hy*y+hz*z; hx-=x*dp; hy-=y*dp; hz-=z*dp;
       const l=1/Math.hypot(hx,hy,hz);
-      const i=addNode(x,y,z,hx*l,hy*l,hz*l,-1,-1,0,PARAMS.step);
-      const o=i*G, fav=(prnd()*5)|0;
-      for(let g=0;g<5;g++) GENE[o+g]=0.25+prnd()*0.5;
-      GENE[o+fav]+=2.2+prnd()*1.6;
-      normalise(o);
-      if(refreshEnv(i) < PARAMS.viable){ killNode(i); continue; }
+      /* Where the seed's genome comes from. A fresh random one owes nothing to
+         anybody and is the whole reason this fills empty ground without
+         spreading the incumbent; a heavily mutated copy of somebody already
+         living starts from something that works and gambles on the
+         difference. */
+      let i;
+      if(PARAMS.seedmut>0 && liveN>0){
+        let src=-1;
+        for(let t=0;t<40 && src<0;t++){ const q=(prnd()*nodeHigh)|0; if(NLIVE[q]===1) src=q; }
+        if(src<0) src=-1;
+        i=addNode(x,y,z,hx*l,hy*l,hz*l,src,-1,PARAMS.mut*PARAMS.seedmut,PARAMS.step);
+      } else {
+        i=addNode(x,y,z,hx*l,hy*l,hz*l,-1,-1,0,PARAMS.step);
+        const o=i*G, fav=(prnd()*5)|0;
+        for(let g=0;g<5;g++) GENE[o+g]=0.25+prnd()*0.5;
+        GENE[o+fav]+=2.2+prnd()*1.6;
+        normalise(o);
+      }
+      /* Planted without regard to the ground, deliberately. A seed either
+         finds itself somewhere it can live or it has to adapt, and refusing
+         to plant on unsuitable terrain quietly made every founder a
+         specialist for wherever it happened to land. */
+      refreshEnv(i);
       readBirthOutputs(i);
       break;
     }
@@ -2063,7 +2156,12 @@ function emitNode(i, pass, w){
        draws further apart because it *is* further apart, and the loose body it
        leaves is ground somebody else can still grow into. */
     const form=NFORM[i];
-    const wid=PARAMS.fat*NSTEP[i]*FORMSZ[form&3];
+    /* Leaf size is a RANGE, not a number: the four node forms are spread
+       evenly across it, so the two knobs set how big the smallest and largest
+       leaves in the world may be. Setting the low knob to zero lets the
+       smallest forms vanish and leaves the branching bare. */
+    const fs=FORMSZ[form&3];
+    const wid=(PARAMS.fatlo+(PARAMS.fathi-PARAMS.fatlo)*fs)*NSTEP[i];
     const asp=FORMASP[(form>>2)&3];
 
     /* colour: the form's own, drifted by the sector's inherited tint and
@@ -2314,7 +2412,7 @@ function ghost(i){
   const form=NFORM[i];
   GHOST[g  ]=(lon+Math.PI)/(Math.PI*2);
   GHOST[g+1]=(Math.PI*0.5-lat)/Math.PI;
-  GHOST[g+2]=PARAMS.fat*NSTEP[i]*FORMSZ[form&3];
+  GHOST[g+2]=(PARAMS.fatlo+(PARAMS.fathi-PARAMS.fatlo)*FORMSZ[form&3])*NSTEP[i];
   GHOST[g+3]=GC[0]; GHOST[g+4]=GC[1]; GHOST[g+5]=GC[2];
   GHOST[g+6]=ptick;
   GHOST[g+7]=FORMASP[(form>>2)&3];
@@ -3862,8 +3960,17 @@ void main(){
   /* relief fades out as the land meets the sea, so beaches stay flat */
   float shoreFade = smoothstep(0.0, 0.085, land);
 
+  /* Two scales of warp, not one. The coarse one at frequency 7 is what gives
+     the ice margin its peninsulas and stranded floes, but its wavelength is
+     about fifty degrees of arc — so close in it is a constant offset across
+     the whole view and the margin falls back to the bare interpolated grid,
+     which reads as chunky facets beside coastlines that stay organic. The
+     fine warp is what breaks that up, and it is faded against the pixel
+     footprint so it can never alias when the whole planet is in frame. */
   float wa = fbm2(d*7.0), wb = fbm2(d*7.0+vec3(19.3,4.1,-7.7));
-  vec4 datW = fetchSmooth(normalize(d + (t1*wa + t2*wb)*0.075));
+  float wc = fbm2(d*58.0+vec3(3.7,-8.2,5.5)), wd = fbm2(d*58.0+vec3(-11.9,2.4,7.1));
+  vec3 warp = (t1*wa + t2*wb)*0.075 + (t1*wc + t2*wd)*(0.011*fadeA);
+  vec4 datW = fetchSmooth(normalize(d + warp));
   float veg  = datW.g;
   float snow = datW.b;
 
@@ -3877,16 +3984,25 @@ void main(){
   vec3 albedo; float gloss;
   float micro  = fbm3(d*30.0)*0.5+0.5;
   /* fractal wobble on the snow line, so no ice edge is ever a clean arc */
-  float snowEdge = snow + 0.105*fbm2(d*14.0) + 0.070*fbm2(d*30.0) + 0.030*fadeA*fbm2(d*66.0);
+  /* and the same again on the value: the three coarse octaves shape the ice
+     at planetary scale, the two fine ones give it an edge worth looking at
+     close up, both held back by the footprint fades */
+  float snowEdge = snow + 0.105*fbm2(d*14.0) + 0.070*fbm2(d*30.0) + 0.030*fadeA*fbm2(d*66.0)
+                 + 0.022*fadeA*fbm2(d*145.0) + 0.013*fadeB*fbm2(d*310.0);
   float micro2 = (0.70*gnoise(d*40.0) + 0.30*fadeA*gnoise(d*84.0+3.9))*0.5+0.5;
 
   if(land < 0.0){
+    /* The shelf bands follow contours of a coarse height field, so close in
+       they read as smooth terraces rather than as water over broken ground.
+       Perturbing the depth itself — the same trick and the same footprint
+       fades as the ice margin — gives every band an edge instead. */
     float depth = clamp(-land*2.4, 0.0, 1.0);
+    float depthN = depth + 0.055*fadeA*fbm2(d*120.0) + 0.030*fadeB*fbm2(d*265.0);
     vec3 shallow = vec3(0.115,0.400,0.435);
     vec3 midw    = vec3(0.040,0.155,0.310);
     vec3 deep    = vec3(0.009,0.045,0.130);
-    vec3 col = mix(shallow, midw, smoothstep(0.0,0.30,depth));
-    col = mix(col, deep, smoothstep(0.26,0.85,depth));
+    vec3 col = mix(shallow, midw, smoothstep(0.0,0.30,depthN));
+    col = mix(col, deep, smoothstep(0.26,0.85,depthN));
     col *= 0.93+0.14*micro;
     float ice = smoothstep(0.34,0.72,snowEdge);
     vec3 iceCol = mix(vec3(0.70,0.79,0.86), vec3(0.94,0.97,1.0), micro);
@@ -5359,6 +5475,167 @@ function setCharts(on){
   clearInterval(chartTimer);
   if(on){ drawCharts(); chartTimer=setInterval(drawCharts,1000); }
 }
+/* ── settings ──────────────────────────────────────────────────────────
+   Every dial here already existed and was reachable only by editing the URL.
+   The panel is the same parameters with sentences attached, because the
+   difference between a piece people experiment with and one they do not is
+   whether they can tell what a control will do before they touch it.
+
+   Two kinds of change. Most take effect on the world already running: the
+   simulation reads PARAMS every tick and simply behaves differently from the
+   next one. A few are read once at startup — they build the noise octaves, or
+   fix the shape of the genome — and those are marked, and want the restart
+   button.
+
+   Either way the setting is written into the URL. That is not a convenience:
+   seed plus parameters already determine a world completely, so the address
+   bar IS the saved state, and a planet worth keeping is a link somebody can
+   send. history.replaceState rather than assigning the hash, or the reload
+   listener fires on every drag of a slider. */
+const SETTINGS = [
+ {group:"The world"},
+ {key:"churn", name:"World changes", min:0, max:2.5, step:0.05, restart:true,
+  why:"How fast the ground itself moves. Coastlines migrate, deserts spread and ice advances because six layers of noise are slowly turning under the surface, and this is their speed. At zero the map is fixed for ever and plants never have to cope with losing the ground they were built for. Turn it up and nothing stays suited to anywhere for long.",
+  fmt:v=>v===0?"fixed for ever":(v<1?"slow":v===1?"normal":"restless")+" ("+v.toFixed(2)+"x)"},
+ {key:"life", name:"How long plants live", min:400, max:4000, step:50,
+  why:"How many turns a well-suited plant survives. Short lives make a restless world of quick pioneers that never settle; long lives make an old and slow one, where holding ground matters more than taking it.",
+  fmt:v=>(v<800?"brief":v<2000?"ordinary":"long-lived")+" ("+v+")"},
+
+ {group:"Plants"},
+ {key:"__sea", name:"Plants in the sea", choice:[
+    {label:"None", why:"the ocean stays empty", set:{seafit:0, marine:0}},
+    {label:"Coastal only", why:"shallows and shores", set:{seafit:1, marine:1}},
+    {label:"Everywhere", why:"the open ocean too", set:{seafit:1, marine:0}}],
+  test:p=>p.seafit<=0?0:(p.marine>0.5?1:2),
+  why:"The sea is two thirds of this planet. Left open to plants it holds most of the life on the world, and because open water has no features to specialise against, one lineage can end up owning all of it. Coastal only keeps the deep ocean barren, which gives green fringes along every shore and blue emptiness in the middle, much the way real ocean productivity works."},
+ {key:"kids", name:"Branching", min:2, max:8, step:1, restart:true,
+  why:"The most children any one node may put out. Two makes forking, thread-like plants; eight lets a node throw growth in every direction at once and build dense rosettes. The genome still decides how many each node actually uses, so this is the ceiling it may evolve up to rather than the number it takes.",
+  fmt:v=>v+" branches"},
+ {key:"__len", name:"Branch length", pair:["splo","sphi"], min:0.75, max:5, step:0.05,
+  why:"How far a node places its children, from shortest to longest. The two knobs set the range the genome may evolve within; put them on the same spot and every plant in the world steps the same distance. Short steps build dense mats that resist invasion but claim ground slowly. Long steps cover distance fast and leave a loose body others can grow into.",
+  fmt:(a,b)=>a.toFixed(2)+" to "+b.toFixed(2)},
+ {key:"__leaf", name:"Leaf size", pair:["fatlo","fathi"], min:0, max:0.8, step:0.01,
+  why:"How large the painted leaves are, from the smallest node form to the largest. Big leaves cover the ground and hide the branching underneath; small ones let the structure and the terrain show through. Put the left knob at zero and the smallest leaves disappear altogether, leaving bare branches.",
+  fmt:(a,b)=>(a<=0?"none":a.toFixed(2))+" to "+b.toFixed(2)},
+ {key:"minfrag", name:"Smallest viable plant", min:5, max:80, step:5,
+  why:"A piece broken off a plant smaller than this is not viable and dies. Low leaves the world full of small scraps; high clears them out and leaves fewer, much larger organisms. Raise it a long way and new plants may not manage to grow big enough to survive at all.",
+  fmt:v=>v+" nodes"},
+ {key:"pmut", name:"How fast plants change", min:0, max:6, step:0.1,
+  why:"How much a plant's growth program is altered where a branch forks. Low means a lineage holds its shape for a very long time and the world changes slowly; high means restless variety, and lineages that never settle into anything recognisable.",
+  fmt:v=>v===0?"never":v<1.5?"slowly":v<3?"steadily":"restlessly"},
+
+ {group:"Seeding"},
+ {key:"reseed", name:"Seed empty regions", min:0, max:1, step:0.05,
+  why:"How often a brand-new plant appears in a region that has nothing living in it. This is the only thing that can repopulate a planet whose plants have all died: growth spreads outward from plants that already exist, so without it, empty stays empty for ever. It also fills parts of the world that nothing could have walked to.",
+  fmt:v=>v===0?"off":v<0.15?"rare":v<0.5?"occasional":"frequent"},
+ {key:"seedmut", name:"What new seeds are", choice:[
+    {label:"New random plants", why:"unrelated to anything living", set:{seedmut:0}},
+    {label:"Mutated copies", why:"of a plant already here", set:{seedmut:6}}],
+  test:p=>p.seedmut>0?1:0,
+  why:"Where a new seed's growth program comes from. A random one owes nothing to anybody, so it fills empty ground without spreading whichever plant is currently winning. A heavily mutated copy starts from something that already works and gambles on the changes: quicker to establish, but it makes the regions of the world more alike. Either way a seed is planted without regard to the ground, so it either finds itself somewhere it can live or it has to adapt."},
+ {key:"spore", name:"Spread by spores", min:0, max:0.03, step:0.001,
+  why:"How often a growing plant throws a seed clear of itself to land somewhere else on the planet. It is how a lineage crosses water it could never grow across. But a spore is a copy of whatever is already succeeding, flung somewhere new, so a high rate slowly makes every region of the world resemble every other.",
+  fmt:v=>v===0?"never":v<0.003?"rare":v<0.012?"occasional":"constant"},
+
+ {group:"Looking at it"},
+ {key:"topn", name:"Ring the largest plants", min:0, max:60, step:5,
+  why:"Draws a magenta ring around the biggest plants, so you can see at a glance where the giants are and how much ground each one holds. Purely an annotation: it changes nothing about the simulation.",
+  fmt:v=>v===0?"off":"the largest "+v},
+ {key:"stem", name:"Branch thickness", min:0, max:0.3, step:0.01,
+  why:"How thick the stems drawn between a node and its parent are. Without them a plant is a scatter of disconnected marks and its branching structure is invisible; thick ones make the skeleton the dominant thing in the picture.",
+  fmt:v=>v===0?"none":v.toFixed(2)},
+];
+
+const setEl = document.getElementById("settings");
+const setList = document.getElementById("setlist");
+const DEFAULTS = Object.assign({}, PARAMS);
+
+function writeHash(){
+  const bits=[];
+  const m=/seed=(\d+)/.exec(location.hash||"");
+  if(m) bits.push("seed="+m[1]);
+  for(const k in PARAMS) if(PARAMS[k]!==DEFAULTS[k]) bits.push(k+"="+PARAMS[k]);
+  /* replaceState, not location.hash — assigning the hash fires the reload
+     listener, and a slider would restart the world on every pixel of travel */
+  history.replaceState(null,"", bits.length ? "#"+bits.join("&") : location.pathname);
+}
+function applyLive(){ plantsDirty=true; updateHUD(); }
+
+function buildSettings(){
+  setList.innerHTML="";
+  for(const item of SETTINGS){
+    if(item.group){
+      const h=document.createElement("div");
+      h.className="setgroup"; h.textContent=item.group; setList.appendChild(h); continue;
+    }
+    const row=document.createElement("div"); row.className="setrow";
+    const head=document.createElement("div"); head.className="setname";
+    const nm=document.createElement("span"); nm.textContent=item.name;
+    const val=document.createElement("span"); val.className="setval";
+    head.appendChild(nm); head.appendChild(val); row.appendChild(head);
+    const why=document.createElement("div"); why.className="setwhy"; why.textContent=item.why;
+    row.appendChild(why);
+
+    if(item.choice){
+      const wrap=document.createElement("div"); wrap.className="setchoice";
+      const mark=()=>{ const at=item.test(PARAMS);
+        [...wrap.children].forEach((b,k)=>b.classList.toggle("on",k===at));
+        val.textContent=item.choice[at].why; };
+      item.choice.forEach(c=>{
+        const b=document.createElement("button"); b.type="button"; b.textContent=c.label;
+        b.addEventListener("click",()=>{ Object.assign(PARAMS,c.set); mark(); writeHash(); applyLive(); });
+        wrap.appendChild(b);
+      });
+      row.appendChild(wrap); mark();
+    } else if(item.pair){
+      const lo=item.pair[0], hi=item.pair[1];
+      const box=document.createElement("div"); box.className="setpair";
+      const a=document.createElement("input"), b=document.createElement("input");
+      [a,b].forEach(r=>{ r.type="range"; r.min=item.min; r.max=item.max; r.step=item.step; });
+      a.value=PARAMS[lo]; b.value=PARAMS[hi];
+      const show=()=>{ val.textContent=item.fmt(PARAMS[lo],PARAMS[hi]); };
+      /* the left knob is always the minimum: push the other along rather than
+         letting them cross, or minimum and maximum swap meaning silently */
+      a.addEventListener("input",()=>{ PARAMS[lo]=+a.value;
+        if(PARAMS[hi]<PARAMS[lo]){ PARAMS[hi]=PARAMS[lo]; b.value=a.value; }
+        show(); writeHash(); applyLive(); });
+      b.addEventListener("input",()=>{ PARAMS[hi]=+b.value;
+        if(PARAMS[lo]>PARAMS[hi]){ PARAMS[lo]=PARAMS[hi]; a.value=b.value; }
+        show(); writeHash(); applyLive(); });
+      box.appendChild(a); box.appendChild(b); row.appendChild(box); show();
+    } else {
+      const r=document.createElement("input");
+      r.type="range"; r.min=item.min; r.max=item.max; r.step=item.step; r.value=PARAMS[item.key];
+      const show=()=>{ val.textContent=item.fmt?item.fmt(PARAMS[item.key]):PARAMS[item.key]; };
+      r.addEventListener("input",()=>{ PARAMS[item.key]=+r.value; show(); writeHash();
+        if(!item.restart) applyLive(); });
+      row.appendChild(r); show();
+    }
+    if(item.restart){
+      const n=document.createElement("div"); n.className="setnote";
+      n.textContent="takes effect when the world restarts"; row.appendChild(n);
+    }
+    setList.appendChild(row);
+  }
+}
+function setSettings(on){
+  setEl.classList.toggle("on",on);
+  document.getElementById("hud").classList.toggle("behind",on);
+  setEl.setAttribute("aria-hidden",on?"false":"true");
+  if(on) buildSettings();
+}
+document.getElementById("gear").addEventListener("click",e=>{ e.stopPropagation(); setSettings(true); });
+document.getElementById("setclose").addEventListener("click",e=>{ e.stopPropagation(); setSettings(false); });
+document.getElementById("setreset").addEventListener("click",e=>{
+  e.stopPropagation(); Object.assign(PARAMS,DEFAULTS); writeHash(); buildSettings(); applyLive();
+});
+document.getElementById("setrestart").addEventListener("click",e=>{
+  e.stopPropagation(); writeHash(); location.reload();
+});
+["pointerdown","pointerup","click","wheel","touchstart"].forEach(ev=>
+  setEl.addEventListener(ev,e=>e.stopPropagation(),{passive:true}));
+addEventListener("keydown",e=>{ if(e.key==="Escape"&&setEl.classList.contains("on")) setSettings(false); });
+
 document.getElementById("chartclose").addEventListener("click",e=>{
   e.stopPropagation(); setCharts(false);
 });
