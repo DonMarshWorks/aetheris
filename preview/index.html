@@ -607,29 +607,6 @@ const PARAMS = {
                     // winning, flung across the planet, so a high rate is the
                     // current champion reseeding itself everywhere. Dropping
                     // 0.030 -> 0.006 took niche evenness from 0.56 to 0.86.
-  signal:  1,       // 1 = plants carry one number the whole body shares, so a
-                    // node can act on what is happening somewhere it cannot
-                    // see. Every node otherwise runs the same program on its
-                    // own inputs and is blind to the plant it belongs to.
-                    // A node adds its `emit` output to the body's signal and
-                    // reads the body's signal as an input; nothing else is
-                    // needed -- no messages, no traversal, no per-node store.
-                    // A node under stress evolving `emit <- -fit` makes an
-                    // alarm any other node can hear, and the listener is one
-                    // output-address mutation away from existing, which is
-                    // what decides whether a behaviour is reachable at all.
-  sigmode: 0,       // how several nodes' emissions combine into the one value
-                    // the body carries. 0 = mean, 1 = loudest wins.
-                    // Don's question, and it exposes a real flaw in the mean:
-                    // for an alarm it is plainly wrong, because one node in
-                    // distress among five hundred healthy ones is averaged to
-                    // nothing. A sum would be worse still -- a big plant would
-                    // be loud purely for being big -- but a max is one node's
-                    // voice and cannot be inflated by size.
-  sigdecay: 0.90,   // how fast the signal fades per tick. Decay is what makes
-                    // it a signal rather than a running total; averaged over
-                    // the body as well, or a large plant would be loud purely
-                    // for being large and this would be a size counter.
   cullmin: 0,       // bud attempts a body must have had before either of the
                     // two rules below may judge it. 0 turns both off. Don's
                     // objection to the size cull, and it is right: a fragment
@@ -1196,10 +1173,10 @@ const ARITY  = [2,2,2,2,2,2,1,1,1,1,2,3];
    genome need not discover units. `one` is the constant every linear-GP needs
    to build an offset from. */
 const IN_ONE=0, IN_AGE=1, IN_DEPTH=2, IN_FIT=3, IN_ENV=4, IN_LAT=9,
-      IN_USED=10, IN_PCAP=11, IN_CROWD=12, IN_SLOT=13, IN_SIG=14;
-const NIN = 15;
+      IN_USED=10, IN_PCAP=11, IN_CROWD=12, IN_SLOT=13;
+const NIN = 14;
 const INNAME = ["one","age","depth","fit","sea","ice","desert","grass","forest",
-                "lat","used","pcap","crowd","slot","signal"];
+                "lat","used","pcap","crowd","slot"];
 
 const matBase = Math.max(1, PARAMS.mature);                // reference maturity
 const KIDMAX  = Math.max(1, Math.min(8, PARAMS.kids|0));   // children a node may hold
@@ -1229,10 +1206,10 @@ const NADDR = NIN + NK + PLEN;                             // the read space
 
    Between them: fan 0 drift 0 is a spike, fan 0 drift small is an arc, fan wide
    is a bush, and each is one number away from the others. */
-const NOUT  = 11;
-const O_CAP=0, O_SPREAD=1, O_PACE=2, O_VIG=3, O_ANGLE=4, O_AFF=5, O_EMIT=10;
+const NOUT  = 10;
+const O_CAP=0, O_SPREAD=1, O_PACE=2, O_VIG=3, O_ANGLE=4, O_AFF=5;
 const OUTNAME = ["capacity","spread","pace","vigour","angle",
-                 "affSea","affIce","affDesert","affGrass","affForest","emit"];
+                 "affSea","affIce","affDesert","affGrass","affForest"];
 
 /* One instruction is (op, a, b, c). Writing to slot *i* rather than to a named
    register is what makes the active path walkable backwards from the outputs,
@@ -1278,67 +1255,7 @@ function fillInputs(i){
      bias it, or ignore it, and nothing is imposed. */
   V[IN_SLOT ] = NKID[i] - (NCAP[i]-1)*0.5;
   V[IN_CROWD] = CCOUNT[NCC[i]]*(1/CROWD_REF) - 1;
-  /* The one thing a node can know about the rest of its own body. Every node
-     runs the same program on its own inputs and is otherwise blind to the
-     plant it belongs to; this is a single number any node may read and any
-     node may add to, which is enough for coordination without messages,
-     without a traversal, and without per-node storage.
-     A node under stress can evolve `emit <- -fit` and every other node in the
-     body then reads a value that rises when any part of the plant is
-     suffering — an alarm, and the listener is one output-address mutation
-     from existing too. That mattered: the evolved turn angle failed twice
-     because the first useful version was several mutations away, and worked
-     the moment it was one. Read as it stood at the start of the tick, never
-     as it is being accumulated, or the answer would depend on the order the
-     plants happened to be walked in — which is deliberately randomised — and
-     seed plus parameters would stop determining a world. */
-  V[IN_SIG  ] = BSIGR[PROOT[i]];
 }
-/* Charged where the program is actually run, so a node that is never evaluated
-   never speaks. */
-function emitInto(i){
-  if(PARAMS.signal<=0) return;
-  const r=PROOT[i];
-  if(r<0) return;
-  let e=Math.tanh(OUTV[O_EMIT]*0.25);
-  if(!isFinite(e)) e=0;
-  BSIG[r]+=e; BSIGN[r]++;
-  if(Math.abs(e) > Math.abs(BSIGX[r])) BSIGX[r]=e;
-  if(SIGSTAMP[r]!==ptick){ SIGSTAMP[r]=ptick; if(sigTouchN<PMAX) SIGTOUCH[sigTouchN++]=r; }
-}
-/* End of tick: fold what was said into what may be heard next tick. Bodies
-   that said nothing are not walked at all -- their decay is applied from the
-   gap when they next speak, which costs one power per speaking body per tick
-   instead of a pass over every body. */
-/* mean magnitude of the signal across bodies that have one, so silence and
-   loud-but-balanced can be told apart */
-function sigLevelOf(){
-  let s=0, n=0;
-  for(let r=0;r<nodeHigh;r++){
-    if(PROOT[r]!==r || PSIZE[r]===0) continue;
-    s+=Math.abs(BSIGR[r]); n++;
-  }
-  return n ? s/n : 0;
-}
-function settleSignals(){
-  const k=Math.max(0,Math.min(0.999,PARAMS.sigdecay));
-  for(let n=0;n<sigTouchN;n++){
-    const r=SIGTOUCH[n];
-    const gap=ptick-SIGT[r]; SIGT[r]=ptick;
-    const d = gap>=64 ? 0 : Math.pow(k,gap);
-    /* mean, or loudest-wins. For an ALARM the mean is plainly wrong: one node
-       in distress among five hundred healthy ones is averaged to nothing,
-       which is the opposite of what a distress signal should do. Max keeps it
-       — and cannot be gamed into loudness by sheer size the way a sum could,
-       because it is still one node's voice. */
-    const heard = PARAMS.sigmode>0 ? BSIGX[r]
-                : (BSIGN[r] ? BSIG[r]/BSIGN[r] : 0);
-    BSIGR[r] = BSIGR[r]*d*k + heard*(1-k);
-    BSIG[r]=0; BSIGN[r]=0; BSIGX[r]=0;
-  }
-  sigTouchN=0;
-}
-
 function runProgram(i){
   fillInputs(i);
   const k=i*NK;
@@ -1384,26 +1301,14 @@ function runProgram(i){
    four output addresses. Forward references contribute nothing, so they are not
    followed. */
 const AMARK = new Uint8Array(PLEN), ASTK = new Int32Array(PLEN+4);
-/* Also answers whether this genome is wired to the body signal at all, which
-   is the counter the whole mechanism has to be judged by: a shared register
-   that nothing reads is not coordination, it is an unused array. `listens` is
-   set if the signal reaches any live output; `speaks` if the emit output is
-   driven by anything that varies rather than by a constant or an immediate. */
-let actListens=false, actSpeaks=false;
 function activeCount(i){
   AMARK.fill(0);
-  actListens=false; actSpeaks=false;
   let sn=0, n=0;
   const base=NIN+NK;
   for(let j=0;j<NOUT;j++){
     const a=POUT[i*NOUT+j];
-    if(a===IN_SIG) actListens=true;
     if(a>=base && a<NADDR) ASTK[sn++]=a-base;
   }
-  { const a=POUT[i*NOUT+O_EMIT];
-    /* an emit wired to `one` or to an evolved constant says the same thing for
-       ever, which is silence with extra steps */
-    if(!(a===IN_ONE || (a>=NIN && a<NIN+NK))) actSpeaks=true; }
   while(sn>0){
     const j=ASTK[--sn];
     if(AMARK[j]) continue;
@@ -1411,8 +1316,7 @@ function activeCount(i){
     const q=(i*PLEN+j)*4, ar=ARITY[PROG[q]];
     for(let t=1;t<=ar;t++){
       const a=PROG[q+t];
-      if(a===IN_SIG) actListens=true;
-      if(a>=base && a<NADDR){ const s=a-base; if(s<j && !AMARK[s]) ASTK[sn++]=s; }
+        if(a>=base && a<NADDR){ const s=a-base; if(s<j && !AMARK[s]) ASTK[sn++]=s; }
     }
   }
   return n;
@@ -2682,18 +2586,6 @@ const BTOP=new Uint8Array(PMAX); const SIZES=[];   // the largest plants, ringed
    effort rather than a lifetime tally — a plant that was boxed in long ago and
    has since broken out should not be answering for it. */
 const BTRY=new Int32Array(PMAX), BSELF=new Int32Array(PMAX);
-/* The body signal, in two halves. Nodes accumulate into BSIG during a tick and
-   read BSIGR, which is what BSIG settled to at the end of the last one. The
-   split is not tidiness: plants are walked in a randomised order every tick on
-   purpose, so a register that were read while it was being written would make
-   the result depend on that order, and seed plus parameters would stop
-   determining a world completely — which this piece treats as a feature.
-   Averaged over the body rather than summed, or a big plant would shout purely
-   by having more nodes and the signal would be a size counter. */
-const BSIG=new Float32Array(PMAX), BSIGR=new Float32Array(PMAX);
-const BSIGN=new Int32Array(PMAX), SIGT=new Int32Array(PMAX);
-/* the loudest thing said this tick, kept signed, for the max combiner */
-const BSIGX=new Float32Array(PMAX);
 /* The highlight marks NODES, not a body, and that is the whole design.
    A body is its root index, and a root index is not durable: bodies split
    when wood rots through, and the severed half is re-rooted somewhere else
@@ -2724,8 +2616,6 @@ const SEL_FADE_MS=3000;
    a promise about seconds, not about frames. */
 const selFade = () => selHold ? 1
   : (selReleasedAt ? Math.max(0, 1-(performance.now()-selReleasedAt)/SEL_FADE_MS) : 0);
-const SIGSTAMP=new Int32Array(PMAX).fill(-1), SIGTOUCH=new Int32Array(PMAX);
-let sigTouchN=0;
 const BX=new Float32Array(PMAX), BY=new Float32Array(PMAX), BZ=new Float32Array(PMAX);
 
 /* ---- history, so stasis can be seen rather than guessed at ----
@@ -2962,7 +2852,6 @@ function plantsStep(){
       /* charged here rather than at every evaluation: this is the pass that
          touches a fair sample of a body's nodes every tick, so it is where a
          plant's voice is actually taken */
-      emitInto(ni);
       const vg = Math.tanh(OUTV[O_VIG]*0.25);
       const b = PROOT[ni], s = vg - BVIG[b];
       BVIG[b] += s*vmem;
@@ -3008,7 +2897,6 @@ function plantsStep(){
       if(tries>0 && ++NTRY[best] >= tries && stillThere) retire(bestFi);
     }
   }
-  settleSignals();
 }
 
 function plantsSeed(){
@@ -3161,15 +3049,11 @@ function plantStats(reset){
   /* how much of a program actually reaches an output. One means nothing is
      being computed, however long the list is */
   let act=0, actN=0, actMin=1e9, actMax=0, badGene=0, badK=0;
-  let listen=0, speak=0, both=0;
   for(let i=0;i<nodeHigh;i+=53){
     if(NLIVE[i]!==1) continue;
     const a=activeCount(i); act+=a; actN++;
     /* the counter the body signal has to be judged by: a shared register
        nothing reads is not coordination, it is an unused array */
-    if(actListens) listen++;
-    if(actSpeaks) speak++;
-    if(actListens && actSpeaks) both++;
     if(a<actMin) actMin=a; if(a>actMax) actMax=a;
     for(let g=0;g<G;g++) if(!isFinite(GENE[i*G+g])) badGene++;
     for(let g=0;g<NK;g++) if(!isFinite(KONST[i*NK+g])) badK++;
@@ -3208,16 +3092,6 @@ function plantStats(reset){
     capBirthShare:Array.from(CAPHIST.subarray(1)).map(v=>+(v/Math.max(1,outN)).toFixed(3)),
     active:{ mean:+(act/Math.max(1,actN)).toFixed(1),
              min:actN?actMin:0, max:actMax, of:PLEN, sampled:actN },
-    /* Is the body signal being used, and is use climbing? `listens` is the
-       share of genomes in which the signal reaches a live output, `speaks` the
-       share whose emit is driven by something that varies, and `both` the
-       share doing each — which is the one that means a lineage has actually
-       wired a sense to a voice. `level` is how loud the world is; if it is
-       zero, nothing is being said whatever the wiring says. */
-    signal:{ listens:+(listen/Math.max(1,actN)).toFixed(3),
-             speaks:+(speak/Math.max(1,actN)).toFixed(3),
-             both:+(both/Math.max(1,actN)).toFixed(3),
-             level:+(sigLevelOf()).toFixed(4), sampled:actN },
     inputs:ins,
     body:withinBody(),
     /* where the growth loop's draws went, which is the open question about
