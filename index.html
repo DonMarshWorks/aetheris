@@ -1746,6 +1746,60 @@ let angDiffSum = 0, angDiffN = 0, angBlocked = 0;
 const INSUM = new Float64Array(NIN), INSUM2 = new Float64Array(NIN);
 const INMIN = new Float32Array(NIN), INMAX = new Float32Array(NIN);
 let inN = 0;
+/* ---- provinces --------------------------------------------------------
+   Every diversity number in this project is global, and a global number
+   cannot tell a planet of distinct provinces from a planet uniformly mixed:
+   both have the same strategies present in the same proportions. That is
+   exactly the difference dispersal erases, so it is exactly the thing that
+   has to be counted to say whether dispersal is costing anything.
+
+   The sphere is cut into equal-area boxes — equal in area because bands of
+   equal latitude are not, and a polar box holding four nodes would otherwise
+   swamp the average with noise. Each box gets the strategy histogram of the
+   nodes standing in it. `differentiation` is the mean total-variation
+   distance between two boxes drawn at random: 0 means every province holds
+   the same mixture and geography has stopped meaning anything, 1 means no two
+   provinces have a strategy in common. `withinEven` is how mixed a single
+   province is on average, so the two together separate "everywhere the same
+   and varied" from "everywhere different and uniform". */
+const GEOLAT = 8;                       // bands of equal area, pole to pole
+function provinces(){
+  const H=[], N=[];
+  const boxOf = (x,y,z)=>{
+    /* equal-area: the band index is linear in sin(latitude) */
+    let bi=Math.floor((y+1)*0.5*GEOLAT); if(bi<0)bi=0; if(bi>=GEOLAT)bi=GEOLAT-1;
+    /* and each band is cut into as many boxes as its width can carry, so all
+       boxes hold about the same area */
+    const lo=-1+2*bi/GEOLAT, hi=-1+2*(bi+1)/GEOLAT;
+    const mid=(lo+hi)*0.5, cw=Math.sqrt(Math.max(1e-6,1-mid*mid));
+    const nlon=Math.max(1, Math.round(2*GEOLAT*cw));
+    let li=Math.floor((Math.atan2(z,x)+Math.PI)/(Math.PI*2)*nlon);
+    if(li<0)li=0; if(li>=nlon)li=nlon-1;
+    return bi*1000+li;
+  };
+  const map=new Map();
+  for(let i=0;i<nodeHigh;i++){
+    if(NLIVE[i]!==1) continue;
+    const k=boxOf(NPX[i],NPY[i],NPZ[i]);
+    let h=map.get(k);
+    if(!h){ h=new Float64Array(32); map.set(k,h); }
+    h[strategyOf(i*G)]++;
+  }
+  const boxes=[...map.values()].filter(h=>{ let t=0; for(let j=0;j<32;j++) t+=h[j]; return t>=40; });
+  if(boxes.length<2) return {provinces:boxes.length, differentiation:0, withinEven:0};
+  const norm=boxes.map(h=>{ let t=0; for(let j=0;j<32;j++) t+=h[j];
+                            const o=new Float64Array(32); for(let j=0;j<32;j++) o[j]=h[j]/t; return o; });
+  let d=0, n=0;
+  for(let a=0;a<norm.length;a++) for(let b2=a+1;b2<norm.length;b2++){
+    let s2=0; for(let j=0;j<32;j++) s2+=Math.abs(norm[a][j]-norm[b2][j]);
+    d+=s2*0.5; n++;
+  }
+  let ev=0;
+  for(const o of norm){ let h2=0; for(let j=0;j<32;j++) if(o[j]>0) h2-=o[j]*Math.log(o[j]); ev+=h2/Math.log(32); }
+  return { provinces:norm.length,
+           differentiation:+(d/Math.max(1,n)).toFixed(4),
+           withinEven:+(ev/norm.length).toFixed(4) };
+}
 function resetStats(){
   CAPHIST.fill(0); OUTHIST.fill(0); OUTRAW.fill(0); outN=0; angN=0;
   angDiffSum=0; angDiffN=0; angBlocked=0;
@@ -2033,21 +2087,7 @@ function emitNode(i, pass, w){
     geneColour(go, NPACE[i], GC);
     const young=1-grow;
     let r=GC[0]+young*44, g=GC[1]+young*40, b=GC[2]+young*34;
-    /* The selected body, shown whole. A plant's colour carries its niche and
-       its commitment, and a lineage that spans two terrains legitimately
-       changes colour across itself — so the eye cannot tell one large plant
-       from several touching ones, which is exactly the question worth asking
-       of a thing whose whole point is how much ground it holds. Red is the one
-       hue the palette never makes, for the same reason the size rings are
-       magenta. Value is kept, so the body's own structure still reads through
-       it: wood stays dark, tips stay bright. */
-    if(selId>0 && NSEL[i]===selId){
-      const f=SELFADE;
-      if(f>0){
-        const lum=(0.30*r+0.59*g+0.11*b)/255;
-        r+=( (90+165*lum) -r)*f; g+=(26*lum-g)*f; b+=(32*lum-b)*f;
-      }
-    }
+
     /* Dead wood is not black. Black would swamp hue, which is the channel
        carrying niche, and half the standing structure would go to it — the
        planet would read as scorched. Keep the lineage's hue, take the colour
@@ -2057,6 +2097,31 @@ function emitNode(i, pass, w){
     if(wood){
       const lum=0.30*r+0.59*g+0.11*b;
       r=(r*0.24+lum*0.76)*0.52; g=(g*0.24+lum*0.76)*0.52; b=(b*0.24+lum*0.76)*0.52;
+    }
+
+    /* The selected body, shown whole — and applied AFTER the wood is drained,
+       or the highlight is drained with it.
+     *
+     * That mattered more than it sounds. A plant here is held together by
+     * heartwood: a node that dies still holding children stops living but
+     * stays in the tree as structure, for up to `rot` ticks before the
+     * connection finally goes. So a body is routinely two or three patches of
+     * living growth strung on a thread of dead wood — genuinely one plant,
+     * and the highlight was right to take all of it. But reddening the wood
+     * before it was darkened left the thread almost black against open water,
+     * so the answer looked like a bug: two separate plants both lit up. Red
+     * the wood after, a little deeper than the living growth, and the reason
+     * they are one plant is visible in the same picture as the claim.
+     *
+     * Red because it is the one hue this palette never makes, for the same
+     * reason the size rings are magenta. Value is kept, so tips still read
+     * bright against trunk. */
+    if(selId>0 && NSEL[i]===selId && SELFADE>0){
+      const f=SELFADE, lum=(0.30*r+0.59*g+0.11*b)/255;
+      const tr = wood ? 70+90*lum : 90+165*lum;
+      const tg = wood ? 16*lum    : 26*lum;
+      const tb = wood ? 20*lum    : 32*lum;
+      r+=(tr-r)*f; g+=(tg-g)*f; b+=(tb-b)*f;
     }
 
     const rot=Math.atan2(hn,he);
@@ -2291,7 +2356,11 @@ function addNode(x,y,z,hx,hy,hz,src,par,amt,stepUsed){
   /* growth off a highlighted plant stays highlighted, so the body does not
      appear to stop at a line; and a recycled slot never keeps a stale mark,
      which would light up a stranger born into a dead node's place */
-  NSEL[i] = (src>=0 && selId>0 && NSEL[src]===selId) ? selId : 0;
+  /* `par`, not `src`. A spore copies a parent's genome but is rooted in its
+     own right — it passes par = -1 — so keying the mark off src lit up a
+     brand-new independent plant on the other side of the world merely because
+     the lineage it came from was being held. Only a real child inherits. */
+  NSEL[i] = (par>=0 && selId>0 && NSEL[src]===selId) ? selId : 0;
   if(src<0) randomGenome(i);
   else if(amt>0){
     inheritMutated(src,i,amt);
@@ -3078,6 +3147,7 @@ function plantStats(reset){
     fitSum:+dbgFit.toFixed(2), fitN:dbgFitOk,
     meanLifeSet:+(dbgLife/Math.max(1,dbgHits)).toFixed(0),
     hitFloor:dbgFloor, ageDeaths:dbgAgeDeaths,
+    geo:provinces(),
     strategies:Array.from(CENSUS).filter(v=>v>0).length,
     topStrategy:+(Math.max(...CENSUS)/Math.max(1,censusN)).toFixed(3),
     /* the census in full, not just its width and its peak. Two readings of it
@@ -4525,7 +4595,17 @@ function pickBody(px,py){
   const i=Math.min(PGRID-1,Math.max(0,((ox+1)*0.5*PGRID)|0));
   const j=Math.min(PGRID-1,Math.max(0,((oy+1)*0.5*PGRID)|0));
   const k=Math.min(PGRID-1,Math.max(0,((oz+1)*0.5*PGRID)|0));
-  let best=-1, bd=PARAMS.step*PARAMS.step*36;
+  /* Every body near the press votes, weighted by how close it comes, and the
+     loudest wins — rather than simply taking the single nearest node.
+     Nearest is a knife edge: where two plants interleave, the closest node
+     flips from one to the other for a hair's movement of the ray, and the ray
+     does move on its own, because the framing keeps a slow breath in it even
+     while the world is paused. Pressing the same spot twice then answered
+     differently. A vote only changes its mind when the finger is genuinely
+     between two plants, which is the honest case for it to be uncertain. */
+  const R=PARAMS.step*3.0, R2=R*R;
+  const vote=new Map();
+  let best=-1, bw=0;
   for(let a=-1;a<=1;a++){
     const ia=i+a; if(ia<0||ia>=PGRID) continue;
     for(let bb=-1;bb<=1;bb++){
@@ -4539,12 +4619,16 @@ function pickBody(px,py){
           if(NLIVE[q]===0) continue;
           const ex2=NPX[q]-ox, ey2=NPY[q]-oy, ez2=NPZ[q]-oz;
           const d2=ex2*ex2+ey2*ey2+ez2*ez2;
-          if(d2<bd){ bd=d2; best=q; }
+          if(d2>R2) continue;
+          const r2=PROOT[q];
+          const w=(vote.get(r2)||0) + 1/(d2+1e-9);
+          vote.set(r2,w);
+          if(w>bw){ bw=w; best=r2; }
         }
       }
     }
   }
-  return best<0 ? -1 : PROOT[best];
+  return best;
 }
 const selBadge = document.getElementById("selbadge");
 function placeBadge(px,py){
@@ -5345,6 +5429,55 @@ window.__world = {
   params(){ return PARAMS; },
   /* picking, so the gesture can be tested without dispatching one */
   pick(x,y){ return pickBody(x,y); },
+  /* Is a body one connected piece, and does it look like one? The parent
+     graph says what the simulation believes; the spatial clumping says what
+     the eye sees. Where they disagree, wood is holding two visible patches
+     together and the highlight is telling the truth about a plant that does
+     not look like one plant. */
+  bodyDiag(n){
+    const sz=new Map();
+    for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0) sz.set(PROOT[i],(sz.get(PROOT[i])||0)+1);
+    const roots=[...sz.entries()].sort((a,b)=>b[1]-a[1]).slice(0,n|0).map(e=>e[0]);
+    const out=[];
+    for(const r of roots){
+      const ns=[]; let alive=0, wood=0;
+      for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0 && PROOT[i]===r){ ns.push(i); if(NLIVE[i]===1) alive++; else wood++; }
+      const idx=new Map(); ns.forEach((v,k)=>idx.set(v,k));
+      const par=new Int32Array(ns.length); for(let k=0;k<ns.length;k++) par[k]=k;
+      const find=a=>{ while(par[a]!==a){ par[a]=par[par[a]]; a=par[a]; } return a; };
+      const uni=(a,b)=>{ a=find(a); b=find(b); if(a!==b) par[a]=b; };
+      /* the parent graph the simulation actually maintains */
+      for(let k=0;k<ns.length;k++){
+        const i=ns[k], q=NPAR[i];
+        if(q>=0 && NLIVE[q]!==0 && NGEN[q]===NPGEN[i] && idx.has(q)) uni(k, idx.get(q));
+      }
+      let comps=new Set(); for(let k=0;k<ns.length;k++) comps.add(find(k));
+      const connected = comps.size===1;
+      /* and the same nodes clumped purely by where they are */
+      const par2=new Int32Array(ns.length); for(let k=0;k<ns.length;k++) par2[k]=k;
+      const find2=a=>{ while(par2[a]!==a){ par2[a]=par2[par2[a]]; a=par2[a]; } return a; };
+      const lim=PARAMS.step*1.8, lim2=lim*lim;
+      for(let a=0;a<ns.length;a++) for(let bq=a+1;bq<ns.length;bq++){
+        const i=ns[a], j=ns[bq];
+        const dx=NPX[i]-NPX[j], dy=NPY[i]-NPY[j], dz=NPZ[i]-NPZ[j];
+        if(dx*dx+dy*dy+dz*dz < lim2){ const x=find2(a), y=find2(bq); if(x!==y) par2[x]=y; }
+      }
+      const cl=new Map();
+      for(let k=0;k<ns.length;k++){ const c=find2(k); if(!cl.has(c)) cl.set(c,[]); cl.get(c).push(ns[k]); }
+      /* the widest gap between the two clumps that are furthest apart */
+      let gap=0; const arr=[...cl.values()];
+      for(let a=0;a<arr.length;a++) for(let bq=a+1;bq<arr.length;bq++){
+        let best=1e9;
+        for(const i of arr[a]) for(const j of arr[bq]){
+          const dx=NPX[i]-NPX[j], dy=NPY[i]-NPY[j], dz=NPZ[i]-NPZ[j];
+          const d=dx*dx+dy*dy+dz*dz; if(d<best) best=d;
+        }
+        best=Math.sqrt(best)/PARAMS.step; if(best>gap) gap=best;
+      }
+      out.push({root:r, alive, wood, connected, clumps:cl.size, gap});
+    }
+    return out;
+  },
   selected(){ return {id:selId, size:selCount, fade:+selFade().toFixed(3), held:selHold, frames:frameTick}; },
   /* pass true to zero the sampling accumulators, so the next reading covers
      only the interval since this one */

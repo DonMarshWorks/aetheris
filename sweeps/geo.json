@@ -1,0 +1,8 @@
+{ "ticks": 45000, "checkpoints": [5000,15000,45000], "defaultEcorate": 16,
+  "seeds": [7,31337,424242,999],
+  "configs": [
+    { "tag": "spore0",     "params": { "spore": 0 } },
+    { "tag": "spore0.001", "params": { "spore": 0.001 } },
+    { "tag": "spore0.006", "params": { "spore": 0.006 } },
+    { "tag": "spore0.030", "params": { "spore": 0.030 } }
+  ] }
