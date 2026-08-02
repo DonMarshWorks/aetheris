@@ -483,6 +483,21 @@ const PARAMS = {
                     // parent, per step. 0 draws none. Without it a plant is a
                     // scatter of disconnected blobs and the branching — the
                     // whole structure of the thing — is invisible.
+  soft:    0.20,    // how soft the footprint edge is, 0..1. This is the
+                    // leaf's anti-aliasing and nothing more; larger values
+                    // read as translucency at high zoom. Without it — and it
+                    // was deleted once, along with `alpha`, by a span removal
+                    // that ran into the end of a comment belonging to the
+                    // parameter after it — every leaf's alpha is NaN, the edge
+                    // test in the fragment shader collapses, and the whole
+                    // planet draws as bare quads.
+  alpha:   0.80,    // how much of the ground a mature node hides. Nearly
+                    // opaque, and the nodes made small enough to leave gaps
+                    // instead: a translucent mark laid over its neighbours
+                    // averages into haze and you cannot see the shape of
+                    // anything, whereas small solid marks with ground between
+                    // them read as structure. Coverage is bought with the leaf
+                    // size range, not with opacity.
   mature:  90,      // reference ticks from bud to maturity, scaled by pace
   life:    1500,    // ticks per unit of fit; a pure specialist at home gets 5x
   seafit:  1.00,    // a flat multiplier on how habitable the sea is at all.
@@ -886,6 +901,7 @@ const S = {
   stats: {ocean:0.6, ice:0.08, desert:0.2, forest:0.2, grass:0.1, temp:14}
 };
 const TARGET = {ocean:0.635, ice:0.090, desertOfLand:0.225};
+let climateHeld = false;   // test hook: pin the dials and see where the world settles
 const YEAR = 900;           // simulated seconds per orbit
 const TILT = 24*Math.PI/180;
 
@@ -1060,6 +1076,10 @@ function stepFields(dt){
 
   /* ---------- homeostasis: keep every environment in the picture -------- */
   ctrlAccum += dt;
+  /* The census still runs while the controller is held — the numbers are the
+     point of holding it. Only the corrections are skipped, so a dial can be
+     pinned and the world asked where it settles, which is the one question a
+     controller steering toward a target can never answer about itself. */
   if(ctrlAccum >= 2.5){
     const d=ctrlAccum; ctrlAccum=0;
     let aOcean=0,aIce=0,aDesert=0,aForest=0,aGrass=0,aTundra=0,tSum=0,aLand=0;
@@ -1090,12 +1110,14 @@ function stepFields(dt){
 
     /* corrections are rate-limited so the loop stays stable no matter how
        large a time step the time-lapse hands it */
-    const dSea = clamp((TARGET.ocean - ocean)*0.055*d, -0.020, 0.020);
-    const dT   = clamp((ice - TARGET.ice)*0.55*d,      -0.30,  0.30);
-    const dH   = clamp((desertOfLand - TARGET.desertOfLand)*0.040*d, -0.012, 0.012);
-    S.seaLevel   = clamp(S.seaLevel   + dSea, -0.50, 0.50);
-    S.globalTemp = clamp(S.globalTemp + dT,   -14, 14);
-    S.globalHum  = clamp(S.globalHum  + dH,   -0.56, 0.52);
+    if(!climateHeld){
+      const dSea = clamp((TARGET.ocean - ocean)*0.055*d, -0.020, 0.020);
+      const dT   = clamp((ice - TARGET.ice)*0.55*d,      -0.30,  0.30);
+      const dH   = clamp((desertOfLand - TARGET.desertOfLand)*0.040*d, -0.012, 0.012);
+      S.seaLevel   = clamp(S.seaLevel   + dSea, -0.50, 0.50);
+      S.globalTemp = clamp(S.globalTemp + dT,   -14, 14);
+      S.globalHum  = clamp(S.globalHum  + dH,   -0.56, 0.52);
+    }
   }
 }
 
@@ -5674,6 +5696,17 @@ window.__world = {
   cam(){ return CAM; },
   pointerCount(){ return ptrs.size; },
   params(){ return PARAMS; },
+  /* Pin the three climate dials and stop the controller correcting them, so
+     the attainable range of each environment can be measured rather than
+     assumed. Reachability is the first thing user-set terrain proportions
+     need to know, and a controller steering toward a target cannot report it. */
+  holdClimate(on, sea, temp, hum){
+    climateHeld = !!on;
+    if(sea!==undefined)  S.seaLevel   = sea;
+    if(temp!==undefined) S.globalTemp = temp;
+    if(hum!==undefined)  S.globalHum  = hum;
+    return {held:climateHeld, sea:S.seaLevel, temp:S.globalTemp, hum:S.globalHum};
+  },
   /* picking, so the gesture can be tested without dispatching one */
   pick(x,y){ return pickBody(x,y); },
   /* Is a body one connected piece, and does it look like one? The parent
