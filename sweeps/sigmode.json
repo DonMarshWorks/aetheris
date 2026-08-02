@@ -1,0 +1,8 @@
+{ "ticks": 45000, "checkpoints": [5000,15000,30000,45000], "defaultEcorate": 16,
+  "seeds": [7,31337,424242,999],
+  "configs": [
+    { "tag": "mean",      "params": { "sigmode": 0 } },
+    { "tag": "max",       "params": { "sigmode": 1 } },
+    { "tag": "max-slow",  "params": { "sigmode": 1, "sigdecay": 0.98 } },
+    { "tag": "dead",      "params": { "signal": 0 } }
+  ] }
