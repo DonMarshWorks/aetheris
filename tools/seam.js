@@ -88,6 +88,21 @@ const fail = m => { failures++; console.log('  \x1b[31mFAIL\x1b[0m ' + m); };
   else fail(`${tot.dropped} of ${tot.deaths} deaths lost their stem outright — ` +
             `it vanishes in one frame while the leaf fades — ${JSON.stringify(tot.why)}`);
 
+  /* and the other half of a continuous death: a plant that is cut in half must
+     not change depth against its neighbours, because there is no depth test
+     here and paint order is the whole answer */
+  const po = await page.evaluate(() => window.__world.paintOrder(600));
+  console.log(`
+${po.checked.toLocaleString()} nodes followed through 600 ecology ticks, ` +
+    `${po.reRooted.toLocaleString()} of them re-rooted by a split
+`);
+  if (po.reRooted < 100)
+    fail(`only ${po.reRooted} splits seen — the paint-order test did not exercise anything`);
+  else if (po.keyChanged === 0)
+    pass('paint order survives every split (no lineage changed its key)');
+  else
+    fail(`${po.keyChanged} nodes changed paint order across a split — ${po.example}`);
+
   await browser.close();
   console.log();
   if (failures) { console.log(`\x1b[31m${failures} check(s) failed\x1b[0m`); process.exit(1); }

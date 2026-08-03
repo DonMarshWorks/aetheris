@@ -1531,6 +1531,9 @@ const NWOODAT=new Int32Array(PMAX);
    away long ago has had no branch for some time and must not grow one to fade.
    Both fall out of recording what was painted. */
 const NSTEMA=new Float32Array(PMAX);
+/* Which lineage a node is painted with. See orderByLineage: it exists to be
+   the one thing about a plant's paint order that a split cannot change. */
+const NDRAW=new Int32Array(PMAX);
 const PFRONT = new Int32Array(PMAX), PFREE = new Int32Array(PMAX);
 let nodeHigh = 0, liveN = 0, frontN = 0, freeN = 0;
 let plantDebt = 0;
@@ -2589,13 +2592,29 @@ let instN = 0;
    frame. */
 const ORDER = new Int32Array(PMAX), BOFF = new Int32Array(PMAX+1);
 let orderN = 0;
-function orderByBody(){
+/* Paint order, and the thing it must not do is change.
+   These are all on one sphere with no depth test, so which plant is on top of
+   which is decided purely by who is painted last. Any of those answers is
+   fine; a DIFFERENT one from one frame to the next is a flash, and in a dense
+   tangle it is a bright one.
+   This used to key on PROOT — a plant's root — which is precisely the thing
+   that changes when a plant comes apart. Wood rots through, pruneFragments
+   re-roots the severed half onto a different node, that half's key jumps, and
+   the whole piece surfaces over or sinks under whatever it overlaps. It
+   happened only where pieces actually overlapped, which is why it showed
+   zoomed into a tangle and not on the open planet, and it happened at the
+   moment part of a plant died, which is what made it look like part of the
+   dying.
+   NDRAW is a lineage's key instead: taken from the parent at birth, minted
+   only by a founder, and never touched again. Both halves of a split keep it,
+   stay adjacent, and neither moves. */
+function orderByLineage(){
   BOFF.fill(0,0,nodeHigh+1);
   orderN = 0;
-  for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0){ BOFF[PROOT[i]]++; orderN++; }
+  for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0){ BOFF[NDRAW[i]]++; orderN++; }
   let run=0;
   for(let r=0;r<nodeHigh;r++){ const c=BOFF[r]; BOFF[r]=run; run+=c; }
-  for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0) ORDER[BOFF[PROOT[i]]++]=i;
+  for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0) ORDER[BOFF[NDRAW[i]]++]=i;
 }
 
 /* ── what a node looks like, in one place ──────────────────────────────
@@ -2842,12 +2861,12 @@ function buildInstances(){
      drawn in must also never change between frames, or overlapping neighbours
      swap depth and the picture flickers, so they are walked by body in node
      order and both are stable. */
-  orderByBody();
+  orderByLineage();
   const limbs = PARAMS.limbs|0;
   for(let a=0;a<orderN && w<WLIM;){
-    const root = PROOT[ORDER[a]];
+    const key = NDRAW[ORDER[a]];
     let b=a;
-    while(b<orderN && PROOT[ORDER[b]]===root) b++;
+    while(b<orderN && NDRAW[ORDER[b]]===key) b++;
     if(limbs===0){
       for(let q=a;q<b && w<WLIM;q++){
         const i=ORDER[q];
@@ -2992,6 +3011,11 @@ function addNode(x,y,z,hx,hy,hz,src,par,amt,stepUsed){
      one place. That is what "grow faster up to some size" is, and the size it
      stops at falls out of the arithmetic rather than being a parameter. */
   NELAST[i]=ptick; NATT[i]=0;
+  /* A founder mints its own; everything else inherits, so a lineage keeps one
+     paint order however often it is cut in half. Two lineages can collide on a
+     key once a slot has been recycled, and that costs nothing: they are drawn
+     as one group, adjacent, which is exactly what the key is for. */
+  NDRAW[i] = par>=0 ? NDRAW[par] : i;
   if(par>=0){
     const give = NE[par]*PARAMS.eshare;
     NE[par] -= give; NE[i] = give;
@@ -6811,6 +6835,31 @@ window.__world = {
                 its ghost carries none, which is the flash that cannot show up
                 as a colour difference because there is nothing to compare */
              stemsDropped:noStem, dropWhy, slotReused:reused };
+  },
+  /* Does a plant's paint order survive being cut in half?
+     Keying it on the root meant it did not: severing re-roots half the body,
+     that half's key jumps, and the piece surfaces over whatever it overlapped.
+     Asserted rather than believed, and the assertion reports how many bodies
+     actually split while it watched — a stability test that never saw an
+     instability is vacuous, and this one has to prove it was exercised. */
+  paintOrder(ticks){
+    const key = new Map(), root = new Map();
+    for(let i=0;i<nodeHigh;i++)
+      if(NLIVE[i]!==0){ key.set(tag(i), NDRAW[i]); root.set(tag(i), PROOT[i]); }
+    for(let n=0;n<(ticks|0);n++) plantsStep();
+    let checked=0, moved=0, split=0, example="";
+    for(let i=0;i<nodeHigh;i++){
+      if(NLIVE[i]===0) continue;
+      const t=tag(i);
+      if(!key.has(t)) continue;              /* born since, or a recycled slot */
+      checked++;
+      if(PROOT[i]!==root.get(t)) split++;
+      if(NDRAW[i]!==key.get(t)){
+        moved++;
+        if(!example) example="node "+i+" key "+key.get(t)+" -> "+NDRAW[i];
+      }
+    }
+    return { checked, keyChanged:moved, reRooted:split, example };
   },
   bodySpan(n){
     const sz=new Map();
