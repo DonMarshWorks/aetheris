@@ -474,6 +474,66 @@ plant's life in wall-clock ticks. A slow plant in the dark then gets the same
 number of chances to prove itself, taken over more time — which is what "slowed
 and never stopped" was supposed to mean in the first place.
 
+## The frontier is not a perimeter, and an energy budget is the rule already running
+
+`plants-design.md` justifies sampling the frontier on the grounds that "the
+frontier *is* the perimeter — growth follows a body's number of tips, and per
+unit area it still slows as 1/r". That was the argument for the rule and it is
+**not true of the bodies this world actually grows.** Measured at 45,000 ticks
+over four seeds (`tools/income.js`, `window.__world.bodyIncome()`):
+
+| body size | bodies | living | frontier | wood | frontier / living |
+|---|---|---|---|---|---|
+| 8–16 | 47 | 10.4 | 7.4 | 0.0 | 0.707 |
+| 64–128 | 976 | 97.3 | 83.7 | 14.6 | 0.860 |
+| 128–256 | 1086 | 178.3 | 152.4 | 21.6 | 0.855 |
+| 256–512 | 389 | 336.8 | 284.4 | 31.1 | 0.844 |
+| 512–1024 | 39 | 607.1 | 513.1 | 54.2 | 0.845 |
+
+**About 85% of a body's living nodes are on the frontier, at every size.** The
+ratio is flat from 64 nodes to 1024 and if anything *rises* with size. So the
+frontier is not a perimeter and growth does not slow as 1/r: a body's share of
+attempts is very nearly proportional to its living node count. That is not new
+behaviour — `formula-design.md` already records retirement-after-one-refusal
+plus readmission-on-a-neighbour's-death bringing the frontier to "about two
+thirds of living nodes" — but the design brief's *justification* never caught up
+with it.
+
+Three consequences, and they change what the energy model is.
+
+**An energy budget fed by leaves is the allocation rule already in force.**
+Income proportional to living nodes and share-of-attempts proportional to
+frontier entries differ by a constant of 0.85. So per-body energy budgeting is
+not a change to the allocation rule — the lever `plants-design.md` calls the
+biggest single one, with a scar to match — it is a re-parameterisation of it,
+plus a seasonal term. That is a far smaller risk than it looked.
+
+**Don's worry about a one-node founder is right, and it is already true.** A
+founder holds one frontier entry against roughly 100,000; a 500-node incumbent
+holds about 425. Founders are outcompeted on attempts by two to three orders of
+magnitude *today*, which is why `settle` and `minfrag` exist as a grace at all
+and why `reseed` was the only thing that could bring a dead planet back. A seed
+energy store does not compensate for an asymmetry the energy model would
+introduce; it fixes one that is already there.
+
+**So the two proposals are not alternatives and the 2×2 is worth running.**
+Grace counted in bud attempts rather than ticks removes an *artefact* — the cull
+killing a slow founder before it has had a fair number of chances — and does
+nothing to help it grow. A seed energy store is *substantive*: it gives a
+founder real attempts it would not otherwise get. One is necessary, the other
+changes who wins, and whether the second makes the first redundant is exactly
+the question a crossed design answers and one-at-a-time does not. `marine`,
+`fitcap` and `rare` are the standing example.
+
+One design note with a documented reason behind it. A seed store makes founders
+succeed, and founders arrive by two routes: `reseed`, a fresh random genome into
+an empty province, and `spore`, a copy of something already winning thrown
+across the world. This file records dispersal as a homogenising force —
+differentiation falls monotonically as the spore rate rises, 0.716 to 0.616 — so
+a store that pays both equally spends part of its budget spreading the
+incumbent. Paying `reseed` founders more than `spore` founders is the same trade
+`seedmut` already makes, in a new place.
+
 ## Moving plants — measured, and it is three orders of magnitude out
 
 Don asked for heading and speed outputs, with nodes moving across the surface,

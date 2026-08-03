@@ -6342,6 +6342,45 @@ window.__world = {
              stepDeg:+(PARAMS.step*180/Math.PI).toFixed(3),
              legalMaxDeg:+(lim*180/Math.PI).toFixed(3), overLimit:over, at:worstI };
   },
+  /* How a body's growth income would scale with its size under an energy
+     budget, which is the one number that decides whether energy budgeting is a
+     small change or a catastrophic one.
+     Today attempts are drawn by SAMPLING THE FRONTIER, so a body's growth goes
+     as its number of tips — perimeter, which for a compact body grows as r
+     while its area grows as r squared, so growth per unit area falls as 1/r and
+     the rule is self-limiting. An energy budget fed by leaf count would instead
+     go as the leaves, and whether that is the same rule or a compounding one
+     depends entirely on how living nodes scale with body size. Dead wood does
+     not photosynthesise, and a body hollows out from the centre, so the living
+     part may already be an annulus rather than a disc — in which case the two
+     rules nearly agree. That is measurable rather than arguable. */
+  bodyIncome(minSize){
+    const min = minSize|0 || 8;
+    const live = new Map(), front = new Map(), wood = new Map();
+    for(let i=0;i<nodeHigh;i++){
+      if(NLIVE[i]===0) continue;
+      const r = PROOT[i];
+      if(NLIVE[i]===1){ live.set(r,(live.get(r)||0)+1); if(NONF[i]) front.set(r,(front.get(r)||0)+1); }
+      else wood.set(r,(wood.get(r)||0)+1);
+    }
+    const rows=[];
+    for(const [r,n] of live) if(n>=min)
+      rows.push({live:n, front:front.get(r)||0, wood:wood.get(r)||0});
+    rows.sort((a,b)=>a.live-b.live);
+    /* bucketed by size, so the shape of the relationship is visible rather
+       than one correlation standing in for it */
+    const edges=[8,16,32,64,128,256,512,1024,1e9], out=[];
+    for(let b=0;b<edges.length-1;b++){
+      const g=rows.filter(x=>x.live>=edges[b] && x.live<edges[b+1]);
+      if(!g.length) continue;
+      const s=k=>g.reduce((a,x)=>a+x[k],0)/g.length;
+      out.push({ band:edges[b]+"-"+(edges[b+1]>1e8?"":edges[b+1]),
+                 bodies:g.length, meanLive:+s('live').toFixed(1),
+                 meanFront:+s('front').toFixed(1), meanWood:+s('wood').toFixed(1),
+                 frontPerLive:+(s('front')/s('live')).toFixed(3) });
+    }
+    return { bodies:rows.length, bands:out };
+  },
   bodySpan(n){
     const sz=new Map();
     for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0) sz.set(PROOT[i],(sz.get(PROOT[i])||0)+1);
