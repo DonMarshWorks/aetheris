@@ -47,6 +47,22 @@ level, global temperature, humidity — are steered by measuring coverage and
 correcting toward targets. Corrections are **rate-limited**, because time-lapse
 hands the loop enormous timesteps. If you change gains, re-check bounds at ×100.
 
+The sea-level correction is additionally **scaled by how much ground lies near
+the waterline**, because the correction is in units of sea level and the thing
+it steers is a share of the world, and the exchange rate between them is not a
+constant. A smooth world piles its elevation into a narrow band, so one step
+sweeps several times as much coastline: across the relief slider one correction
+buys anywhere from 0.011 to 0.107 of ocean share, and above about 0.09 the loop
+steps over its own target and limit-cycles. Evidence in
+`docs/world-controls.md`.
+
+**The settings panel** exposes four of these physically — sea level,
+temperature, rainfall and relief — and `docs/world-controls.md` is what
+measuring them said, including the two that were promising more than the world
+would give. Slider ends are not a matter of taste: `window.__world.settings()`
+reports them so a harness tests the control the visitor is given rather than a
+copy of its numbers, and `tools/controls.js` is that harness.
+
 **Rendering.** The shader reads the grid through a Catmull-Rom sampler with
 analytic derivatives, and adds fractal detail so a coarse grid yields organic
 coastlines.
@@ -68,9 +84,14 @@ exactly equinox. It is also penumbra-blurred in proportion to how far the
 shadow has been thrown, or the ring's fine banding survives to the ground and
 the band lands with cut edges.
 
-**Test hooks.** `window.__world` exposes `S` (state), `advance()`, `freeze()`,
-`setView()`, `sunDir()`, `cam()`, `pointerCount()`, `debug()`. Used by
-`verify.js`. Keep them working.
+**Test hooks.** `window.__world` exposes `S` (state), `F` (the fields),
+`advance()`, `runWorld()`, `freeze()`, `setView()`, `sunDir()`, `cam()`,
+`pointerCount()`, `debug()`, `params()`, `defaults()`, `settings()`,
+`holdClimate()`, and the plant hooks in `plants-design.md`. Used by
+`verify.js`, `sweep.js`, `controls.js` and `linkcheck.js`. Keep them working.
+`holdClimate()` pins the three dials so the world can be asked where it
+settles, which is the one question a controller steering toward a target can
+never answer about itself.
 
 ## Hard-won lessons
 
@@ -88,6 +109,22 @@ easy to reintroduce.
   constant. Nothing threw, nothing logged, and several parameters simply had no
   effect. When a parameter provably does nothing, instrument the line that uses
   it before theorising about why; and grep for duplicate definitions first.
+- **Capture the defaults before the hash is applied, not after.** The settings
+  panel writes a shareable link by naming every parameter that differs from the
+  defaults. `DEFAULTS` was taken next to the panel, which runs after the URL has
+  already been merged into `PARAMS` — so every setting that *arrived* in the
+  link counted as a default and was dropped the moment the panel was opened.
+  The restart button walked straight into it: it reloads with the settings in
+  the hash, and reopening the panel on the other side threw them away. Nothing
+  failed; the link just quietly described a different world. `tools/linkcheck.js`
+  walks the four journeys that expose it.
+- **Never sample a control loop at a multiple of its own period.** At ×100 a
+  tick is 8.4 simulated seconds; sampling every 120 landed on the same phase of
+  a limit cycle every time and drew a flat line through a world swinging by ten
+  points. It read as a correction too *small* to arrive, which is the opposite
+  of the fault and wants the opposite fix. What caught it was a cross-check that
+  had no business disagreeing: the simulation's own census against an
+  independent recomputation of the same quantity at the same instant.
 
 **GLSL**
 

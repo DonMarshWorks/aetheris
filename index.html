@@ -169,7 +169,9 @@
 
   #settings{
     position:fixed;inset:0;z-index:41;display:none;overflow:hidden;
-    background:rgba(6,9,14,.975);padding:22px 26px;
+    /* opaque enough that the readout behind does not ghost through as
+       half-legible digits between the cards */
+    background:rgba(6,9,14,.994);padding:22px 26px;
     flex-direction:column;gap:12px;
   }
   #settings.on{display:flex}
@@ -182,51 +184,124 @@
   .setbtns button:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
   #setrestart{color:rgba(240,190,120,.95);border-color:rgba(240,190,120,.35)}
   /* the list scrolls, never the document — same rule the graphs follow */
-  /* The address bar already holds the whole world -- seed plus parameters
-     determine it completely -- but on a phone the address bar is hidden or
-     truncated, so the one place the feature is most useful is the one place
-     it is invisible. Put it where it can be seen and copied. */
-  #setshare{flex:none;padding:2px 0 6px}
-  .sharelab{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
-    color:rgba(233,240,255,.45);margin-bottom:5px}
+  /* Cards, not one long column. A single column across a laptop gives lines
+     nobody can read and one setting per screen; the same content in a grid of
+     narrow cards puts a dozen in view at once and holds the prose to a
+     comfortable measure without a max-width fighting the layout. The card is
+     the unit deliberately, because the graphs want the same treatment.
+
+     Every card carries the same four things in the same places — name, why,
+     what it reads now, and the control with its two ends named — so the eye
+     learns one shape and then only reads the words that differ. */
+  #setlist{
+    flex:1;min-height:0;width:100%;max-width:1560px;margin:0 auto;
+    overflow-y:auto;overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;touch-action:pan-y;
+    display:grid;gap:11px;align-content:start;
+    grid-template-columns:repeat(auto-fill,minmax(min(100%,286px),1fr));
+    padding:2px 4px 26px 0;
+  }
+  /* a heading is a rule across the whole grid, not a card */
+  .setgroup{grid-column:1/-1;font-size:10px;letter-spacing:.24em;
+    text-transform:uppercase;color:rgba(233,240,255,.5);
+    margin:14px 0 1px;padding-bottom:7px;
+    border-bottom:1px solid rgba(233,240,255,.10)}
+  .setgroup:first-child{margin-top:0}
+  .card{
+    background:rgba(233,240,255,.032);border:1px solid rgba(233,240,255,.085);
+    border-radius:4px;padding:12px 13px 13px;
+    display:flex;flex-direction:column;min-width:0;
+  }
+  .cardhead{display:flex;justify-content:space-between;gap:8px;
+    align-items:flex-start;margin-bottom:5px}
+  .cardname{font-size:12px;letter-spacing:.06em;color:var(--ink);min-width:0}
+  /* Reserved, and reserved visibly: an enabled pin will lift this control out
+     onto the world view so a value can be moved while watching what it does.
+     The space is claimed now so the card's proportions do not change when it
+     arrives. */
+  .pin{
+    flex:none;width:22px;height:22px;margin:-3px -3px 0 0;padding:0;border:0;
+    background:transparent;color:rgba(233,240,255,.30);
+    display:grid;place-items:center;cursor:default;
+  }
+  .pin svg{width:12px;height:12px;fill:currentColor;pointer-events:none}
+  .pin[disabled]{opacity:.5}
+  /* the why grows so that every slider in a row sits on the same line */
+  .setwhy{flex:1;font-size:10.5px;line-height:1.55;color:rgba(233,240,255,.52);
+    margin:0 0 10px}
+  .setread{display:flex;justify-content:space-between;gap:8px;align-items:baseline;
+    font-size:11px;font-variant-numeric:tabular-nums;margin-bottom:1px}
+  .setval{color:rgba(233,240,255,.80);min-width:0;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .setnow{flex:none;font-size:10px;color:rgba(233,240,255,.44);white-space:nowrap}
+  .setends{display:flex;justify-content:space-between;gap:10px;
+    font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+    color:rgba(233,240,255,.36)}
+  .setends span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .setends span:last-child{text-align:right}
+  /* The panel's sliders are built rather than native, and both reasons are
+     physical. html and body carry touch-action:none, because the canvas
+     handles pan, pinch and double-tap itself and anything less lets the
+     browser zoom the interface along with the planet — but that same line
+     suppresses the browser's own drag behaviour on an <input type=range>, so
+     a native thumb on a phone is a small target fighting the one rule keeping
+     the page still. Reported from an iPhone as sliders that are hard to grab.
+     And a range is one setting with two ends, not two settings: two stacked
+     tracks say the wrong thing about branch length and leaf size.
+
+     So: a track, one or two knobs, and pointer events, which do not care what
+     touch-action says. The row is 34px tall against an 18px knob, so the
+     target is the whole row rather than the dot, and a press anywhere on it
+     takes the nearer knob straight there — which is also what makes a long
+     throw one gesture instead of a hunt. */
+  .srange{position:relative;height:34px;touch-action:none;cursor:pointer;
+    -webkit-user-select:none;user-select:none;outline:none}
+  .strack{position:absolute;left:9px;right:9px;top:50%;height:3px;margin-top:-1.5px;
+    background:rgba(233,240,255,.15);border-radius:2px}
+  .sfill{position:absolute;top:0;bottom:0;background:#7fb4dd;border-radius:2px}
+  .sknob{position:absolute;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;
+    border-radius:50%;background:#cfe2f2;box-shadow:0 1px 3px rgba(0,0,0,.55);
+    transition:transform .12s ease}
+  .sknob.on{transform:scale(1.32)}
+  .srange:focus-visible .sknob{box-shadow:0 0 0 3px rgba(127,180,221,.5)}
+  .setchoice{display:flex;gap:6px;flex-wrap:wrap}
+  .setchoice button{
+    font:inherit;font-size:10.5px;letter-spacing:.06em;color:var(--dim);
+    background:transparent;border:1px solid var(--faint);padding:5px 10px;
+    cursor:pointer;transition:.2s;
+  }
+  .setchoice button.on{color:var(--ink);border-color:rgba(233,240,255,.55);
+    background:rgba(233,240,255,.10)}
+  .setnote{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:rgba(240,190,120,.75);margin:0 0 7px}
+
+  /* The link and the buttons are a card like any other and scroll with them.
+     It spans the grid because a URL is long and truncating the one thing the
+     visitor is meant to copy would be perverse. */
+  #setactions{grid-column:1/-1}
+  #setactions .cardhead{margin-bottom:8px;align-items:center}
+  .setbtns{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+  .setbtns button{
+    font:inherit;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--dim);background:transparent;border:1px solid var(--faint);
+    padding:6px 11px;cursor:pointer;transition:.25s;white-space:nowrap;
+  }
+  .setbtns button:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
+  #setrestart{color:rgba(240,190,120,.95);border-color:rgba(240,190,120,.35)}
   #setlink{
     width:100%;font:inherit;font-size:11px;color:rgba(233,240,255,.80);
     background:rgba(233,240,255,.05);border:1px solid var(--faint);
     padding:8px 10px;border-radius:2px;
   }
   #setlink:focus{outline:none;border-color:rgba(233,240,255,.42)}
-  #setlist{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
-    -webkit-overflow-scrolling:touch;touch-action:pan-y;padding-right:4px}
-  .setgroup{font-size:10px;letter-spacing:.24em;text-transform:uppercase;
-    color:rgba(233,240,255,.5);margin:20px 0 10px;padding-bottom:6px;
-    border-bottom:1px solid rgba(233,240,255,.10)}
-  .setgroup:first-child{margin-top:2px}
-  .setrow{padding:12px 0;border-bottom:1px solid rgba(233,240,255,.055)}
-  .setname{font-size:12px;letter-spacing:.06em;color:var(--ink);
-    display:flex;justify-content:space-between;gap:12px;align-items:baseline}
-  .setval{font-size:11px;color:rgba(233,240,255,.62);font-variant-numeric:tabular-nums;
-    white-space:nowrap}
-  .setwhy{font-size:11px;line-height:1.6;color:rgba(233,240,255,.52);margin:6px 0 10px;
-    max-width:62ch}
-  .setrow input[type=range]{width:100%;accent-color:#7fb4dd;height:22px}
-  .setpair{display:flex;flex-direction:column;gap:2px}
-  .setchoice{display:flex;gap:6px;flex-wrap:wrap}
-  .setchoice button{
-    font:inherit;font-size:11px;letter-spacing:.06em;color:var(--dim);
-    background:transparent;border:1px solid var(--faint);padding:6px 12px;
-    cursor:pointer;transition:.2s;
-  }
-  .setchoice button.on{color:var(--ink);border-color:rgba(233,240,255,.55);
-    background:rgba(233,240,255,.10)}
-  .setnote{font-size:10px;letter-spacing:.1em;text-transform:uppercase;
-    color:rgba(240,190,120,.75);margin-top:7px}
   @media (max-width: 620px){
-    #settings{padding:15px 17px}
-    .setwhy{font-size:10.5px}
-    /* the three header buttons and the title do not fit across a phone, and
-       the one that fell off the right edge was close */
-    #settings .chead{flex-direction:column;align-items:stretch;gap:10px}
-    .setbtns{justify-content:flex-start;flex-wrap:wrap}
+    #settings{padding:15px 14px}
+    #setactions .cardhead{flex-direction:column;align-items:stretch;gap:9px}
+    .setbtns{justify-content:flex-start}
+  }
+  /* a finger is not a mouse pointer: give the knob a target it can find */
+  @media (pointer: coarse){
+    .srange{height:44px}
   }
 
   /* the count, over the world, by the finger. Pointer-transparent so it can
@@ -305,17 +380,24 @@
       <div class="ctitle">settings</div>
       <div class="csub">change the world, then let it run &mdash; or start it again</div>
     </div>
-    <div class="setbtns">
-      <button id="setcopy" type="button">copy link</button>
-      <button id="setreset" type="button">defaults</button>
-      <button id="setcancel" type="button">cancel</button>
-      <button id="setrestart" type="button">restart world</button>
-      <button id="setclose" type="button">ok</button>
-    </div>
   </div>
-  <div id="setshare">
-    <div class="sharelab">this world, as a link</div>
-    <input id="setlink" type="text" readonly spellcheck="false">
+  <!-- The actions card lives outside the list because buildSettings() empties
+       the list to rebuild it; it is moved back in at the front each time, which
+       keeps these buttons' listeners attached to the same elements for the life
+       of the page. -->
+  <div id="setactions" class="card">
+    <div class="cardhead">
+      <span class="cardname">this world, as a link</span>
+      <div class="setbtns">
+        <button id="setcopy" type="button">copy link</button>
+        <button id="setreset" type="button">defaults</button>
+        <button id="setcancel" type="button">cancel</button>
+        <button id="setrestart" type="button">restart world</button>
+        <button id="setclose" type="button">ok</button>
+      </div>
+    </div>
+    <input id="setlink" type="text" readonly spellcheck="false"
+           aria-label="this world, as a link">
   </div>
   <div id="setlist"></div>
 </div>
@@ -747,8 +829,28 @@ const PARAMS = {
                     // thing this climate makes — it is the transition band,
                     // and humidity slides the whole vegetation field across it.
                     // That is why there is no grass slider.
+                    //
+                    // Reachable up to about 0.56 and no further, and the limit
+                    // is not the humidity clamp — pinned there by hand with
+                    // the other dials held, the same worlds reach 0.70 to 0.84.
+                    // It is this control fighting the ice one. Drying the land
+                    // kills the vegetation; bare dry ground does not hold snow
+                    // (see the moisture factor on `st`); ice falls below its
+                    // target, so the temperature controller cools the whole
+                    // planet by ten degrees to win it back — and the census
+                    // counts bare ground warmer than 2C as desert and colder
+                    // than 2C as TUNDRA. At the dry end 99% of the land really
+                    // is bare; only 56% of it is still warm enough to be
+                    // called desert. The slider is bounded to what the world
+                    // will honour rather than the controller re-pointed at
+                    // bare land, which would change what the piece ships with.
   relief:  1.00,    // how mountainous the terrain is, as a multiplier on the
                     // six octave amplitudes. Read once at startup.
+  tilt:    24,      // axial tilt in degrees, and so how strong the seasons are.
+                    // 0 gives none at all; 90 gives a summer pole in permanent
+                    // daylight and a winter pole in permanent night. Read once
+                    // at startup, because the axis it builds is fixed in space
+                    // and the ring is built from it.
   churn:   1.00,    // how fast the terrain itself moves. One multiplier on
                     // every drift the six noise octaves do — their turning and
                     // their breathing — plus the ridge and the temperature and
@@ -756,13 +858,16 @@ const PARAMS = {
                     // plant never has to adapt to ground that changed under
                     // it; at 2 the world is twice as restless. Read once at
                     // startup, because the octaves are built from it.
-  fatlo:   0.18,    // the smallest and largest painted leaf, per step actually
-  fathi:   0.36,    // taken. These two reproduce exactly what the single `fat`
-                    // of 0.25 used to draw across the four node forms, so the
-                    // default look is unchanged and the range is what is new. The four node forms are spread evenly across the
+  fatlo:   0.14,    // the smallest and largest painted leaf, per step actually
+  fathi:   0.54,    // taken. The four node forms are spread evenly across the
                     // range, so the two together decide how much ground and
                     // how much branching structure the foliage hides. A low
                     // knob at zero lets the smallest forms vanish entirely.
+                    // Widened from 0.18/0.36 — that pair reproduced exactly
+                    // what a single `fat` of 0.25 used to draw, which was the
+                    // right way to introduce the range and the wrong place to
+                    // leave it: the point of two knobs is that the forms
+                    // differ, and at 0.18-0.36 they barely did.
   seedmut: 0,       // where a reseeded founder's genome comes from. 0 = a new
                     // random one, owing nothing to anybody, which is what
                     // fills empty ground without spreading the incumbent.
@@ -821,6 +926,17 @@ const PARAMS = {
                     // occupied and mean fit nearly doubles.
   rot:     900,     // ticks dead wood holds before the connection rots through
 };
+/* What the piece ships with, captured BEFORE the hash is applied — and the
+   order is the whole point. The settings panel writes a shareable link by
+   naming every parameter that differs from the defaults, so if "default" means
+   "whatever this page happened to boot with", every setting that arrived in
+   the URL is silently already a default and is dropped from the link the
+   moment the panel is opened. The visitor's own settings, taken off the
+   address bar in front of them, and a copy button offering a link to a
+   different world. The restart button walks straight into it: it reloads with
+   the settings in the hash, and reopening the panel on the other side throws
+   them away. */
+const DEFAULTS = Object.assign({}, PARAMS);
 (function(){
   const h = location.hash || "";
   for(const k in PARAMS){
@@ -953,7 +1069,19 @@ const S = {
    reach exactly these. */
 let climateHeld = false;   // test hook: pin the dials and see where the world settles
 const YEAR = 900;           // simulated seconds per orbit
-const TILT = 24*Math.PI/180;
+/* Axial tilt, in degrees, and it is the whole of what seasons are here. The
+   climate model is zonal — insolation is cos(lat - solarLat) and nothing in it
+   knows about longitude — so the sub-solar latitude may be taken anywhere from
+   the equator to the pole without the model needing to change shape. At 0 the
+   sun never leaves the equator and there are no seasons at all; at 90 it stands
+   over one pole at midsummer and that hemisphere is in continuous daylight
+   while the other is in continuous night, which is what the cosine already
+   says when the angular distance passes 90 degrees and it is clamped to zero.
+
+   Everything else about the axis is derived: POLE, the ring plane, the daily
+   spin and the camera all read it from here, so this is the only place it is
+   written. */
+const TILT = clamp(PARAMS.tilt, 0, 90)*Math.PI/180;
 
 /* Which way the axis leans. The daily spin turns about this, so the axis
    itself is fixed in space — which is why the ring, which shares the plane,
@@ -1048,6 +1176,12 @@ function computeProx(){
   F.prox.set(a);
 }
 
+/* The half-width of the band of ground either side of the waterline whose area
+   measures how much ocean share a unit of sea level buys, and the largest
+   share one correction step is allowed to move. See the correction itself. */
+const SEABAND = 0.02;
+const SEASTEP = 0.035;
+
 let ctrlAccum = 0;
 function stepFields(dt){
   const sea=S.seaLevel;
@@ -1132,12 +1266,15 @@ function stepFields(dt){
      controller steering toward a target can never answer about itself. */
   if(ctrlAccum >= 2.5){
     const d=ctrlAccum; ctrlAccum=0;
-    let aOcean=0,aIce=0,aDesert=0,aForest=0,aGrass=0,aTundra=0,tSum=0,aLand=0;
+    let aOcean=0,aIce=0,aDesert=0,aForest=0,aGrass=0,aTundra=0,tSum=0,aLand=0,aShore=0;
     for(let j=0;j<GH;j++){
       const w=COSLAT[j], row=j*GW;
       for(let i=0;i<GW;i++){
         const k=row+i;
         tSum += temp[k]*w;
+        /* how much ground lies within a whisker of the waterline — see the
+           correction below, where it becomes the gain of the sea-level loop */
+        if(h[k]>S.seaLevel-SEABAND && h[k]<S.seaLevel+SEABAND) aShore+=w;
         if(h[k]<S.seaLevel){ aOcean+=w; if(snow[k]>0.45) aIce+=w; }
         else{
           aLand+=w;
@@ -1161,7 +1298,27 @@ function stepFields(dt){
     /* corrections are rate-limited so the loop stays stable no matter how
        large a time step the time-lapse hands it */
     if(!climateHeld){
-      const dSea = clamp((PARAMS.tgtocean - ocean)*0.055*d, -0.020, 0.020);
+      /* The sea-level correction is in units of sea level and the thing it is
+         steering is a SHARE OF THE WORLD, and the exchange rate between them
+         is not a constant — it is how much ground lies near the waterline. A
+         smooth world piles most of its elevation into a narrow band, so the
+         same step sweeps several times as much coastline.
+         Measured across the relief slider, one full correction step buys:
+         0.011-0.015 of ocean share at relief 2, 0.020-0.033 at relief 1, and
+         0.081-0.107 at relief 0.3. At the top of that range the loop simply
+         steps over its own target and limit-cycles: at x100 and relief 0.3,
+         three seeds in four settled two to six points away from the share they
+         were asked for and stayed there, while x1 — where each step is a third
+         the size — was fine on all four.
+
+         So the step is held to a fixed cost in SHARE rather than in sea level.
+         `ease` is never above 1, so no world gets a larger correction than it
+         does today, and at the shipped relief every seed measured already
+         costs less than the cap — which is chosen just above the worst of
+         them, so the default world is untouched by construction. */
+      const slope = (aShore/areaTotal)/(2*SEABAND);
+      const ease = Math.min(1, SEASTEP/Math.max(1e-4, 0.020*slope));
+      const dSea = clamp((PARAMS.tgtocean - ocean)*0.055*ease*d, -0.020*ease, 0.020*ease);
       const dT   = clamp((ice - PARAMS.tgtice)*0.55*d,      -0.30,  0.30);
       const dH   = clamp((desertOfLand - PARAMS.tgtdesert)*0.040*d, -0.012, 0.012);
       S.seaLevel   = clamp(S.seaLevel   + dSea, -0.50, 0.50);
@@ -5565,82 +5722,138 @@ function setCharts(on){
    seed plus parameters already determine a world completely, so the address
    bar IS the saved state, and a planet worth keeping is a link somebody can
    send. history.replaceState rather than assigning the hash, or the reload
-   listener fires on every drag of a slider. */
+   listener fires on every drag of a slider.
+
+   Each entry may name its two ends (`lo`, `hi`). They are the fastest thing on
+   the card to read and the last thing anybody needs the prose for — a slider
+   whose ends are named can be understood without reading a word. And `now`
+   names a climate statistic to show beside the asked-for value, because the
+   controller steers toward a target over minutes and the gap between what was
+   asked and what the world currently is IS the mechanism. */
 const SETTINGS = [
  {group:"The world"},
  {key:"tgtocean", name:"Sea level", min:0.15, max:0.90, step:0.01,
-  why:"How high the sea stands, and so how much of the world is under it. The climate steers toward this rather than jumping to it, so the coast takes a few minutes to arrive — which is the clearest look you will get at the thing that keeps this planet in balance. Low leaves one great continent and a few seas; high leaves scattered islands.",
-  fmt:v=>Math.round(v*100)+"% ocean"+nowPct("ocean")},
+  lo:"one continent", hi:"scattered isles", now:"ocean",
+  why:"How big the oceans are. A world with larger oceans will have more diverse plants, because the sea is a barrier between continents — unless you allow plants in the ocean, or spores that can travel across the world.",
+  fmt:v=>Math.round(v*100)+"% ocean"},
  {key:"tgtice", name:"Temperature", min:0.034, max:0.194, step:0.002, rev:true,
-  why:"How cold the world runs, which shows up as how far the ice reaches from the poles. Cold pushes the ice caps down over ground that plants had made a living on, and every lineage built for that ground has to move, adapt, or die. The range is the world's own: even at the coldest this climate can hold, the ice covers about a fifth of it.",
-  fmt:v=>Math.round(v*100)+"% ice"+nowPct("ice")},
- {key:"tgtdesert", name:"Rainfall", min:0.02, max:0.80, step:0.01, rev:true,
-  why:"How wet the land is. Dry makes deserts of most of it; wet makes forest. Grassland is the band in between and is always thin — it is not a thing this climate makes so much as the place where desert has not quite become forest, which is why there is no separate control for it.",
-  fmt:v=>Math.round(v*100)+"% of land desert"+nowPct("desert")},
- {key:"relief", name:"Relief", min:0.3, max:2.0, step:0.05, restart:true,
-  why:"How mountainous the ground is. Low gives a smooth world of broad shallow shelves and simple continents; high gives mountains, deep basins and broken archipelagos. It changes what the planet is rather than how much of each thing it holds — and the sea finds its own level either way, because the setting above asks for a share of ocean rather than a depth.",
+  lo:"ice age", hi:"hothouse", now:"ice",
+  why:"How warm or cold the world is. Ice on a cooler world will extend farther from the poles, and will extend from the mountains during the winter. Some plants thrive in a cooler world, others like the heat.",
+  fmt:v=>Math.round(v*100)+"% ice"},
+ /* The dry end stops at 0.55 and that is measured, not chosen: past about half
+    the land bare, drying it further turns the bare ground cold rather than hot
+    and the census books it as tundra. See docs/world-controls.md. */
+ {key:"tgtdesert", name:"Rainfall", min:0.02, max:0.55, step:0.01, rev:true,
+  lo:"desert world", hi:"drenched", now:"desert",
+  why:"How wet the land is. A dry world has more deserts. A wet world has more forests. Grassland occupies the areas between deserts and forests.",
+  fmt:v=>Math.round(v*100)+"% of land desert"},
+ /* The full physical range, on the precedent the sea level slider already sets:
+    it goes to 90% ocean, far outside the balance the piece ships with. What
+    verify.js gates is the DEFAULT world; the panel is where a visitor leaves
+    it deliberately.
+
+    Past about 55 degrees the poles become the warmest ground on the planet and
+    the equator the coldest, because the sub-solar point stands over a pole and
+    the equator is then 90 degrees from the sun. Measured at 90: summer pole
+    28C and no ice, winter pole -13C under 72% ice, and an equatorial ice belt
+    holding a third of the tropics. That is the standard high-obliquity result
+    and it falls out of cos(lat - solarLat) with nothing added for it. */
+ {key:"tilt", name:"Axial tilt", min:0, max:90, step:1, restart:true,
+  lo:"no seasons", hi:"pole to the sun",
+  why:"How far the world leans, and so how strong its seasons are. At zero the sun never leaves the equator, the ice line never moves, and a plant that suits its ground suits it for ever. Turn it up and the summer pole stands in constant daylight while the winter pole sees only night. Lean it far enough and the world turns inside out: the sun stands over a pole, so the poles become the warmest ground on the planet and the ice belt is at the equator.",
+  fmt:v=>v===0?"upright — no seasons":v+"°"},
+ {key:"relief", name:"Elevation change", min:0.3, max:2.0, step:0.05, restart:true,
+  lo:"broad plains", hi:"archipelagos",
+  why:"How smooth or rough the world is. Low values produce broad plains and simple continents. High values create snow-capped mountains, deep basins and archipelagos.",
   fmt:v=>v<0.7?"smooth":v<1.3?"ordinary":v<1.7?"mountainous":"broken"},
- {key:"churn", name:"World changes", min:0, max:2.5, step:0.05, restart:true,
-  why:"How fast the ground itself moves. Coastlines migrate, deserts spread and ice advances because six layers of noise are slowly turning under the surface, and this is their speed. At zero the map is fixed for ever and plants never have to cope with losing the ground they were built for. Turn it up and nothing stays suited to anywhere for long.",
+ {key:"churn", name:"Tectonic change", min:0, max:2.5, step:0.05, restart:true,
+  lo:"static world", hi:"restless",
+  why:"How fast the world reshapes itself. Low values create static worlds where nothing changes. High values force plants to adapt to changing coastlines, islands that emerge and erode, and glaciers that come and go.",
   fmt:v=>v===0?"fixed for ever":(v<1?"slow":v===1?"normal":"restless")+" ("+v.toFixed(2)+"x)"},
- {key:"life", name:"How long plants live", min:400, max:4000, step:50,
-  why:"How many turns a well-suited plant survives. Short lives make a restless world of quick pioneers that never settle; long lives make an old and slow one, where holding ground matters more than taking it.",
-  fmt:v=>(v<800?"brief":v<2000?"ordinary":"long-lived")+" ("+v+")"},
 
  {group:"Plants"},
- {key:"__sea", name:"Plants in the sea", choice:[
+ {key:"__sea", name:"Sea plants", choice:[
     {label:"None", why:"the ocean stays empty", set:{seafit:0, marine:0}},
     {label:"Coastal only", why:"shallows and shores", set:{seafit:1, marine:1}},
     {label:"Everywhere", why:"the open ocean too", set:{seafit:1, marine:0}}],
   test:p=>p.seafit<=0?0:(p.marine>0.5?1:2),
-  why:"The sea is two thirds of this planet. Left open to plants it holds most of the life on the world, and because open water has no features to specialise against, one lineage can end up owning all of it. Coastal only keeps the deep ocean barren, which gives green fringes along every shore and blue emptiness in the middle, much the way real ocean productivity works."},
+  why:"Can plants live in water? If they can, and if there are broad oceans, sea plants will quickly evolve and may become the dominant life form in the world. If plants are not allowed in the water, then all plants have to battle for territory on land. Allowing plants in shallow coastal waters is an interesting compromise: most of the coastline will evolve a fringe of life."},
  {key:"kids", name:"Branching", min:2, max:8, step:1, restart:true,
-  why:"The most children any one node may put out. Two makes forking, thread-like plants; eight lets a node throw growth in every direction at once and build dense rosettes. The genome still decides how many each node actually uses, so this is the ceiling it may evolve up to rather than the number it takes.",
+  lo:"rigid", hi:"organic",
+  why:"How many branches a plant can produce from a branching point. A low value produces very rigid, artificial-looking plants that resemble circuit boards. High values produce plants that flow and twist more organically.",
   fmt:v=>v+" branches"},
  {key:"__len", name:"Branch length", pair:["splo","sphi"], min:0.75, max:5, step:0.05,
-  why:"How far a node places its children, from shortest to longest. The two knobs set the range the genome may evolve within; put them on the same spot and every plant in the world steps the same distance. Short steps build dense mats that resist invasion but claim ground slowly. Long steps cover distance fast and leave a loose body others can grow into.",
+  lo:"dense mat", hi:"lanky",
+  why:"How far apart a plant's leaves are. Short branches produce dense mats. Long branches produce lanky plants that cover a lot of ground quickly, leaving holes that other plants may invade. A plant can choose a mixture of shorter and longer branches within the given range, depending on its own genetic program.",
   fmt:(a,b)=>a.toFixed(2)+" to "+b.toFixed(2)},
+ {key:"stem", name:"Branch thickness", min:0, max:0.3, step:0.01,
+  lo:"invisible", hi:"skeletal",
+  why:"How thick branches are between leaves. Very thin branches disappear, displaying plants as a scatter of disconnected leaves. Thick branches emphasise the plant's structure as the primary visual.",
+  fmt:v=>v===0?"none":v.toFixed(2)},
  {key:"__leaf", name:"Leaf size", pair:["fatlo","fathi"], min:0, max:0.8, step:0.01,
-  why:"How large the painted leaves are, from the smallest node form to the largest. Big leaves cover the ground and hide the branching underneath; small ones let the structure and the terrain show through. Put the left knob at zero and the smallest leaves disappear altogether, leaving bare branches.",
+  lo:"bare branches", hi:"smothered",
+  why:"How large a plant's leaves can be. Big leaves cover the ground and hide the branching underneath; small ones let the structure and the terrain show through. Leaves disappear completely if you choose low values for both ends of the range.",
   fmt:(a,b)=>(a<=0?"none":a.toFixed(2))+" to "+b.toFixed(2)},
- {key:"minfrag", name:"Smallest viable plant", min:5, max:80, step:5,
-  why:"A piece broken off a plant smaller than this is not viable and dies. Low leaves the world full of small scraps; high clears them out and leaves fewer, much larger organisms. Raise it a long way and new plants may not manage to grow big enough to survive at all.",
+ {key:"minfrag", name:"Smallest plant", min:5, max:80, step:5,
+  lo:"scraps survive", hi:"giants only",
+  why:"Old parts of a plant die, leaving pieces of the plant to continue as independent plants. If the pieces are too small, the simulation removes them from the world. A low value allows these scraps to continue growing. A high value clears the ground for larger plants and new random seeds or spores.",
   fmt:v=>v+" nodes"},
- {key:"pmut", name:"How fast plants change", min:0, max:6, step:0.1,
-  why:"How much a plant's growth program is altered where a branch forks. Low means a lineage holds its shape for a very long time and the world changes slowly; high means restless variety, and lineages that never settle into anything recognisable.",
+ {key:"pmut", name:"Evolution speed", min:0, max:6, step:0.1,
+  lo:"holds its shape", hi:"restless",
+  why:"How quickly mutations occur in plants. A low value allows plants to hold their shape but slows the rate of adaptation. A high value increases diversification, but might harm the reproduction of a plant that is already well suited to its environment.",
   fmt:v=>v===0?"never":v<1.5?"slowly":v<3?"steadily":"restlessly"},
-
- {group:"Seeding"},
- {key:"reseed", name:"Seed empty regions", min:0, max:1, step:0.05,
-  why:"How often a brand-new plant appears in a region that has nothing living in it. This is the only thing that can repopulate a planet whose plants have all died: growth spreads outward from plants that already exist, so without it, empty stays empty for ever. It also fills parts of the world that nothing could have walked to.",
+ {key:"life", name:"How long plants live", min:400, max:4000, step:50,
+  lo:"brief", hi:"long-lived",
+  why:"How many turns a well-suited plant survives. Short lives make a restless world of quick pioneers that never settle; long lives make an old and slow one, where holding ground matters more than taking it.",
+  fmt:v=>(v<800?"brief":v<2000?"ordinary":"long-lived")+" ("+v+")"},
+ {key:"reseed", name:"Seeding", min:0, max:1, step:0.05,
+  lo:"never", hi:"frequent",
+  why:"How often a brand-new plant appears in a region that has no plant cover. A low value prevents a world from recovering if all its plants die. A high value allows plants to grow on remote islands they could not reach any other way.",
   fmt:v=>v===0?"off":v<0.15?"rare":v<0.5?"occasional":"frequent"},
- {key:"seedmut", name:"What new seeds are", choice:[
+ {key:"seedmut", name:"Seed inheritance", choice:[
     {label:"New random plants", why:"unrelated to anything living", set:{seedmut:0}},
     {label:"Mutated copies", why:"of a plant already here", set:{seedmut:6}}],
   test:p=>p.seedmut>0?1:0,
-  why:"Where a new seed's growth program comes from. A random one owes nothing to anybody, so it fills empty ground without spreading whichever plant is currently winning. A heavily mutated copy starts from something that already works and gambles on the changes: quicker to establish, but it makes the regions of the world more alike. Either way a seed is planted without regard to the ground, so it either finds itself somewhere it can live or it has to adapt."},
- {key:"spore", name:"Spread by spores", min:0, max:0.03, step:0.001,
-  why:"How often a growing plant throws a seed clear of itself to land somewhere else on the planet. It is how a lineage crosses water it could never grow across. But a spore is a copy of whatever is already succeeding, flung somewhere new, so a high rate slowly makes every region of the world resemble every other.",
+  why:"Is a seed an entirely new plant, or a mutated copy of an existing one? New plants encourage diversity, but are slower to succeed. Copied plants preserve some of the lineage of their parents. They are usually more successful, but the world also becomes more uniform when most plants are cousins."},
+ /* The copy for this used to open "if seeds are spores, how often do they
+    spread", which reads as though the control above gates this one. It does
+    not: a spore is thrown by a plant that is already growing, and the setting
+    above decides where a founder's genome comes from when an EMPTY region is
+    seeded. Two mechanisms, both live at all times. */
+ {key:"spore", name:"Spore frequency", min:0, max:0.03, step:0.001,
+  lo:"never", hi:"constant",
+  why:"How often a growing plant throws a spore clear of itself to land somewhere else on the planet. Low values keep plant copies from spreading across continents. High values populate the world quickly, but also make distant regions similar to each other.",
   fmt:v=>v===0?"never":v<0.003?"rare":v<0.012?"occasional":"constant"},
-
- {group:"Looking at it"},
- {key:"topn", name:"Ring the largest plants", min:0, max:60, step:5,
-  why:"Draws a magenta ring around the biggest plants, so you can see at a glance where the giants are and how much ground each one holds. Purely an annotation: it changes nothing about the simulation.",
+ {key:"topn", name:"Highlight champions", min:0, max:60, step:5,
+  lo:"off", hi:"sixty",
+  why:"The largest plants are highlighted with a magenta ring, so you can see at a glance where the giants are. Click and hold on a plant to see how many nodes it has.",
   fmt:v=>v===0?"off":"the largest "+v},
- {key:"stem", name:"Branch thickness", min:0, max:0.3, step:0.01,
-  why:"How thick the stems drawn between a node and its parent are. Without them a plant is a scatter of disconnected marks and its branching structure is invisible; thick ones make the skeleton the dominant thing in the picture.",
-  fmt:v=>v===0?"none":v.toFixed(2)},
 ];
 
 /* what the world actually is, beside what has been asked of it — the gap is
    the controller still on its way there, and is worth seeing */
 function nowPct(k){
   const v=S.stats && S.stats[k];
-  return v===undefined ? "" : "  ·  now "+(100*v).toFixed(1)+"%";
+  return v===undefined ? "" : "now "+(100*v).toFixed(1)+"%";
 }
 const setEl = document.getElementById("settings");
 const setList = document.getElementById("setlist");
-const DEFAULTS = Object.assign({}, PARAMS);
+const setActions = document.getElementById("setactions");
+/* The three climate cards show what the world currently is beside what has
+   been asked of it, and that number is moving — a static one would make the
+   controller look broken for the minute it takes to arrive. Refreshed on a
+   timer only while the panel is open. */
+let nowFields = [], nowTimer = 0;
+/* the two ends of a slider, named. The fastest thing on a card to read, and
+   the one that makes the prose optional. */
+function ends(item){
+  const d=document.createElement("div"); d.className="setends";
+  const a=document.createElement("span"), b=document.createElement("span");
+  a.textContent=item.lo||""; b.textContent=item.hi||"";
+  d.appendChild(a); d.appendChild(b); return d;
+}
+/* DEFAULTS is taken where PARAMS is declared, not here — see the comment
+   there. Taken here it would already carry the hash. */
 /* What the world was when the panel opened, so cancelling can put it back.
    Once a restart-only setting has been touched there is no way to apply it to
    the running world, so the only honest choices are to restart or to drop the
@@ -5673,20 +5886,170 @@ function writeHash(){
 }
 function applyLive(){ plantsDirty=true; updateHUD(); }
 
+/* ── the slider ────────────────────────────────────────────────────────
+   One or two knobs on a shared track. See the CSS for why it is not an
+   <input type=range>; briefly, the page-wide touch-action:none the canvas
+   needs also suppresses the browser's own thumb drag, and a range wants one
+   track rather than two.
+
+   The knob is a child of the track, and the track is inset by exactly the
+   knob's radius at each end. That makes the track's own width the distance a
+   knob centre travels, so a knob is placed at a plain percentage and the fill
+   between two knobs is the same percentages again — no arithmetic that can
+   drift out of step with the CSS. */
+const KNOB_R = 9;
+function quantise(v, min, max, step){
+  const q = min + Math.round((v-min)/step)*step;
+  /* min + n*step accumulates error at a decimal step, so round back to the
+     precision the step itself carries or the URL fills with 0.30000000000004 */
+  const dp = (String(step).split(".")[1]||"").length;
+  return Math.min(max, Math.max(min, +q.toFixed(Math.max(dp,6))));
+}
+function makeSlider(o){
+  const two = o.values.length > 1;
+  const el = document.createElement("div");
+  el.className = "srange"; el.tabIndex = 0;
+  el.setAttribute("role", two ? "group" : "slider");
+  if(o.label) el.setAttribute("aria-label", o.label);
+  const track = document.createElement("div"); track.className="strack";
+  const fill  = document.createElement("div"); fill.className="sfill";
+  track.appendChild(fill); el.appendChild(track);
+  const knobs = o.values.map(()=>{ const k=document.createElement("div");
+    k.className="sknob"; track.appendChild(k); return k; });
+  const v = o.values.slice();
+  let held = -1, focused = 0;
+
+  const frac = x => (x-o.min)/((o.max-o.min)||1);
+  function draw(){
+    knobs.forEach((k,i)=>{ k.style.left = (frac(v[i])*100)+"%"; });
+    const a = two ? frac(v[0]) : 0, b = two ? frac(v[1]) : frac(v[0]);
+    fill.style.left  = (a*100)+"%";
+    fill.style.width = Math.max(0,(b-a)*100)+"%";
+    if(!two){ el.setAttribute("aria-valuemin",o.min); el.setAttribute("aria-valuemax",o.max);
+              el.setAttribute("aria-valuenow",v[0]); }
+    else el.setAttribute("aria-label",(o.label||"")+": "+v[0]+" to "+v[1]);
+  }
+  /* the track's width IS the knob travel, so this needs no inset correction */
+  function tAt(x){
+    const r = track.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (x-r.left)/Math.max(1,r.width)));
+  }
+  function pick(x){
+    if(!two) return 0;
+    const r = track.getBoundingClientRect();
+    const p = [0,1].map(i => r.left + frac(v[i])*r.width);
+    /* With both knobs on the same spot the nearer one is a coin toss and one
+       end of the range becomes unreachable for good. Which side the finger is
+       on decides it instead, so a range collapsed to a point can always be
+       opened again. */
+    if(Math.abs(Math.abs(x-p[0]) - Math.abs(x-p[1])) < 0.5) return x < p[0] ? 0 : 1;
+    return Math.abs(x-p[0]) <= Math.abs(x-p[1]) ? 0 : 1;
+  }
+  function set(i, raw){
+    let nv = quantise(raw, o.min, o.max, o.step);
+    /* the left knob is always the minimum: push the other along rather than
+       letting them cross, or minimum and maximum swap meaning silently */
+    if(two) nv = i===0 ? Math.min(nv, v[1]) : Math.max(nv, v[0]);
+    if(nv === v[i]) return;
+    v[i] = nv; draw(); o.onInput(v.slice(), i);
+  }
+  const toValue = x => o.min + tAt(x)*(o.max-o.min);
+
+  el.addEventListener("pointerdown", e=>{
+    e.preventDefault(); e.stopPropagation();
+    held = focused = pick(e.clientX);
+    knobs[held].classList.add("on");
+    try{ el.setPointerCapture(e.pointerId); }catch(_){}
+    el.focus({preventScroll:true});
+    set(held, toValue(e.clientX));
+  });
+  el.addEventListener("pointermove", e=>{
+    if(held<0) return;
+    e.preventDefault();
+    set(held, toValue(e.clientX));
+  });
+  const release = e=>{
+    if(held<0) return;
+    knobs[held].classList.remove("on"); held=-1;
+    try{ if(el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId); }catch(_){}
+  };
+  el.addEventListener("pointerup", release);
+  el.addEventListener("pointercancel", release);
+  /* a lost release would otherwise leave a knob following the finger for ever
+     — the same failure the canvas clears its pointer map for */
+  el.addEventListener("lostpointercapture", release);
+
+  el.addEventListener("keydown", e=>{
+    const big = e.shiftKey ? 10 : 1;
+    let d = 0;
+    if(e.key==="ArrowLeft"||e.key==="ArrowDown") d = -big;
+    else if(e.key==="ArrowRight"||e.key==="ArrowUp") d = big;
+    else if(e.key==="Home") { set(focused, o.min); e.preventDefault(); return; }
+    else if(e.key==="End")  { set(focused, o.max); e.preventDefault(); return; }
+    else if(two && (e.key==="Tab")) { return; }
+    else if(two && (e.key==="["||e.key==="]")) { focused = e.key==="[" ? 0 : 1; e.preventDefault(); return; }
+    else return;
+    e.preventDefault();
+    set(focused, v[focused] + d*o.step);
+  });
+
+  draw();
+  return {el, values:v};
+}
+
+/* The thumbtack, drawn rather than fetched — every glyph in this piece has to
+   be, since nothing may leave the origin. */
+const PIN_SVG =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.9 1.2 14.8 6.1l-1.1 1.1-1.2-.3-2.6 2.6.5 2.4-1.1 1.1-3-3-4 4-.7-.7 4-4-3-3 1.1-1.1 2.4.5 2.6-2.6-.3-1.2z"/></svg>';
+
 function buildSettings(){
-  setList.innerHTML="";
+  /* innerHTML would destroy the actions card, which lives here between
+     rebuilds; it is held by reference outside and put back at the front. Its
+     buttons keep the listeners bound at load either way. */
+  setList.textContent="";
+  setList.appendChild(setActions);
+  nowFields=[];
   for(const item of SETTINGS){
     if(item.group){
       const h=document.createElement("div");
       h.className="setgroup"; h.textContent=item.group; setList.appendChild(h); continue;
     }
-    const row=document.createElement("div"); row.className="setrow";
-    const head=document.createElement("div"); head.className="setname";
-    const nm=document.createElement("span"); nm.textContent=item.name;
-    const val=document.createElement("span"); val.className="setval";
-    head.appendChild(nm); head.appendChild(val); row.appendChild(head);
+    const row=document.createElement("div"); row.className="card";
+    /* the parameter, on the card. Harnesses drive these controls, and finding
+       one by its visible name means every edit to the copy breaks a test that
+       has nothing to do with the copy — which it did, the first time the
+       wording changed. */
+    row.dataset.key=item.key;
+    const head=document.createElement("div"); head.className="cardhead";
+    const nm=document.createElement("span"); nm.className="cardname"; nm.textContent=item.name;
+    const pin=document.createElement("button");
+    pin.type="button"; pin.className="pin"; pin.disabled=true;
+    pin.innerHTML=PIN_SVG;
+    pin.setAttribute("aria-label","pin "+item.name+" to the world view");
+    pin.title="soon: keep this control on screen while the world runs";
+    head.appendChild(nm); head.appendChild(pin); row.appendChild(head);
+    /* Above the description rather than below the control, and for two
+       reasons. It is a property of the setting, so it belongs where the
+       setting is named; and it sits inside the part of the card that stretches,
+       so every slider in a row still lands on the same line. Under the control
+       it pushed its own card's slider 20px out of step with its neighbours. */
+    if(item.restart){
+      const n=document.createElement("div"); n.className="setnote";
+      n.textContent="takes effect when the world restarts"; row.appendChild(n);
+    }
     const why=document.createElement("div"); why.className="setwhy"; why.textContent=item.why;
     row.appendChild(why);
+
+    /* The reading sits with the control rather than with the title, because it
+       is what the control currently says and not what it is called. Beside it,
+       for the three the climate steers, what the world actually IS — the gap
+       between the two is the controller still on its way there. */
+    const read=document.createElement("div"); read.className="setread";
+    const val=document.createElement("span"); val.className="setval";
+    const now=document.createElement("span"); now.className="setnow";
+    read.appendChild(val); read.appendChild(now);
+    const refreshNow = item.now ? ()=>{ now.textContent=nowPct(item.now); } : null;
+    if(refreshNow){ refreshNow(); nowFields.push(refreshNow); }
 
     if(item.choice){
       const wrap=document.createElement("div"); wrap.className="setchoice";
@@ -5698,41 +6061,37 @@ function buildSettings(){
         b.addEventListener("click",()=>{ Object.assign(PARAMS,c.set); mark(); writeHash(); applyLive(); });
         wrap.appendChild(b);
       });
-      row.appendChild(wrap); mark();
+      row.appendChild(read); row.appendChild(wrap); mark();
     } else if(item.pair){
+      /* One track, two knobs. Two separate tracks read as two settings that
+         happen to sit together; the span between the knobs is the thing being
+         chosen, and now it is drawn. */
       const lo=item.pair[0], hi=item.pair[1];
-      const box=document.createElement("div"); box.className="setpair";
-      const a=document.createElement("input"), b=document.createElement("input");
-      [a,b].forEach(r=>{ r.type="range"; r.min=item.min; r.max=item.max; r.step=item.step; });
-      a.value=PARAMS[lo]; b.value=PARAMS[hi];
       const show=()=>{ val.textContent=item.fmt(PARAMS[lo],PARAMS[hi]); };
-      /* the left knob is always the minimum: push the other along rather than
-         letting them cross, or minimum and maximum swap meaning silently */
-      a.addEventListener("input",()=>{ PARAMS[lo]=+a.value;
-        if(PARAMS[hi]<PARAMS[lo]){ PARAMS[hi]=PARAMS[lo]; b.value=a.value; }
-        show(); writeHash(); applyLive(); });
-      b.addEventListener("input",()=>{ PARAMS[hi]=+b.value;
-        if(PARAMS[lo]>PARAMS[hi]){ PARAMS[lo]=PARAMS[hi]; a.value=b.value; }
-        show(); writeHash(); applyLive(); });
-      box.appendChild(a); box.appendChild(b); row.appendChild(box); show();
+      const sl=makeSlider({min:item.min, max:item.max, step:item.step, label:item.name,
+        values:[PARAMS[lo], PARAMS[hi]],
+        onInput:vv=>{ PARAMS[lo]=vv[0]; PARAMS[hi]=vv[1]; show(); writeHash(); applyLive(); }});
+      row.appendChild(read); row.appendChild(sl.el); row.appendChild(ends(item)); show();
     } else {
-      const r=document.createElement("input");
-      r.type="range"; r.min=item.min; r.max=item.max; r.step=item.step;
       /* Some of these run backwards against the quantity they steer: colder
          means MORE ice, drier means MORE desert. The slider reads left to
          right as the physical thing — cold to hot, dry to wet — and the value
          is mirrored, so the control matches the label rather than the
-         implementation. */
-      const toUI = v => item.rev ? (item.min+item.max-v) : v;
-      r.value = toUI(PARAMS[item.key]);
+         implementation. The mirror is its own inverse, so one function does
+         both directions.
+
+         Rounded, because the mirror is a subtraction and 0.034+0.194−0.138 is
+         0.08999999999999997 rather than 0.09. The slider quantises its own
+         output and then this undid it: the value stopped equalling its own
+         default, so `tgtice=0.08999999999999997` appeared in every shared link
+         from a control nobody had meaningfully moved. */
+      const toUI = v => item.rev ? +((item.min+item.max-v).toFixed(6)) : v;
       const show=()=>{ val.textContent=item.fmt?item.fmt(PARAMS[item.key]):PARAMS[item.key]; };
-      r.addEventListener("input",()=>{ PARAMS[item.key]=toUI(+r.value); show(); writeHash();
-        if(item.restart) markRestart(); else applyLive(); });
-      row.appendChild(r); show();
-    }
-    if(item.restart){
-      const n=document.createElement("div"); n.className="setnote";
-      n.textContent="takes effect when the world restarts"; row.appendChild(n);
+      const sl=makeSlider({min:item.min, max:item.max, step:item.step, label:item.name,
+        values:[toUI(PARAMS[item.key])],
+        onInput:vv=>{ PARAMS[item.key]=toUI(vv[0]); show(); writeHash();
+                      if(item.restart) markRestart(); else applyLive(); }});
+      row.appendChild(read); row.appendChild(sl.el); row.appendChild(ends(item)); show();
     }
     setList.appendChild(row);
   }
@@ -5741,8 +6100,10 @@ function setSettings(on){
   setEl.classList.toggle("on",on);
   document.getElementById("hud").classList.toggle("behind",on);
   setEl.setAttribute("aria-hidden",on?"false":"true");
+  clearInterval(nowTimer); nowTimer=0;
   if(on){ setSnap=Object.assign({},PARAMS); pendingRestart=false;
-          buildSettings(); updateBtns(); writeHash(); }
+          buildSettings(); updateBtns(); writeHash();
+          nowTimer=setInterval(()=>{ for(const f of nowFields) f(); }, 900); }
 }
 document.getElementById("gear").addEventListener("click",e=>{ e.stopPropagation(); setSettings(true); });
 document.getElementById("setcopy").addEventListener("click",async e=>{
@@ -5809,6 +6170,16 @@ window.__world = {
   cam(){ return CAM; },
   pointerCount(){ return ptrs.size; },
   params(){ return PARAMS; },
+  defaults(){ return Object.assign({}, DEFAULTS); },
+  /* What the panel actually offers, so a harness can test the ends of the real
+     slider rather than a copy of its numbers. A copy drifts: the rainfall end
+     was bounded to what the world will honour and the test went on measuring
+     the old one, which would have reported a failure that no visitor could
+     reach. The counters worth having are the ones that cannot disagree with
+     the thing they are counting. */
+  settings(){ return SETTINGS.filter(s=>s.key && !s.choice).map(s=>({
+    key:s.key, name:s.name, min:s.min, max:s.max, step:s.step,
+    rev:!!s.rev, restart:!!s.restart, pair:s.pair||null })); },
   /* Pin the three climate dials and stop the controller correcting them, so
      the attainable range of each environment can be measured rather than
      assumed. Reachability is the first thing user-set terrain proportions

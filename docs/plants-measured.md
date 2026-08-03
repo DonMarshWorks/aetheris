@@ -379,6 +379,76 @@ rather than left dormant, because an unused input still costs an address every
 program can reference by accident. If herbivory or disturbance ever lands, the
 mechanism is forty lines and the counters that judge it are in this section.
 
+**A variant worth separating from that verdict: how happy is the plant.** Don's
+later proposal is the mean fit of every node in the body, supplied as an input.
+It looks like the signal above and it is not, in one way that may be the whole
+difference: **the value is computed by the simulation rather than emitted by the
+genome.** The removed version needed a lineage to evolve an emitter and a reader
+together before either was worth anything, which is the plateau problem that
+also killed genome-named child headings — no mutation rate fixes an absent
+gradient. Here `vigour <- MUL(bodyfit, ...)` is one output-address mutation from
+existing, which is the condition under which a behaviour turned out to be
+reachable at all.
+
+It also answers the diagnosis on its own terms. A node at the centre of a body
+straddling a coastline knows its own fit and cannot know that half of its body
+is drowning; that genuinely is something happening where it cannot see it. And
+the behaviour Don wants from it is legible — a well-suited body curling in and
+shortening its steps, a badly-suited one throwing long scouts — which is exactly
+the scout-and-nursery axis `formula-design.md` was built around, promoted from
+within-body to whole-body.
+
+Not built. Two things to know before building it. The counters already exist and
+are in this section: adoption measured as the share of genomes wiring the input
+into a live output, **against a control whose register is dead** — the control is
+what turned the first attempt from a success into a null result. And the cost is
+near zero if it rides the passes that already run: fit is re-estimated on a
+rolling cursor and connected components are relabelled every `sweep` ticks, so a
+running mean per root updates on machinery that is already paid for. Do not add
+a scan.
+
+## Moving plants — measured, and it is three orders of magnitude out
+
+Don asked for heading and speed outputs, with nodes moving across the surface,
+and named the risk himself: collision testing might be too expensive.
+
+**It is, and not by a little.** Nodes are static today, so collision is tested
+only where a bud is placed — a handful of candidates per plant per turn, about
+nine bins each, which is why the whole thing is affordable. Moving nodes stops
+the work scaling with the number of *plants* and starts it scaling with the
+number of *nodes*, every one of which must be re-binned and re-tested every turn.
+
+`overlapScan()` already performs exactly that pass over every seventh living
+node, so it was timed rather than estimated (`tools/motioncost.js`). At 105,915
+living nodes in 1,104 bodies:
+
+| | |
+|---|---|
+| one 27-bin neighbourhood pass over 1/7 of the population | 27.1 ms |
+| extrapolated to every living node | **189 ms** |
+| the ecology's entire per-frame budget | 4 ms |
+| ecology steps the frame loop owes per second | 192 |
+| cost of moving every node every step | **36 s of CPU per second** |
+
+Thirty-six times the whole machine before anything is drawn, and one single pass
+is forty-seven times the budget the entire ecology gets. Spread across frames it
+would allow each node to be re-tested about four times a second — and that
+budget is *already* spent, on growth. There is no version of this that is merely
+tight.
+
+**But the behaviour it was wanted for is nearly free, and is already half
+designed.** A body that grows on one side and dies on the other migrates without
+anything moving, which is how clonal organisms actually travel; the fairy ring in
+`plants-design.md` is that mechanism with no preferred direction. Give it a
+direction and it is tropism. Both halves already run every tick — the frontier
+chooses where growth goes, the death scheduler chooses what stops holding
+ground — so the cost is the *input* that biases them, not a new pass.
+`formula-design.md` already names it as the next input to add: the environment
+gradient, "which would let a lineage evolve to branch *toward* better ground
+rather than merely surviving where it lands." Paired with body fit above, that
+is the unhappy plant shooting out scouts, and it costs a gradient lookup rather
+than 189 ms.
+
 ---
 
 ## Two ideas that were decided, twice
