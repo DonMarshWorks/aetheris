@@ -75,6 +75,7 @@ function distil(p) {
     geoBoxes: p.geo ? p.geo.provinces : null,
     budShare: p.draws.budShare, eligibleShare: p.draws.eligibleShare,
     transferTook: p.transfer.tookShare,
+    starvedShare: p.draws.starvedShare,
     angleSpread: p.outputs.angle.spreadWithinNode,
   };
 }

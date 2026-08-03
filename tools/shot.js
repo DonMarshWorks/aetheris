@@ -100,6 +100,36 @@ const VIEWS = [
     const sunYaw = Math.atan2(sun[0], sun[2]);
     const sunPitch = Math.asin(Math.max(-1, Math.min(1, sun[1])));
 
+    /* A fade cannot be photographed. --seq takes several frames a few ecology
+       ticks apart from one fixed camera, so a bud arriving or a node draining
+       into heartwood is visible as a change between images rather than having
+       to be inferred from one. The world is stepped between shutters and the
+       camera is not touched, so anything that moves between frames is the
+       simulation and not the view. */
+    const seq = +arg('seq', 0);
+    if (seq > 0) {
+      const gap = +arg('seqticks', 16);
+      /* setSpeed(0) stops the simulation and NOT the daily rotation, which
+         advances from wall-clock time in the frame loop — so the first attempt
+         at this drifted several degrees between shutters and at telephoto that
+         is a different place entirely. freeze() is what pins the surface. */
+      await page.evaluate(() => window.__world.freeze(0));
+      const v = VIEWS.find(q => q.name === arg('seqview', 'close-c')) || VIEWS[2];
+      const yaw = sunYaw + v.dYaw;
+      const pitch = Math.max(-1.35, Math.min(1.35, sunPitch * 0.7 + v.dPitch));
+      await page.evaluate(vv => window.__world.setView(vv.yaw, vv.pitch, vv.zoom),
+        { yaw, pitch, zoom: v.zoom });
+      await page.waitForTimeout(2500);
+      for (let k = 0; k < seq; k++) {
+        if (k > 0) await page.evaluate(g => window.__world.growPlants(g), gap);
+        /* the sheet is rebuilt on the next frame, not inside growPlants */
+        await page.waitForTimeout(350);
+        const f = path.join(ROOT, OUT, `${s.tag}-seq${String(k).padStart(2, '0')}.png`);
+        await page.screenshot({ path: f });
+      }
+      console.log(`wrote ${seq} sequence frames ${gap} ecology ticks apart for ${s.tag}`);
+    }
+
     for (const v of VIEWS) {
       const yaw = sunYaw + v.dYaw;
       /* the orbit clamps pitch, and near a solstice the sub-solar point is far

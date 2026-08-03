@@ -1,0 +1,8 @@
+{ "note":"calibrate the attempt grace: 150 gave 5323 bodies of 16.7 nodes",
+  "ticks": 8000, "checkpoints":[8000], "defaultEcorate":16, "seeds":[31337],
+  "configs":[
+    {"tag":"g20", "params":{"energy":1,"esettle":20}},
+    {"tag":"g40", "params":{"energy":1,"esettle":40}},
+    {"tag":"g80", "params":{"energy":1,"esettle":80}},
+    {"tag":"seed40", "params":{"energy":1,"eseed":40}}
+  ] }

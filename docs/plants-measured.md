@@ -534,6 +534,100 @@ a store that pays both equally spends part of its budget spreading the
 incumbent. Paying `reseed` founders more than `spore` founders is the same trade
 `seedmut` already makes, in a new place.
 
+## The energy model — built, measured, and it earns its place
+
+Don's design, and it supersedes the `sunfx` pace scaling above. A leaf gathers
+energy from the sun it stands in and banks it; a bud attempt spends some; an
+attempt also costs a little life. So "growth proportional to sunlight but never
+zero" and "slower plants live longer" both fall out of one currency instead of
+being written down as two formulas — the same move that made `pace` worth
+having after the old scalar carried the cost and never the benefit.
+
+Accrual is **lazy**: a node's store is brought up to date when it is drawn, from
+the ticks since anyone last looked at it, so the mechanism costs nothing per
+tick and nothing is scanned. The **attempt** is what costs, not the success — a
+node that spends its store on a bud that collides has still spent it, which is
+what makes a plant boxed in by neighbours exhaust itself rather than hammering
+at the same wall for free.
+
+**At the default tilt it is worth about two seed standard deviations**, and it
+costs nothing in body size:
+
+| | score | ±sd | evenness | turnover | mean body |
+|---|---|---|---|---|---|
+| energy on | **0.831** | 0.008 | 0.959 | **0.204** | 95.7 |
+| energy + life cost | 0.821 | 0.011 | 0.958 | 0.169 | 95.0 |
+| off | 0.813 | 0.010 | 0.956 | 0.167 | 94.7 |
+
+Most of the gain is **turnover**, 0.167 → 0.204. A leaf that must save before it
+can grow keeps the frontier churning where every mature tip previously budded
+the moment it was drawn.
+
+### Scarcity is the mechanism, and a bigger bank destroys it
+
+`ecap` is how many buds' worth a leaf may hold. The prediction here was that 3
+was too small to fund waiting out a season and that 8–20 would be better. It is
+the opposite, monotonically:
+
+| tilt 24 | score | turnover |
+|---|---|---|
+| cap 3 | **0.832** | **0.220** |
+| cap 8 | 0.816 | 0.195 |
+| cap 20 | 0.808 | 0.147 |
+| *(off)* | *0.813* | *0.167* |
+
+At 20 it scores **below the off baseline** on turnover. The energy model helps
+because leaves are *often* short; a generous bank means a node is never
+energy-limited, the gate stops biting, and what is left is the off condition
+plus bookkeeping inertia. **Do not raise `ecap` to make waiting possible — the
+waiting is the cost, not the feature.**
+
+### The seed store beats the attempt grace, and they are substitutes
+
+Both of Don's answers to the founder problem work, and the crossed design says
+which. At tilt 90, where darkness makes growth slow:
+
+| | score | all four seeds live? | mean body |
+|---|---|---|---|
+| off | gated | no — seed 7 dies | 79.5 |
+| energy only | gated | no — two die | 79.1 |
+| **energy + seed 400** | **0.761** | **yes** | **75.1** |
+| energy + attempt grace | 0.742 | yes | 62.9 |
+| energy + both | 0.740 | yes | 60.6 |
+| energy + both, big seed | 0.731 | yes | 59.4 |
+
+Both clear the extinction; the seed store does it **without shattering the
+world** and scores higher. Combining them is worse than either alone — the
+signature of substitutes over-correcting, exactly as `marine`/`fitcap`/`rare`.
+At tilt 24 the asymmetry is sharper still: the store costs nothing (0.832,
+top of the table) and the grace costs 0.053.
+
+**The sizing rule falls out of why 40 failed and 400 worked.** At a bud success
+of 0.12 an endowment of *E* funds about `E × 0.12` nodes: 40 buys five, invisible
+against a viability threshold of 65; 400 buys about 48. So **`eseed ≈ minfrag /
+budShare`**, around 540, and 400 is just under it.
+
+### Two flaws the measurement found, both mine
+
+**The cap ate the endowment.** `eseed` 40 and 400 produced *byte-identical*
+worlds across sixteen runs — same score, same 109,286 live, same 1,194 bodies,
+every digit. A tenfold parameter change cannot do that unless the parameter is
+dead, and it was: the cap was written as a bound on what a node may *hold*
+rather than on what sunlight may *bank*, so `accrue()` clamped a founder's 400
+down to `ecap` the first time anything looked at it. Every seed-store number
+taken before that fix was void. This is the fourth time on this project that a
+parameter has provably done nothing, and the rule in CLAUDE.md caught it again:
+instrument the line before theorising.
+
+**The attempt grace fails in two opposite ways for one reason.** On its own, at
+20, 40 and 80 attempts the planet goes **extinct** — a founder gets nowhere near
+enough chances to clear `minfrag` before the bar reaches full strength. At 150 it
+**shatters** into 5,323 bodies of 16.7 nodes — because a body that never attempts
+anything never spends its grace and is spared for ever. A clock that only counts
+chances cannot expire on a plant that has stopped taking them. The grace now
+ends on whichever runs out first, chances or ticks, with the tick clock
+deliberately generous: its job is to catch the stuck, not to hurry the slow.
+
 ## Moving plants — measured, and it is three orders of magnitude out
 
 Don asked for heading and speed outputs, with nodes moving across the surface,

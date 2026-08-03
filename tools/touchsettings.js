@@ -167,18 +167,24 @@ async function suite(engineName) {
       `a tap near the high end moves only the high knob ` +
       `(${lowTap.lo}→${highTap.lo}, ${lowTap.hi}→${highTap.hi})`);
 
-    /* drive the low knob past the high one: it must stop, never swap */
+    /* Drive the low knob all the way past the high one. The thumbs may cross —
+       a thumb is whichever one the finger took hold of and stays that thumb —
+       but what the control REPORTS must still be a [minimum, maximum] pair, so
+       no client ever sees them the wrong way round. */
     await page.mouse.move(xAt(p, 0.05), p.cy);
     await page.mouse.down();
     for (const f of [0.3, 0.6, 0.9, 1.3]) await page.mouse.move(xAt(p, f), p.cy);
     await page.mouse.up();
-    const shut = await pair();
-    check(shut.lo <= shut.hi && Math.abs(shut.lo - shut.hi) < 0.06,
-      `the low end stops at the high end instead of passing it (${shut.lo} to ${shut.hi})`);
+    const crossed = await pair();
+    check(crossed.lo <= crossed.hi,
+      `the reported pair stays sorted after the thumbs cross (${crossed.lo} to ${crossed.hi})`);
+    check(crossed.hi > 4.5,
+      `and the dragged thumb went where it was taken rather than stopping ` +
+      `(${crossed.lo} to ${crossed.hi})`);
 
     /* and the range must be re-openable once collapsed — with both knobs on
-       one spot the nearer one is a coin toss, and a wrong guess strands the
-       control shut for good */
+       one spot the nearer one is a coin toss, and a wrong guess would strand
+       the control shut */
     await page.mouse.move(xAt(p, 0.9), p.cy);
     await page.mouse.down();
     for (const f of [0.6, 0.3, 0.05]) await page.mouse.move(xAt(p, f), p.cy);

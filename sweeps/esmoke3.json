@@ -1,0 +1,8 @@
+{ "note":"the attempt grace has to be large enough for a founder to plausibly reach minfrag: 65 nodes at a bud success of about 0.12 is roughly 540 attempts. Backstop now caps the grace in ticks so large values cannot spare debris for ever.",
+  "ticks": 8000, "checkpoints":[8000], "defaultEcorate":16, "seeds":[31337],
+  "configs":[
+    {"tag":"g150",  "params":{"energy":1,"esettle":150}},
+    {"tag":"g300",  "params":{"energy":1,"esettle":300}},
+    {"tag":"g600",  "params":{"energy":1,"esettle":600}},
+    {"tag":"g600s", "params":{"energy":1,"esettle":600,"eseed":40}}
+  ] }

@@ -1,0 +1,21 @@
+{
+ "note": "Don's energy model. A leaf gathers energy from the sun it stands in and banks it, a bud attempt spends some, and an attempt also costs a little life -- so growth proportional to sunlight but never zero, and slower plants living longer, both fall out of one currency instead of two formulas. Crossed with the two proposals for the founder problem, which are not alternatives: a grace counted in bud attempts removes an artefact (the cull killing a slow founder before it has had a fair number of chances) and a seed energy store is substantive (it gives a founder attempts it would not otherwise get). Run at both tilts because darkness is the whole point and at 24 degrees there is very little of it.",
+ "ticks": 45000,
+ "checkpoints": [20000, 45000],
+ "defaultEcorate": 16,
+ "seeds": [7, 31337, 424242, 999],
+ "configs": [
+  { "tag": "off-t24",    "params": { "energy": 0, "tilt": 24 } },
+  { "tag": "e-t24",      "params": { "energy": 1, "tilt": 24 } },
+  { "tag": "seed-t24",   "params": { "energy": 1, "tilt": 24, "eseed": 40 } },
+  { "tag": "grace-t24",  "params": { "energy": 1, "tilt": 24, "esettle": 600 } },
+  { "tag": "both-t24",   "params": { "energy": 1, "tilt": 24, "eseed": 40, "esettle": 600 } },
+  { "tag": "life-t24",   "params": { "energy": 1, "tilt": 24, "eseed": 40, "elife": 20 } },
+  { "tag": "off-t90",    "params": { "energy": 0, "tilt": 90 } },
+  { "tag": "e-t90",      "params": { "energy": 1, "tilt": 90 } },
+  { "tag": "seed-t90",   "params": { "energy": 1, "tilt": 90, "eseed": 40 } },
+  { "tag": "grace-t90",  "params": { "energy": 1, "tilt": 90, "esettle": 600 } },
+  { "tag": "both-t90",   "params": { "energy": 1, "tilt": 90, "eseed": 40, "esettle": 600 } },
+  { "tag": "life-t90",   "params": { "energy": 1, "tilt": 90, "eseed": 40, "elife": 20 } }
+ ]
+}

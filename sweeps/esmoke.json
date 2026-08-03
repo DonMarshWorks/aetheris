@@ -1,0 +1,7 @@
+{ "note":"smoke: does the energy gate run at all",
+  "ticks": 8000, "checkpoints":[8000], "defaultEcorate":16, "seeds":[31337],
+  "configs":[
+    {"tag":"off",   "params":{"energy":0}},
+    {"tag":"e",     "params":{"energy":1}},
+    {"tag":"e-all", "params":{"energy":1,"eseed":40,"esettle":150,"elife":20}}
+  ] }

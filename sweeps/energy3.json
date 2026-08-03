@@ -1,0 +1,15 @@
+{
+ "note": "With the endowment no longer eaten by the cap, eseed=400 clears the extinction at tilt 90 that the attempt grace was invented for, and does it without shattering the world. So the two are substitutes and the seed store is the better of them. This round asks the remaining question: how much may a leaf bank? A node needs roughly capacity/budShare -- about 25 buds' worth -- to fill its slots over a life, so a cap of 3 is about an eighth of its working life and cannot fund waiting out a season. 8 and 20 can.",
+ "ticks": 45000,
+ "checkpoints": [20000, 45000],
+ "defaultEcorate": 16,
+ "seeds": [7, 31337, 424242, 999],
+ "configs": [
+  { "tag": "cap3-t24",  "params": { "energy": 1, "tilt": 24, "eseed": 400, "ecap": 3 } },
+  { "tag": "cap8-t24",  "params": { "energy": 1, "tilt": 24, "eseed": 400, "ecap": 8 } },
+  { "tag": "cap20-t24", "params": { "energy": 1, "tilt": 24, "eseed": 400, "ecap": 20 } },
+  { "tag": "cap3-t90",  "params": { "energy": 1, "tilt": 90, "eseed": 400, "ecap": 3 } },
+  { "tag": "cap8-t90",  "params": { "energy": 1, "tilt": 90, "eseed": 400, "ecap": 8 } },
+  { "tag": "cap20-t90", "params": { "energy": 1, "tilt": 90, "eseed": 400, "ecap": 20 } }
+ ]
+}

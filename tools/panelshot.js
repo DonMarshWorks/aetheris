@@ -63,6 +63,14 @@ const SIZES = want ? ALL.filter(s => want.split(',').includes(s.name)) : ALL;
     await page.waitForTimeout(1500);
     await page.screenshot({ path: path.join(OUT, `world-${s.name}.png`) });
 
+    /* the metrics overlay is a grid of the same cards now, so it gets looked
+       at the same way */
+    await page.click('#info');
+    await page.waitForTimeout(1400);
+    await page.screenshot({ path: path.join(OUT, `charts-${s.name}.png`) });
+    await page.click('#chartclose');
+    await page.waitForTimeout(200);
+
     await page.click('#gear');
     await page.waitForTimeout(400);
     await page.screenshot({ path: path.join(OUT, `settings-${s.name}.png`) });

@@ -1,0 +1,13 @@
+{
+ "note": "The seed store was tested at eseed=40, which funds 40 bud attempts -- about five successful buds at the measured success rate, against a viability threshold of 65 nodes. That is far too small to do the job it was proposed for, so its null result is a verdict on the value and not on the idea. Retested at a size that could actually carry a founder to viability, alone and with the attempt grace.",
+ "ticks": 45000,
+ "checkpoints": [20000, 45000],
+ "defaultEcorate": 16,
+ "seeds": [7, 31337, 424242, 999],
+ "configs": [
+  { "tag": "bigseed-t24",   "params": { "energy": 1, "tilt": 24, "eseed": 400 } },
+  { "tag": "bigseed-t90",   "params": { "energy": 1, "tilt": 90, "eseed": 400 } },
+  { "tag": "bigboth-t24",   "params": { "energy": 1, "tilt": 24, "eseed": 400, "esettle": 600 } },
+  { "tag": "bigboth-t90",   "params": { "energy": 1, "tilt": 90, "eseed": 400, "esettle": 600 } }
+ ]
+}

@@ -79,17 +79,28 @@
   .clockrow{display:flex;align-items:center;gap:14px}
   .clock{font-size:26px;font-weight:200;letter-spacing:.06em;font-variant-numeric:tabular-nums;line-height:1}
   /* the round controls, wherever they sit */
+  /* The interface floats over whatever the planet happens to be showing, and
+     that is not always space: an ice cap, a cloud deck or a bright desert puts
+     near-white behind these and a pale outline on transparent disappears into
+     it. So each carries its own scrim — a dark fill too faint to see against
+     the night side, and enough against a cloud — plus a soft drop shadow, and
+     the glyph gets one of its own so the mark survives even where the disc
+     does not. Deliberately not backdrop-filter: it costs a GPU pass per
+     element on a piece that is already spending its budget on the planet. */
   .rbtn{
-    pointer-events:auto;flex:0 0 34px;width:34px;height:34px;padding:0;
+    pointer-events:auto;flex:0 0 40px;width:40px;height:40px;padding:0;
     display:flex;align-items:center;justify-content:center;
-    background:transparent;border:1px solid var(--faint);border-radius:50%;
+    background:rgba(8,12,20,.34);border:1px solid var(--faint);border-radius:50%;
     color:var(--ink);cursor:pointer;transition:.25s;font:inherit;
+    box-shadow:0 1px 6px rgba(0,0,0,.45);
   }
-  .rbtn:hover{border-color:rgba(233,240,255,.60);background:rgba(233,240,255,.10)}
-  .rbtn svg{width:12px;height:12px;display:block}
+  .rbtn:hover{border-color:rgba(233,240,255,.60);background:rgba(233,240,255,.14)}
+  .rbtn svg{width:16px;height:16px;display:block;
+    filter:drop-shadow(0 0 2px rgba(0,0,0,.55))}
   /* held down reads as a state, not a hover */
-  .rbtn.on{border-color:rgba(233,240,255,.72);background:rgba(233,240,255,.16)}
-  #info{font-size:15px;font-weight:700;line-height:1}
+  .rbtn.on{border-color:rgba(233,240,255,.72);background:rgba(233,240,255,.20)}
+  #info{font-size:18px;font-weight:700;line-height:1;
+    text-shadow:0 0 3px rgba(0,0,0,.6)}
   .ctrls{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
   .clocklabel{margin-top:8px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
 
@@ -106,7 +117,7 @@
      overlay is the easiest way to give it one by accident. */
   #charts{
     position:fixed;inset:0;z-index:40;display:none;overflow:hidden;
-    background:rgba(6,9,14,.965);padding:22px 26px;
+    background:rgba(6,9,14,.994);padding:22px 26px;
     flex-direction:column;gap:14px;
   }
   #charts.on{display:flex}
@@ -124,19 +135,34 @@
      scrollbar is the invariant; an overlay that is taller than the phone it is
      read on is not, and forcing ten charts into one screen is what made them
      unreadable. */
-  #cscroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
-    -webkit-overflow-scrolling:touch;touch-action:pan-y}
-  #cgraph{width:100%;display:block}
+  /* the same grid of cards the settings use, and deliberately the same class
+     names — one card shape learned once, whether it holds a control or a
+     history */
+  #cscroll{flex:1;min-height:0;width:100%;max-width:1560px;margin:0 auto;
+    overflow-y:auto;overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;touch-action:pan-y;
+    display:grid;gap:11px;align-content:start;
+    grid-template-columns:repeat(auto-fill,minmax(min(100%,286px),1fr));
+    padding:2px 4px 26px 0}
+  .cgraph{width:100%;height:74px;display:block;margin-top:2px}
 
   .speeds{pointer-events:auto;display:flex;gap:2px;justify-content:flex-end}
+  /* the same scrim as the round controls, and for the same reason — these sit
+     directly above them and vanished into a cloud deck together */
+  /* shrunk to its buttons before the shadow goes on it: the row is a
+     full-width flex container aligned right, so a shadow on the box drew a
+     lit rectangle across the empty space to its left */
+  .speeds{width:max-content;margin-left:auto;box-shadow:0 1px 6px rgba(0,0,0,.45)}
   .sp{
-    font:inherit;font-size:10.5px;letter-spacing:.1em;color:var(--dim);
-    background:transparent;border:1px solid var(--faint);border-left-width:0;
-    padding:6px 11px;cursor:pointer;transition:.25s;
+    font:inherit;font-size:11px;letter-spacing:.1em;color:var(--ink);
+    background:rgba(8,12,20,.34);border:1px solid var(--faint);border-left-width:0;
+    padding:7px 12px;cursor:pointer;transition:.25s;
+    text-shadow:0 0 3px rgba(0,0,0,.55);
   }
   .sp:first-child{border-left-width:1px}
-  .sp:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
-  .sp.on{color:#0a0d14;background:rgba(233,240,255,.86);border-color:rgba(233,240,255,.86)}
+  .sp:hover{color:var(--ink);border-color:rgba(233,240,255,.38);background:rgba(233,240,255,.12)}
+  .sp.on{color:#0a0d14;background:rgba(233,240,255,.90);border-color:rgba(233,240,255,.90);
+    text-shadow:none}
 
   #splash{
     position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
@@ -155,9 +181,12 @@
     .sub{font-size:9.5px;margin-top:5px}
     .clock{font-size:21px}
     .clockrow{gap:11px}
-    .rbtn{flex:0 0 30px;width:30px;height:30px}
+    .rbtn{flex:0 0 36px;width:36px;height:36px}
+    .rbtn svg{width:15px;height:15px}
     .ctrls{gap:7px;margin-top:10px}
-    #info{font-size:13px}
+    /* one rule, not two: this block already carried a second #info further
+       down that silently won over anything set above it */
+    #info{font-size:16px}
     .clocklabel{font-size:9.5px;letter-spacing:.13em;margin-top:6px}
     .bars{gap:6px;margin-top:12px}
     .bar{width:44px}
@@ -344,7 +373,19 @@
       <button id="playpause" class="rbtn" type="button" aria-label="pause" title="pause"></button>
       <button id="lock" class="rbtn" type="button" aria-label="hold the view" title="hold the view" aria-pressed="false"></button>
       <button id="gear" class="rbtn" type="button" aria-label="settings" title="settings">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 5.4A2.6 2.6 0 1 0 8 10.6 2.6 2.6 0 0 0 8 5.4zm0 1.5a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2z"/><path fill="currentColor" d="M7.1 1h1.8l.25 1.62c.35.11.68.25.99.43l1.33-.95 1.27 1.27-.95 1.33c.18.31.32.64.43.99L13.82 6v1.8l-1.62.25c-.11.35-.25.68-.43.99l.95 1.33-1.27 1.27-1.33-.95c-.31.18-.64.32-.99.43L8.9 12.8H7.1l-.25-1.62a4.4 4.4 0 0 1-.99-.43l-1.33.95-1.27-1.27.95-1.33a4.4 4.4 0 0 1-.43-.99L2.18 7.8V6l1.6-.31c.11-.35.25-.68.43-.99l-.95-1.33 1.27-1.27 1.33.95c.31-.18.64-.32.99-.43z" opacity=".55"/></svg>
+        <!-- Drawn as a hub and eight teeth about (8,8), because the previous
+             one was not centred: its teeth ran from y=1 to y=12.8, a midpoint
+             of 6.9, while its hub sat at 8 — so the gear rode 1.1 units of 16
+             high inside the circle and looked askew next to the others.
+             Stroked rather than filled, which also puts it in the same
+             line-art register as the pause and the padlock. -->
+        <svg viewBox="0 0 16 16" aria-hidden="true" fill="none"
+             stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <circle cx="8" cy="8" r="2.7"/>
+          <path d="M8 4.1V2.3M8 11.9v1.8M4.1 8H2.3M11.9 8h1.8
+                   M5.24 5.24 3.97 3.97M10.76 10.76l1.27 1.27
+                   M10.76 5.24l1.27-1.27M5.24 10.76 3.97 12.03"/>
+        </svg>
       </button>
       <button id="info" class="rbtn" type="button" aria-label="the life of it" title="the life of it">i</button>
     </div>
@@ -371,7 +412,7 @@
     </div>
     <button id="chartclose" type="button" aria-label="close">close &times;</button>
   </div>
-  <div id="cscroll"><canvas id="cgraph"></canvas></div>
+  <div id="cscroll"></div>
 </div>
 
 <div id="settings" aria-hidden="true">
@@ -600,6 +641,55 @@ const PARAMS = {
                     // them read as structure. Coverage is bought with the leaf
                     // size range, not with opacity.
   mature:  90,      // reference ticks from bud to maturity, scaled by pace
+  /* ---- energy ----
+     Don's model, and it replaces `sunfx` rather than joining it. A leaf gathers
+     energy from the sun it stands in and banks it; a bud attempt spends some;
+     an attempt also costs a little life. So "growth is proportional to sunlight
+     but never zero" and "slower plants live longer" both fall out of one
+     currency instead of being written down as two formulas — which is the same
+     move that made `pace` worth having, after the old scalar carried the cost
+     and never the benefit.
+
+     Accrual is LAZY: a node's store is brought up to date when it is drawn,
+     from the ticks since it was last drawn, so the whole mechanism costs
+     nothing per tick and nothing is scanned. The cap is what makes that honest
+     — a node nobody has looked at for a long time is capped rather than
+     credited for the whole interval.
+
+     Scales: 900 attempts a tick, 3 draws each, over a frontier of about 90,000,
+     so a node gets a chance roughly every 33 ticks. `egain` is set so full sun
+     funds a bud in rather less than that and full sun is therefore not
+     limiting; half sun misses every other chance and deep shade most of them. */
+  energy:  0,       // master switch. 0 = off, and off is what ships until this
+                    // has been measured over a long run.
+  egain:   0.035,   // energy a node gathers per tick at full sun
+  ebud:    1.0,     // energy a bud attempt costs
+  ecap:    3.0,     // most a node may bank, in buds
+  eseed:   0,       // energy a FOUNDER is given, which is the seed's own store
+                    // and nothing to do with the sun. A founder holds one
+                    // frontier entry against roughly 100,000 while a 500-node
+                    // incumbent holds 425, so it is outcompeted on attempts by
+                    // two to three orders of magnitude before darkness is even
+                    // considered. This is what lets it grow fast up to some
+                    // size and then live on income like everything else.
+  eshare:  0.5,     // fraction of a parent's store a child is given, so a
+                    // founder's endowment spreads through the young body and
+                    // dilutes as it grows rather than being spent in one place
+  elife:   0,       // ticks of life a bud attempt costs. This is what makes
+                    // "slower plants live longer" emergent: a plant that cannot
+                    // afford to bud is not paying for the attempts it is not
+                    // making.
+  esettle: 0,       // a young body's grace before the fragment cull, counted in
+                    // BUD ATTEMPTS rather than ticks. 0 keeps the tick grace.
+                    // Measured: anything that slows growth walks into the
+                    // minfrag/settle cliff, which has now caught this branch
+                    // three times. Counting the grace in the same currency as
+                    // the growth is what stops it — a slow plant gets the same
+                    // number of chances to prove itself, taken over more time.
+  esettlemax: 2000, // and the tick backstop on that grace, because a body that
+                    // stops attempting anything would otherwise never spend it
+                    // and be spared for ever. Measured: without this the world
+                    // shattered into 5,323 bodies of 16.7 nodes.
   sunfx:   0,       // how strongly sunlight scales how fast a node lives. 0 is
                     // off and is what the piece shipped with; 1 means a node in
                     // full dark matures and dies `sunlo` times as fast as one
@@ -868,6 +958,20 @@ const PARAMS = {
                     // plant never has to adapt to ground that changed under
                     // it; at 2 the world is twice as restless. Read once at
                     // startup, because the octaves are built from it.
+  fadein:  48,      // ticks a new bud takes to reach full cover. Buds arriving
+                    // at full strength made the planet sparkle — several
+                    // hundred a second each appearing from nothing, and the eye
+                    // reads simultaneous onsets as glitter rather than growth.
+                    // The ecology runs at about 190 ticks a second whatever the
+                    // time-lapse, so this is a quarter second of real time at
+                    // any speed. 0 turns it off.
+  fadein0: 0,       // the cover it starts at, as a fraction of its final. From
+                    // nothing: starting at a tenth still read as a pop, just a
+                    // quieter one, because the eye catches the onset and not
+                    // the level.
+  woodfade: 70,     // and ticks a node takes to drain from living tissue to
+                    // heartwood, which otherwise substituted between two frames
+
   fatlo:   0.14,    // the smallest and largest painted leaf, per step actually
   fathi:   0.54,    // taken. The four node forms are spread evenly across the
                     // range, so the two together decide how much ground and
@@ -1375,6 +1479,12 @@ let plantsOn = PARAMS.plants > 0;
    nothing that fine can be seen. Colour still does, and that reads. */
 const PW = 2048, PH = 1024;
 const FADE = 52;                            // ticks a dead node takes to go
+/* and the other end of the same courtesy: a new bud rises from FADEIN0 of its
+   final cover to all of it over FADEIN ticks. 95 ticks is about half a second
+   at the ~190 ecology ticks a second the frame loop pays, at any time-lapse. */
+const FADEIN  = Math.max(0, PARAMS.fadein|0);
+const FADEIN0 = Math.min(1, Math.max(0, PARAMS.fadein0));
+const WOODFADE = Math.max(0, PARAMS.woodfade|0);
 /* a few discrete node forms, so lineages are distinguishable at a glance */
 /* the four node forms, as fractions of the leaf-size range */
 const FORMSZ  = [0.00, 0.34, 0.68, 1.00];
@@ -1387,6 +1497,16 @@ const NKID=new Uint8Array(PMAX), NSLOT=new Uint8Array(PMAX);
 const NLIVE=new Uint8Array(PMAX), NBIN=new Int32Array(PMAX);
 const NBORN=new Int32Array(PMAX), NLIFE=new Int32Array(PMAX);
 const NPAR=new Int32Array(PMAX), NPGEN=new Int32Array(PMAX), NGEN=new Int32Array(PMAX);
+/* energy banked at a node, the tick it was last brought up to date, and how
+   many bud attempts it has made in its life. The last is summed per body in the
+   cull pass, which already visits every node, and is what lets a young body's
+   grace be counted in chances rather than in wall-clock ticks. */
+const NE=new Float32Array(PMAX), NELAST=new Int32Array(PMAX), NATT=new Int32Array(PMAX);
+/* the tick a node became heartwood, so the change can be drawn as a change
+   rather than as a substitution. Stored rather than derived: it IS derivable
+   from NLIFE and `rot`, exactly, but only while `rot` has not been touched
+   since — and `rot` is a live parameter. */
+const NWOODAT=new Int32Array(PMAX);
 const PFRONT = new Int32Array(PMAX), PFREE = new Int32Array(PMAX);
 let nodeHigh = 0, liveN = 0, frontN = 0, freeN = 0;
 let plantDebt = 0;
@@ -1490,10 +1610,10 @@ const ARITY  = [2,2,2,2,2,2,1,1,1,1,2,3];
    genome need not discover units. `one` is the constant every linear-GP needs
    to build an offset from. */
 const IN_ONE=0, IN_AGE=1, IN_DEPTH=2, IN_FIT=3, IN_ENV=4, IN_LAT=9,
-      IN_USED=10, IN_PCAP=11, IN_CROWD=12, IN_SLOT=13, IN_SUN=14;
-const NIN = 15;
+      IN_USED=10, IN_PCAP=11, IN_CROWD=12, IN_SLOT=13, IN_SUN=14, IN_STORE=15;
+const NIN = 16;
 const INNAME = ["one","age","depth","fit","sea","ice","desert","grass","forest",
-                "lat","used","pcap","crowd","slot","sun"];
+                "lat","used","pcap","crowd","slot","sun","store"];
 
 /* ---- sunlight ----
    How much sun a node is standing in, which is `cos(lat − solarLat)` clamped at
@@ -1529,6 +1649,30 @@ function sunPace(i){
   const lo = Math.min(1, Math.max(0.02, PARAMS.sunlo));
   const e = Math.max(lo, sunAt(i));
   return 1 + PARAMS.sunfx*(e - 1);
+}
+
+/* Bring a node's energy store up to date, from the ticks since anyone last
+   looked at it. Lazy on purpose: the alternative is adding to a hundred
+   thousand floats every tick for a quantity almost none of them will spend
+   before the next time they are drawn. The cap is what keeps that honest —
+   a node nobody has drawn for a season is capped, not credited for the season.
+
+   `sunlo` floors it, so a leaf in the dark gathers a little and growth is
+   slowed rather than stopped, which was the whole requirement. */
+let energyStarved = 0;
+function accrue(i){
+  const dt = ptick - NELAST[i];
+  if(dt <= 0) return;
+  NELAST[i] = ptick;
+  const lo = Math.min(1, Math.max(0, PARAMS.sunlo));
+  const e = NE[i] + dt*PARAMS.egain*Math.max(lo, sunAt(i));
+  /* The cap bounds what SUNLIGHT may bank, not what a node may hold. Written
+     the other way round it silently ate the seed endowment: a founder given 400
+     was clamped to `ecap` the first time anything looked at it, so eseed 40 and
+     eseed 400 produced byte-identical worlds across sixteen runs. A tenfold
+     parameter change cannot produce identical output unless the parameter is
+     dead, which is the assertion that caught it. */
+  NE[i] = e > PARAMS.ecap ? (NE[i] > PARAMS.ecap ? NE[i] : PARAMS.ecap) : e;
 }
 
 const matBase = Math.max(1, PARAMS.mature);                // reference maturity
@@ -1613,6 +1757,17 @@ function fillInputs(i){
      latitude, and at high axial tilt those two stop agreeing — which is the
      condition under which phenology has anything to evolve against. */
   V[IN_SUN  ] = 2*sunAt(i) - 1;
+  /* What this leaf has banked, centred on the price of one bud: 0 means it can
+     just afford to grow, negative means it cannot yet, positive means it has
+     been saving. This is the input that lets thrift be a strategy rather than
+     an accident — hold off while poor and spend in a burst, or bud the instant
+     it can afford to, or read the store against the sun and behave differently
+     going into a winter than coming out of one. The store is brought up to date
+     before the program is run, so the value is current rather than whatever it
+     was when the node was last drawn. */
+  V[IN_STORE] = PARAMS.energy > 0
+    ? Math.max(-2, Math.min(2, (NE[i] - PARAMS.ebud)/Math.max(1e-3, PARAMS.ebud)))
+    : 0;
 }
 function runProgram(i){
   fillInputs(i);
@@ -2463,9 +2618,18 @@ function emitNode(i, pass, w){
        and the value out of it, and let more ground show through: one value
        ramp from bright new tip to grey wood, so growth and die-back both read
        as movement. */
+    /* Dying into wood is an event in the life of a plant, so it should look
+       like one happening rather than one having happened. Drained over
+       WOODFADE ticks instead of on the tick it turns: a node that was bright
+       living tissue does not become grey structure between two frames. The
+       ramp is the same shape the ghosts use going out and the buds use coming
+       in, and it costs one stored tick. */
+    let wf = 1;
     if(wood){
+      wf = WOODFADE > 0 ? Math.min(1, (ptick-NWOODAT[i])/WOODFADE) : 1;
       const lum=0.30*r+0.59*g+0.11*b;
-      r=(r*0.24+lum*0.76)*0.52; g=(g*0.24+lum*0.76)*0.52; b=(b*0.24+lum*0.76)*0.52;
+      const tr=(r*0.24+lum*0.76)*0.52, tg=(g*0.24+lum*0.76)*0.52, tb=(b*0.24+lum*0.76)*0.52;
+      r+=(tr-r)*wf; g+=(tg-g)*wf; b+=(tb-b)*wf;
     }
 
     /* The selected body, shown whole — and applied AFTER the wood is drained,
@@ -2494,12 +2658,24 @@ function emitNode(i, pass, w){
     }
 
     const rot=Math.atan2(hn,he);
-    /* Solid. Growth and die-back are already carried by colour — a young tip
-       is lifted toward white, wood is drained toward grey — so fading them as
-       well was saying the same thing twice and costing every leaf its edge.
-       The only translucency left in a living plant is the anti-aliasing on the
-       footprint rim, and the dying, which should be translucent. */
-    const al=PARAMS.alpha*(wood?0.90:1.0);
+    /* Solid, once it has arrived. Growth and die-back are already carried by
+       colour — a young tip is lifted toward white, wood is drained toward grey
+       — so fading a node for its whole youth was saying the same thing twice
+       and costing every leaf its edge.
+     *
+     * But arriving at full strength in one frame made the whole planet
+     * sparkle: several hundred buds a second each appearing from nothing, and
+     * the eye reads simultaneous onsets as a glitter rather than as growth.
+     * The dying already fade out over `FADE`; this is the same courtesy at the
+     * other end, and deliberately much shorter — long enough to stop the pop,
+     * short enough that a new leaf is not a ghost. A simulation tick is 0.084
+     * real seconds and each owes ECORATE ecology steps, so the ecology runs at
+     * about 190 ticks a second whatever the time-lapse is set to, and `fadein`
+     * is therefore in real time as well as in ticks. */
+    const fin = FADEIN > 0 ? Math.min(1, age/FADEIN) : 1;
+    /* wood's own cover arrives over the same ramp as its colour, or the leaf
+       would thin abruptly while the hue was still on its way */
+    const al=PARAMS.alpha*(wood ? 1-0.10*wf : FADEIN0+(1-FADEIN0)*fin);
 
     /* the branch back to the parent: an ellipse lying along the step, centred
        between the two, so a body reads as connected structure rather than as a
@@ -2727,6 +2903,16 @@ function addNode(x,y,z,hx,hy,hz,src,par,amt,stepUsed){
   NPX[i]=x; NPY[i]=y; NPZ[i]=z;
   NHX[i]=hx; NHY[i]=hy; NHZ[i]=hz;
   NKID[i]=0; NSLOT[i]=0; NLIVE[i]=1; NSTEP[i]=stepUsed; NCAP[i]=1;
+  /* A founder arrives with the seed's own store, which owes nothing to the
+     sun; a child is given a share of its parent's, so an endowment spreads
+     through the young body and dilutes as it grows instead of being spent in
+     one place. That is what "grow faster up to some size" is, and the size it
+     stops at falls out of the arithmetic rather than being a parameter. */
+  NELAST[i]=ptick; NATT[i]=0;
+  if(par>=0){
+    const give = NE[par]*PARAMS.eshare;
+    NE[par] -= give; NE[i] = give;
+  } else NE[i] = PARAMS.eseed;
   /* growth off a highlighted plant stays highlighted, so the body does not
      appear to stop at a line; and a recycled slot never keeps a stale mark,
      which would light up a stranger born into a dead node's place */
@@ -2808,7 +2994,7 @@ function killNode(i){
        plants that made it, and a body could never grow back through its own
        dead interior — which is exactly what a crust does. */
     CCOUNT[NCC[i]]--;              /* wood is structure, not a living neighbour */
-    NLIVE[i]=2; NONF[i]=0; woodN++; unbin(i);
+    NLIVE[i]=2; NONF[i]=0; woodN++; unbin(i); NWOODAT[i]=ptick;
     freeGround(NPX[i],NPY[i],NPZ[i]);   /* and it stops holding ground, too */
     /* Wood is only ever released from the tips inward, while growth runs the
        other way, so it accumulates without limit and eventually crowds the
@@ -2973,6 +3159,9 @@ function spore(ni){
    one death is handed straight to the next birth and would otherwise graft a
    fragment onto a stranger. */
 const PROOT=new Int32Array(PMAX), PSIZE=new Int32Array(PMAX), PSTK=new Int32Array(PMAX);
+/* bud attempts summed over a body's living nodes — the grace clock when the
+   grace is counted in chances rather than in ticks */
+const PATT=new Int32Array(PMAX);
 const BTOP=new Uint8Array(PMAX); const SIZES=[];   // the largest plants, ringed
 /* bud attempts charged to a body, and how many of those its own body refused.
    Halved on every cull pass, so they are an exponential memory of recent
@@ -3020,20 +3209,35 @@ const BX=new Float32Array(PMAX), BY=new Float32Array(PMAX), BZ=new Float32Array(
    at whatever resolution the run's own length allows, for ever, in fixed
    memory. */
 const HCAP = 1024;
+/* Each carries a sentence or two for the same reason every setting does: a
+   graph nobody can read is decoration, and the difference between a piece
+   people sit with and one they glance at is whether the numbers mean anything
+   to them. Kept short — the chart is the subject and the words are the
+   caption, not the other way round. */
 const HSER = [
-  {k:"live",  label:"living nodes",        v:new Float32Array(HCAP)},
-  {k:"bodies",label:"plants",              v:new Float32Array(HCAP)},
-  {k:"meanB", label:"mean plant size",     v:new Float32Array(HCAP)},
-  {k:"maxB",  label:"largest plant",       v:new Float32Array(HCAP)},
-  {k:"fit",   label:"mean fit",            v:new Float32Array(HCAP)},
+  {k:"live",  label:"living nodes",        v:new Float32Array(HCAP),
+   why:"How many leaves are alive on the whole planet. It settles into a band once the world is full; a long slide either way means something has changed that the plants have not caught up with."},
+  {k:"bodies",label:"plants",              v:new Float32Array(HCAP),
+   why:"How many separate organisms there are. Plants break apart when their old wood rots through, so this climbs when the world is shattering into fragments and falls when a few large bodies are winning."},
+  {k:"meanB", label:"mean plant size",     v:new Float32Array(HCAP),
+   why:"Nodes in the average plant. Read it against the count above — many small plants and few large ones are very different worlds holding the same amount of life."},
+  {k:"maxB",  label:"largest plant",       v:new Float32Array(HCAP),
+   why:"The biggest single organism on the planet. A giant that keeps growing while the mean falls is one lineage taking over."},
+  {k:"fit",   label:"mean fit",            v:new Float32Array(HCAP),
+   why:"How well suited the average leaf is to the ground it stands on. Low means most of the world is living somewhere it barely tolerates."},
   /* `want` is the side of a line the piece needs to stay on. Only these two
      carry it, because only these two *are* the acceptance test: diversity must
      not collapse. Everything else is description; these are the pass mark. */
-  {k:"even",  label:"niche evenness",      v:new Float32Array(HCAP), lo:0, hi:1, want:0.45, above:true},
-  {k:"top",   label:"biggest lineage share",v:new Float32Array(HCAP), lo:0, hi:1, want:0.50, above:false},
-  {k:"mixed", label:"plants of two minds", v:new Float32Array(HCAP), lo:0, hi:1},
-  {k:"pace",  label:"mean pace",           v:new Float32Array(HCAP), lo:0, hi:1},
-  {k:"spec",  label:"specialisation",      v:new Float32Array(HCAP), lo:0, hi:1},
+  {k:"even",  label:"niche evenness",      v:new Float32Array(HCAP), lo:0, hi:1, want:0.45, above:true,
+   why:"How evenly life is spread across the five environments. This is half the acceptance test: if one environment holds everything, the planet has become a monoculture. The dashed line is the pass mark."},
+  {k:"top",   label:"biggest lineage share",v:new Float32Array(HCAP), lo:0, hi:1, want:0.50, above:false,
+   why:"How much of the world the single most successful strategy holds. The other half of the acceptance test — one lineage taking more than half is the failure this piece exists to avoid."},
+  {k:"mixed", label:"plants of two minds", v:new Float32Array(HCAP), lo:0, hi:1,
+   why:"The share of plants carrying more than one kind of node. It is the sign a single body has specialised internally — nursery nodes that sit and reproduce, scouts that run."},
+  {k:"pace",  label:"mean pace",           v:new Float32Array(HCAP), lo:0, hi:1,
+   why:"How fast the average node matures, which it pays for in lifespan. High is a world of quick pioneers; low is one of slow persisters."},
+  {k:"spec",  label:"specialisation",      v:new Float32Array(HCAP), lo:0, hi:1,
+   why:"How committed the average lineage is to one environment rather than being a generalist. It drifts down under a moving climate, because following a niche that has relocated means crossing country only a generalist can cross."},
 ];
 const HT = new Float32Array(HCAP);            // tick each sample was taken at
 let hN = 0, hEvery = 1, hSkip = 0;
@@ -3083,7 +3287,12 @@ function pruneFragments(){
   }
   /* size is counted in living nodes: a body held up by wood alone is a corpse */
   PSIZE.fill(0,0,nodeHigh);
-  for(let i=0;i<nodeHigh;i++) if(NLIVE[i]===1) PSIZE[PROOT[i]]++;
+  /* and, on the same pass, how many chances the body has actually had. Summed
+     from the nodes rather than kept per body, so it survives a split: a severed
+     half carries its own half of the history and neither piece inherits the
+     other's. */
+  PATT.fill(0,0,nodeHigh);
+  for(let i=0;i<nodeHigh;i++) if(NLIVE[i]===1){ PSIZE[PROOT[i]]++; PATT[PROOT[i]]+=NATT[i]; }
   /* A body's root is nearly always wood now, so counting living nodes that
      are their own root counts nothing at all. Count the distinct roots that
      still have anything living under them. */
@@ -3168,7 +3377,28 @@ function pruneFragments(){
          culls every founder on the tick it appears, and the planet is sterile
          within a few hundred ticks. Spared outright for the first `younger` of
          its grace, then the bar climbs to full by the end of it. */
-      let a=((ptick-NBORN[r])/settle - yf)/Math.max(1e-3,1-yf);
+      /* How far through its grace the body is. In ticks by default; in bud
+         ATTEMPTS when `esettle` is set, which is the currency growth is
+         actually paid in — a tick grace punishes a plant for being slow, and
+         anything that slows growth has walked into that cliff three times on
+         this branch.
+
+         Whichever runs out FIRST, and both halves are load-bearing. Measured
+         with the attempt clock alone: at 20, 40 and 80 attempts the planet went
+         extinct, because a founder gets nowhere near enough chances to clear
+         `minfrag` before the bar reaches full strength; at 150 it shattered
+         into 5,323 bodies of 16.7 nodes, because a body that never attempts
+         anything never spends its grace and is therefore spared for ever.
+         Extinction and immortal debris are the same flaw seen from two sides —
+         a clock that only counts chances cannot expire on a plant that has
+         stopped taking them. The tick clock is the backstop that makes the
+         attempt clock safe, and it is deliberately generous, because its job is
+         to catch the stuck rather than to hurry the slow. */
+      const es = PARAMS.esettle|0;
+      const through = es > 0
+        ? Math.max(PATT[r]/es, (ptick-NBORN[r])/Math.max(1, PARAMS.esettlemax|0))
+        : (ptick-NBORN[r])/settle;
+      let a=(through - yf)/Math.max(1e-3,1-yf);
       a = a<0?0:(a>1?1:a);
       let need=minf*a*a*(3-2*a);
       /* Size is a proxy for viability and a poor one, because a body wedged
@@ -3244,6 +3474,13 @@ function plantsStep(){
       if(NLIVE[ni]!==1 || !same(fv,ni) || NKID[ni]>=NCAP[ni]){ retire(fi); frontDrop++; continue; }
       frontDraw++;
       if(ptick-NBORN[ni] < NMAT[ni]){ frontYoung++; continue; }
+      /* A leaf that has not gathered enough cannot bud yet. Checked before the
+         program is run, because running it is the expensive part and a node
+         that cannot afford the answer does not need to compute it. */
+      if(PARAMS.energy > 0){
+        accrue(ni);
+        if(NE[ni] < PARAMS.ebud){ energyStarved++; continue; }
+      }
       runProgram(ni);
       /* charged here rather than at every evaluation: this is the pass that
          touches a fair sample of a body's nodes every tick, so it is where a
@@ -3285,6 +3522,17 @@ function plantsStep(){
        entries. If it has moved, leave it — the next draw that finds it full
        will drop it, which is the same lazy cleaning as everywhere else. */
     const stillThere = PFRONT[bestFi]===bestTag;
+    /* The attempt is what costs, not the success. A node that spends its store
+       on a bud that collides has still spent it — which is the honest reading
+       of "each attempt to bud subtracts a unit from a plant's life", and it is
+       what makes a plant boxed in by its neighbours slowly exhaust itself
+       rather than hammering at the same wall for free. */
+    NATT[best]++;
+    if(PARAMS.energy > 0){
+      NE[best] -= PARAMS.ebud;
+      if(PARAMS.elife > 0)
+        NLIFE[best] = Math.max(1, NLIFE[best] - (PARAMS.elife|0));
+    }
     if(bud(best)){
       budOk++; NTRY[best]=0;
       if(NKID[best] >= NCAP[best] && stillThere) retire(bestFi);
@@ -3494,9 +3742,14 @@ function plantStats(reset){
     /* where the growth loop's draws went, which is the open question about
        whether the eligible set is small enough to draw from uniformly */
     draws:{ eligible:frontDraw, dropped:frontDrop, immature:frontYoung,
-            budOk, budBlocked:budNo,
+            budOk, budBlocked:budNo, starved:energyStarved,
             eligibleShare:+(frontDraw/Math.max(1,frontDraw+frontDrop)).toFixed(3),
             matureShare:+((frontDraw-frontYoung)/Math.max(1,frontDraw)).toFixed(3),
+            /* the share of otherwise-good draws refused for want of energy.
+               Near zero means the mechanism is not biting at all; near one
+               means it is the only thing deciding anything, and the world is
+               about to go the way the sunfx pace scaling did. */
+            starvedShare:+(energyStarved/Math.max(1,frontDraw-frontYoung+energyStarved)).toFixed(3),
             budShare:+(budOk/Math.max(1,budOk+budNo)).toFixed(3) },
     meanFit:+(dbgFit/Math.max(1,dbgFitOk)).toFixed(3),
     /* meanFit above is a lifetime average — nothing resets these counters — so
@@ -5651,9 +5904,7 @@ function m3(a,b){
    one means stasis, and a waving one means the lineages are taking turns —
    which is the outcome worth hoping for and cannot be seen from two numbers. */
 const chartsEl = document.getElementById("charts");
-const cgraph = document.getElementById("cgraph");
 const cscroll = document.getElementById("cscroll");
-const cctx = cgraph.getContext("2d");
 let chartsOn = false, chartTimer = 0;
 
 function trendOf(v,n){
@@ -5671,54 +5922,57 @@ function trendOf(v,n){
   return (s1/c1 - s0/c0)/span;
 }
 
+/* Built once when the overlay opens, redrawn on the timer. The cards are DOM
+   and only the little canvases are repainted, so a second's tick costs ten
+   sparklines rather than a full relayout. */
+function buildCharts(){
+  cscroll.textContent="";
+  for(const s of HSER){
+    const card=document.createElement("div"); card.className="card";
+    card.dataset.key=s.k;
+    const head=document.createElement("div"); head.className="cardhead";
+    const nm=document.createElement("span"); nm.className="cardname"; nm.textContent=s.label;
+    head.appendChild(nm); card.appendChild(head);
+    const why=document.createElement("div"); why.className="setwhy"; why.textContent=s.why||"";
+    card.appendChild(why);
+    const read=document.createElement("div"); read.className="setread";
+    s.valEl=document.createElement("span"); s.valEl.className="setval";
+    s.arrEl=document.createElement("span"); s.arrEl.className="setnow";
+    read.appendChild(s.valEl); read.appendChild(s.arrEl); card.appendChild(read);
+    s.cv=document.createElement("canvas"); s.cv.className="cgraph";
+    s.cv.setAttribute("aria-hidden","true");
+    card.appendChild(s.cv);
+    cscroll.appendChild(card);
+  }
+}
+
 function drawCharts(){
   const dprC = Math.min(devicePixelRatio||1, 2);
-  const W = cscroll.clientWidth, avail = cscroll.clientHeight;
-  if(W<8 || avail<8) return;
-
-  /* as many columns as the width can carry without the labels colliding.
-     A phone in portrait leaves about 340 css pixels here, which used to fall
-     through to a single column: ten charts stacked in one screen, each sixty
-     pixels tall and three hundred wide, which is the wrong aspect ratio for
-     reading a trend and the right one for reading nothing. Two columns halve
-     the rows and double the height. The longest label, BIGGEST LINEAGE SHARE,
-     is about 126 pixels in this font and still fits the 165 a two-column
-     phone gives. */
-  const cols = W>1180 ? 5 : W>860 ? 4 : W>560 ? 3 : W>300 ? 2 : 1;
-  const rows = Math.ceil(HSER.length/cols);
-  const padX=8, padY=6;
-  /* A chart shorter than this says nothing, so the canvas is allowed to grow
-     past the window and the overlay scrolls. The document must still not:
-     that is what the fixed, clipped container is for. */
-  const MINCELL = 92;
-  const H = Math.max(avail, rows*MINCELL + padY*(rows-1));
-  if(cgraph.style.height !== H+"px") cgraph.style.height = H+"px";
-  if(cgraph.width!==(W*dprC|0) || cgraph.height!==(H*dprC|0)){
-    cgraph.width=W*dprC|0; cgraph.height=H*dprC|0;
-  }
-  const g=cctx;
-  g.setTransform(dprC,0,0,dprC,0,0);
-  g.clearRect(0,0,W,H);
-
   const n=hN;
   document.getElementById("csub").textContent = n<2
     ? "nothing has happened yet — let it run"
     : `${HT[n-1]|0} ecology ticks · ${n} samples · every ${hEvery*(PARAMS.sweep|0)} ticks`;
-  if(n<2) return;
-
-  const cw=(W-padX*(cols-1))/cols, ch=(H-padY*(rows-1))/rows;
+  if(!HSER[0].cv) return;
   const t0=HT[0], t1=Math.max(HT[n-1], t0+1);
 
-  HSER.forEach((s,idx)=>{
-    const cx=(idx%cols)*(cw+padX), cy=((idx/cols)|0)*(ch+padY);
-    const top=cy+26, bot=cy+ch-14, left=cx+2, right=cx+cw-2;
-    if(bot<=top) return;
+  for(const s of HSER){
+    const cv=s.cv, W=cv.clientWidth, H=cv.clientHeight;
+    if(W<8||H<8) continue;
+    if(cv.width!==(W*dprC|0) || cv.height!==(H*dprC|0)){
+      cv.width=W*dprC|0; cv.height=H*dprC|0;
+    }
+    const g=cv.getContext("2d");
+    g.setTransform(dprC,0,0,dprC,0,0);
+    g.clearRect(0,0,W,H);
+    if(n<2){ s.valEl.textContent="—"; s.arrEl.textContent=""; continue; }
+
     let lo = s.lo!==undefined ? s.lo : Infinity;
     let hi = s.hi!==undefined ? s.hi : -Infinity;
     if(s.lo===undefined) for(let i=0;i<n;i++){ if(s.v[i]<lo)lo=s.v[i]; if(s.v[i]>hi)hi=s.v[i]; }
     if(!(hi>lo)) { hi=lo+1; }
     if(s.lo===undefined){ const pad=(hi-lo)*0.12; lo-=pad; hi+=pad; if(lo>0&&lo<hi*0.35) lo=0; }
 
+    const top=2, bot=H-11, left=0, right=W;
     g.fillStyle="rgba(233,240,255,.035)";
     g.fillRect(left,top,right-left,bot-top);
     g.strokeStyle="rgba(233,240,255,.10)"; g.lineWidth=1;
@@ -5740,30 +5994,26 @@ function drawCharts(){
       g.moveTo(left,wy); g.lineTo(right,wy); g.stroke(); g.setLineDash([]);
     }
 
+    /* the axis top, so a flat line at 40,000 is not mistaken for one at 4 */
+    g.font="9px ui-monospace,Menlo,Consolas,monospace";
+    g.fillStyle="rgba(233,240,255,.30)";
+    const hiS = hi>=100?String(hi|0):hi.toFixed(2);
+    g.fillText(hiS, right-g.measureText(hiS).width, H-2);
+
     const last=s.v[n-1], tr=trendOf(s.v,n);
     /* A slow monotone slide is the failure that hides best: every reading
        looks fine and only the direction is wrong. Where a metric has a side it
        must stay on, judge it against that rather than against its own trend. */
     const bad = s.want!==undefined && (s.above ? last<s.want : last>s.want);
     const drifting = s.want!==undefined && (s.above ? tr<-0.06 : tr>0.06);
-    const arrow = bad ? "!" : tr>0.06 ? "↑" : tr<-0.06 ? "↓" : "→";
-    const col   = bad ? "rgba(255,120,110,1)"
+    s.valEl.textContent = last>=100 ? String(last|0) : last.toFixed(last>=10?1:3);
+    s.arrEl.textContent = bad ? "! below the mark" : tr>0.06 ? "↑ rising"
+                        : tr<-0.06 ? "↓ falling" : "→ steady";
+    s.arrEl.style.color = bad ? "rgba(255,120,110,1)"
                 : drifting ? "rgba(240,190,120,.95)"
                 : tr>0.06 ? "rgba(150,235,175,.95)"
-                : tr<-0.06 ? "rgba(240,165,150,.95)" : "rgba(233,240,255,.45)";
-    g.font="10px ui-monospace,Menlo,Consolas,monospace";
-    g.fillStyle="rgba(233,240,255,.62)";
-    g.fillText(s.label.toUpperCase(), left, cy+11);
-    const val = last>=100 ? String(last|0) : last.toFixed(last>=10?1:3);
-    g.fillStyle="rgba(233,240,255,.92)";
-    g.fillText(val, left, cy+23);
-    g.fillStyle=col;
-    g.fillText(arrow, left+g.measureText(val).width+7, cy+23);
-    /* the axis, so a flat line at 40,000 is not mistaken for a flat line at 4 */
-    g.fillStyle="rgba(233,240,255,.30)";
-    const hiS = hi>=100?String(hi|0):hi.toFixed(2);
-    g.fillText(hiS, right-g.measureText(hiS).width, cy+11);
-  });
+                : tr<-0.06 ? "rgba(240,165,150,.95)" : "rgba(233,240,255,.44)";
+  }
 }
 
 function setCharts(on){
@@ -5772,7 +6022,7 @@ function setCharts(on){
   document.getElementById("hud").classList.toggle("behind",on);
   chartsEl.setAttribute("aria-hidden",on?"false":"true");
   clearInterval(chartTimer);
-  if(on){ drawCharts(); chartTimer=setInterval(drawCharts,1000); }
+  if(on){ buildCharts(); drawCharts(); chartTimer=setInterval(drawCharts,1000); }
 }
 /* ── settings ──────────────────────────────────────────────────────────
    Every dial here already existed and was reachable only by editing the URL.
@@ -5828,7 +6078,7 @@ const SETTINGS = [
     and it falls out of cos(lat - solarLat) with nothing added for it. */
  {key:"tilt", name:"Axial tilt", min:0, max:90, step:1, restart:true,
   lo:"no seasons", hi:"pole to the sun",
-  why:"How far the world leans, and so how strong its seasons are. At zero the sun never leaves the equator, the ice line never moves, and a plant that suits its ground suits it for ever. Turn it up and the summer pole stands in constant daylight while the winter pole sees only night. Lean it far enough and the world turns inside out: the sun stands over a pole, so the poles become the warmest ground on the planet and the ice belt is at the equator.",
+  why:"How far the world leans, and how strong its seasons are. At zero the sun never leaves the equator, the ice line never moves, and plants don't have to adapt to seasonal changes. Turn it up and the summer pole is never dark while the winter pole never sees the sun rise, while ice forms at the equator.",
   fmt:v=>v===0?"upright — no seasons":v+"°"},
  {key:"relief", name:"Elevation change", min:0.3, max:2.0, step:0.05, restart:true,
   lo:"broad plains", hi:"archipelagos",
@@ -5988,14 +6238,23 @@ function makeSlider(o){
   let held = -1, focused = 0;
 
   const frac = x => (x-o.min)/((o.max-o.min)||1);
+  /* The knobs are free to pass each other; what a knob IS is the thumb the
+     finger took hold of, and it stays that thumb wherever it is dragged.
+     Blocking the crossing meant a drag that reached the other knob simply
+     stopped, which feels like the control is broken rather than like a rule
+     being enforced. Order is a property of the VALUES, not of the thumbs, so
+     it is imposed here, once, on the way out — every client is handed a
+     [minimum, maximum] pair and none of them needs to know. */
+  const sorted = () => v.length > 1 && v[0] > v[1] ? [v[1], v[0]] : v.slice();
   function draw(){
     knobs.forEach((k,i)=>{ k.style.left = (frac(v[i])*100)+"%"; });
-    const a = two ? frac(v[0]) : 0, b = two ? frac(v[1]) : frac(v[0]);
+    const s = sorted();
+    const a = two ? frac(s[0]) : 0, b = two ? frac(s[1]) : frac(v[0]);
     fill.style.left  = (a*100)+"%";
     fill.style.width = Math.max(0,(b-a)*100)+"%";
     if(!two){ el.setAttribute("aria-valuemin",o.min); el.setAttribute("aria-valuemax",o.max);
               el.setAttribute("aria-valuenow",v[0]); }
-    else el.setAttribute("aria-label",(o.label||"")+": "+v[0]+" to "+v[1]);
+    else el.setAttribute("aria-label",(o.label||"")+": "+s[0]+" to "+s[1]);
   }
   /* the track's width IS the knob travel, so this needs no inset correction */
   function tAt(x){
@@ -6006,20 +6265,16 @@ function makeSlider(o){
     if(!two) return 0;
     const r = track.getBoundingClientRect();
     const p = [0,1].map(i => r.left + frac(v[i])*r.width);
-    /* With both knobs on the same spot the nearer one is a coin toss and one
-       end of the range becomes unreachable for good. Which side the finger is
-       on decides it instead, so a range collapsed to a point can always be
-       opened again. */
+    /* With both knobs on the same spot the nearer one is a coin toss. Which
+       side the finger is on decides it instead, so a range collapsed to a
+       point opens in the direction it was pulled rather than at random. */
     if(Math.abs(Math.abs(x-p[0]) - Math.abs(x-p[1])) < 0.5) return x < p[0] ? 0 : 1;
     return Math.abs(x-p[0]) <= Math.abs(x-p[1]) ? 0 : 1;
   }
   function set(i, raw){
-    let nv = quantise(raw, o.min, o.max, o.step);
-    /* the left knob is always the minimum: push the other along rather than
-       letting them cross, or minimum and maximum swap meaning silently */
-    if(two) nv = i===0 ? Math.min(nv, v[1]) : Math.max(nv, v[0]);
+    const nv = quantise(raw, o.min, o.max, o.step);
     if(nv === v[i]) return;
-    v[i] = nv; draw(); o.onInput(v.slice(), i);
+    v[i] = nv; draw(); o.onInput(sorted(), i);
   }
   const toValue = x => o.min + tAt(x)*(o.max-o.min);
 
