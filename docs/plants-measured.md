@@ -407,6 +407,73 @@ rolling cursor and connected components are relabelled every `sweep` ticks, so a
 running mean per root updates on machinery that is already paid for. Do not add
 a scan.
 
+## Sunlight as a pace: no effect where it was cheap, fatal where it was not
+
+Axial tilt made the sun a real variable (`docs/world-controls.md`), so the
+obvious next thing was Don's: give the genome the sun angle as an input, and
+scale how fast a node lives by how much sun it stands in — floored above zero so
+growth in the dark is slowed and never stopped, and with the **same** factor on
+maturity and on lifespan, so a dark plant is slow rather than small and gets
+through the same number of children in a longer life.
+
+Built as `sunfx` (strength, 0 is off) and `sunlo` (the floor), plus a `sun`
+input. Crossed with tilt, four seeds, 45,000 ticks:
+
+| | score | live | bodies | mean body | evenness |
+|---|---|---|---|---|---|
+| off, tilt 24 | 0.811 | 111,601 | 1,219 | 94.2 | 0.948 |
+| **on, tilt 24** | **0.812** | 108,733 | 1,095 | 101.6 | 0.941 |
+| off, tilt 90 | 0.772 | 103,394 | 1,320 | 82.6 | 0.829 |
+| **on, tilt 90** | **dead** | **0** | **0** | — | — |
+
+**At the default tilt it does nothing at all** — 0.812 against 0.811, against a
+seed sd of 0.015 — and the reason is worth keeping. At 24° insolation is
+dominated by latitude, and `lat` is *already* an input. The sun input is very
+nearly a linear function of something the genome could read anyway, so it
+carries no information. Sun and latitude only come apart at high tilt, where the
+poles are the warmest ground on the planet — and that is precisely where the
+pace scaling killed the world.
+
+**And the extinction is the `minfrag`/`settle` cliff for the third time.** With
+`sunlo` at 0.15 a node in the dark takes 1/0.15 as long to mature: up to 960
+ticks for its first bud, against the 1,000 ticks of grace a young body gets to
+reach 65 nodes before the fragment cull applies. No founder can make it, every
+new body is culled, and the planet ratchets to zero. This document already
+records that cliff under dispersal, and `formula-design.md` records it again
+under `settle` — **anything that slows growth walks into it**, and that is now
+the pattern rather than the incident.
+
+Two ways out, tested separately, and neither is good:
+
+| | score | bodies | mean body | note |
+|---|---|---|---|---|
+| grace stretched to 6,700 | 0.585 | **17,235** | **6.7** | survives, shatters |
+| floor raised to 0.40 | gated | 1,142 | 90.8 | 3 seeds of 4 |
+| floor raised to 0.60 | gated | 1,282 | 87.9 | 3 seeds of 4 |
+
+Stretching the grace by the same factor the maturity got trades extinction for
+debris: at 6,700 ticks the cull barely applies, so every two-node scrap
+survives and the mean plant falls from 82.6 to 6.7. Raising the floor gets three
+seeds of four through and seed 31337 still dies — `score.js` gates the whole
+configuration for it rather than averaging the corpse in, which is the behaviour
+it exists for.
+
+**Verdict: the input stays, the pace scaling does not.** `sunfx` defaults to 0.
+The `sun` input costs nothing measurable and is the thing a lineage needs before
+phenology can evolve at all; the scaling is a liability that buys nothing where
+it is safe and kills the world where it would matter.
+
+**What this buys the energy model.** Don's better proposal — leaves accumulate
+energy, a bud costs energy, and a bud attempt costs a unit of life, so "slow
+plants live longer" emerges instead of being written down — walks into exactly
+the same cliff, because it too slows growth in the dark. The measurement above
+says what it needs in order not to: **count a young body's grace in bud
+attempts, not in ticks.** That is the same change of currency the proposal
+already makes for lifespan, applied to the one other place that measures a
+plant's life in wall-clock ticks. A slow plant in the dark then gets the same
+number of chances to prove itself, taken over more time — which is what "slowed
+and never stopped" was supposed to mean in the first place.
+
 ## Moving plants — measured, and it is three orders of magnitude out
 
 Don asked for heading and speed outputs, with nodes moving across the surface,

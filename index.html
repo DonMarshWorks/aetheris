@@ -600,6 +600,16 @@ const PARAMS = {
                     // them read as structure. Coverage is bought with the leaf
                     // size range, not with opacity.
   mature:  90,      // reference ticks from bud to maturity, scaled by pace
+  sunfx:   0,       // how strongly sunlight scales how fast a node lives. 0 is
+                    // off and is what the piece shipped with; 1 means a node in
+                    // full dark matures and dies `sunlo` times as fast as one
+                    // at the sub-solar latitude. Both are scaled by the SAME
+                    // factor deliberately, so a dark plant is slow rather than
+                    // small — it gets through the same number of children in a
+                    // longer life. Off by default until it is measured.
+  sunlo:   0.15,    // the floor under that factor, so growth in the dark is
+                    // slowed and never stopped. It also sizes the maturity
+                    // queue, so a very low value costs memory.
   life:    1500,    // ticks per unit of fit; a pure specialist at home gets 5x
   seafit:  1.00,    // a flat multiplier on how habitable the sea is at all.
                     // 0 empties the ocean entirely and leaves the ecology to
@@ -1480,10 +1490,46 @@ const ARITY  = [2,2,2,2,2,2,1,1,1,1,2,3];
    genome need not discover units. `one` is the constant every linear-GP needs
    to build an offset from. */
 const IN_ONE=0, IN_AGE=1, IN_DEPTH=2, IN_FIT=3, IN_ENV=4, IN_LAT=9,
-      IN_USED=10, IN_PCAP=11, IN_CROWD=12, IN_SLOT=13;
-const NIN = 14;
+      IN_USED=10, IN_PCAP=11, IN_CROWD=12, IN_SLOT=13, IN_SUN=14;
+const NIN = 15;
 const INNAME = ["one","age","depth","fit","sea","ice","desert","grass","forest",
-                "lat","used","pcap","crowd","slot"];
+                "lat","used","pcap","crowd","slot","sun"];
+
+/* ---- sunlight ----
+   How much sun a node is standing in, which is `cos(lat − solarLat)` clamped at
+   zero: one at the sub-solar latitude, zero at the terminator and beyond. It is
+   a DAILY MEAN and not an instantaneous elevation, and that is deliberate — the
+   daily spin advances on wall-clock time and is never touched by runWorld, so
+   feeding it here would make the ecology depend on frame timing and on how long
+   a tab had been open. Seed plus parameters must go on determining a world
+   completely. The climate model above is zonal for the same reason and has
+   already made the same choice.
+
+   `lat` is not stored; NPY is sin(lat), so the cosine of the difference comes
+   out of an angle-subtraction identity with no trigonometry per node — the two
+   solar terms are computed once a tick. */
+let sunCos = 1, sunSin = 0;
+function updateSunTerms(){ sunCos = Math.cos(S.solarLat); sunSin = Math.sin(S.solarLat); }
+function sunAt(i){
+  const sy = NPY[i];
+  const cy = Math.sqrt(Math.max(0, 1 - sy*sy));
+  const e = cy*sunCos + sy*sunSin;               // cos(lat − solarLat)
+  return e > 0 ? e : 0;
+}
+/* What that sunlight buys, as a multiplier on how fast a node lives. Floored
+   well above zero so a plant in the dark is slowed and never stopped, and mixed
+   against 1 by `sunfx` so the whole mechanism has an off switch to measure it
+   against. The SAME factor scales maturity and lifespan, which is the point: a
+   node in darkness takes proportionally longer to mature and lives
+   proportionally longer, so the number of children it gets through in a
+   lifetime is unchanged and a dark plant still reaches a reasonable size. It
+   grows slowly; it is not punished. */
+function sunPace(i){
+  if(PARAMS.sunfx <= 0) return 1;
+  const lo = Math.min(1, Math.max(0.02, PARAMS.sunlo));
+  const e = Math.max(lo, sunAt(i));
+  return 1 + PARAMS.sunfx*(e - 1);
+}
 
 const matBase = Math.max(1, PARAMS.mature);                // reference maturity
 const KIDMAX  = Math.max(1, Math.min(8, PARAMS.kids|0));   // children a node may hold
@@ -1562,6 +1608,11 @@ function fillInputs(i){
      bias it, or ignore it, and nothing is imposed. */
   V[IN_SLOT ] = NKID[i] - (NCAP[i]-1)*0.5;
   V[IN_CROWD] = CCOUNT[NCC[i]]*(1/CROWD_REF) - 1;
+  /* the sun where this node stands, spread over [-1,1] like everything else so
+     the genome need not discover units. It varies with the season and with
+     latitude, and at high axial tilt those two stop agreeing — which is the
+     condition under which phenology has anything to evolve against. */
+  V[IN_SUN  ] = 2*sunAt(i) - 1;
 }
 function runProgram(i){
   fillInputs(i);
@@ -1716,7 +1767,12 @@ function pointMutate(i){
    and drawing twice as often as it should. */
 const tag  = i => i + (NGEN[i]&1023)*PMAX;
 const same = (v,i) => (NGEN[i]&1023)===((v/PMAX)|0);
-const MATB = Math.max(8, Math.ceil(matBase*1.6)+2);
+/* Sized for the SLOWEST maturity any node can be given, which sunlight can
+   stretch by 1/sunlo. Too short and the ring wraps: a node due in more ticks
+   than the queue is long is spliced in at a slot that comes round early, and it
+   buds before it has matured. */
+const MATB = Math.max(8, Math.ceil(matBase*1.6/Math.min(1, Math.max(0.02,
+  PARAMS.sunfx > 0 ? PARAMS.sunlo : 1)))+2);
 const PENDQ = []; for(let n=0;n<MATB;n++) PENDQ.push([]);
 function joinWhenMature(i){ PENDQ[(ptick+NMAT[i])%MATB].push(tag(i)); }
 
@@ -2617,8 +2673,13 @@ function readBirthOutputs(i){
      and the nursery, and it is the only thing that gives a plant any notion of
      investment. The old scalar pace had the cost and never the benefit, which
      is why selection could only ever delete it. */
-  NMAT[i]  = Math.max(1, Math.min(MATB-1, (matBase*(1.60-1.20*pace))|0));
-  NLIFE[i] = Math.max(PARAMS.hostile|0, (PARAMS.life*capFit(NFIT[i])*(1.40-0.80*pace))|0);
+  /* Sunlight divides both, so a node in the dark matures slowly and lives long
+     by exactly the same factor. MATB is sized for the slowest possible
+     maturity, or the queue would wrap and a dark node would be admitted early
+     — the bug the generation tag already exists to catch. */
+  const sp = 1/sunPace(i);
+  NMAT[i]  = Math.max(1, Math.min(MATB-1, (matBase*(1.60-1.20*pace)*sp)|0));
+  NLIFE[i] = Math.max(PARAMS.hostile|0, (PARAMS.life*capFit(NFIT[i])*(1.40-0.80*pace)*sp)|0);
   recordBirth(cap, pace, Math.tanh(OUTV[O_VIG]*0.25));
 }
 
@@ -2785,7 +2846,10 @@ function reap(){
       const o=i*G, f=refreshEnv(i);
       const crowd = PARAMS.kin>0 ? kinPressure(i) : 0;
       const freq  = PARAMS.rare>0 ? commonness(o) : 0;
-      const raw = PARAMS.life*capFit(f)*(1.40-0.80*NPACE[i])*(1-PARAMS.kin*crowd)*(1-PARAMS.rare*freq);
+      /* the same sunlight factor the birth pass used, re-read rather than
+         stored: the season has moved since, and a node whose winter is
+         arriving should be having its life re-estimated for the winter */
+      const raw = PARAMS.life*capFit(f)*(1.40-0.80*NPACE[i])*(1-PARAMS.kin*crowd)*(1-PARAMS.rare*freq)/sunPace(i);
       const nl = Math.max(PARAMS.hostile|0, raw|0);
       dbgHits++; dbgLife+=nl;
       if(!isFinite(f)) dbgNaN++; else { dbgFit+=f; dbgFitOk++; dbgRaw+=raw; if(raw < (PARAMS.hostile|0)) dbgFloor++; }
@@ -3139,6 +3203,9 @@ function pruneFragments(){
    anything chosen. */
 function plantsStep(){
   if(!plantsOn) return;
+  /* the season, once per step rather than per node — solarLat only moves when
+     the climate does, and growPlants() runs without the climate at all */
+  updateSunTerms();
   ptick++;
   admitMature();
   reap();
@@ -3230,6 +3297,7 @@ function plantsStep(){
 
 function plantsSeed(){
   if(!plantsOn) return;
+  updateSunTerms();
   /* Uniformly random genomes normalise to near-generalists, and a world of
      identical generalists gives selection nothing to work on. Tip each seed
      toward one of the five so there is variation on the board at tick zero. */

@@ -1,0 +1,20 @@
+{
+ "note": "sunfx=1 at tilt 90 went extinct on all four seeds. The suspect is not the mechanism but a documented interaction: slowing maturity by 1/sunlo means a founder in the dark takes up to 960 ticks to mature its first node, and the fragment cull gives a young body only `settle` = 1000 ticks to reach `minfrag` = 65. That is the minfrag/settle extinction cliff, which has now appeared three times on this branch in three different places -- anything that slows growth walks into it. Two ways out, tested separately: give the grace period the same 1/sunlo stretch the maturity got, or raise the floor so the dark is less dark. If neither revives it the mechanism is dead on its own terms.",
+ "ticks": 45000,
+ "checkpoints": [
+  20000,
+  45000
+ ],
+ "defaultEcorate": 16,
+ "seeds": [
+  7,
+  31337,
+  424242,
+  999
+ ],
+ "configs": [
+  { "tag": "t90-settle6700", "params": { "sunfx": 1, "tilt": 90, "sunlo": 0.15, "settle": 6700 } },
+  { "tag": "t90-lo40",       "params": { "sunfx": 1, "tilt": 90, "sunlo": 0.40 } },
+  { "tag": "t90-lo60",       "params": { "sunfx": 1, "tilt": 90, "sunlo": 0.60 } }
+ ]
+}

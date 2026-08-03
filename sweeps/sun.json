@@ -1,0 +1,21 @@
+{
+ "note": "Does insolation-driven pace do anything? sunfx scales how fast a node lives by how much sun it stands in, flooring at sunlo so growth in the dark is slowed and never stopped, and applying the SAME factor to maturity and to lifespan so a dark plant is slow rather than small. Crossed with axial tilt, because at 24 degrees the seasonal term is small and at 90 the poles are the warmest ground on the planet and the ice belt is at the equator -- if this mechanism is worth anything it should be worth most there. One change at a time: the allocation rule is untouched, growth is still drawn by sampling the frontier.",
+ "ticks": 45000,
+ "checkpoints": [
+  20000,
+  45000
+ ],
+ "defaultEcorate": 16,
+ "seeds": [
+  7,
+  31337,
+  424242,
+  999
+ ],
+ "configs": [
+  { "tag": "off-t24",  "params": { "sunfx": 0, "tilt": 24 } },
+  { "tag": "on-t24",   "params": { "sunfx": 1, "tilt": 24 } },
+  { "tag": "off-t90",  "params": { "sunfx": 0, "tilt": 90 } },
+  { "tag": "on-t90",   "params": { "sunfx": 1, "tilt": 90 } }
+ ]
+}
