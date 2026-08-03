@@ -144,7 +144,10 @@
     display:grid;gap:11px;align-content:start;
     grid-template-columns:repeat(auto-fill,minmax(min(100%,286px),1fr));
     padding:2px 4px 26px 0}
-  .cgraph{width:100%;height:74px;display:block;margin-top:2px}
+  /* Tall enough that the size of a change is legible and not just its sign.
+     A card is about 286px wide, so this is roughly 2:1 — a trend read at 74px
+     was mostly reading the noise band. */
+  .cgraph{width:100%;height:136px;display:block;margin-top:2px}
 
   .speeds{pointer-events:auto;display:flex;gap:2px;justify-content:flex-end}
   /* the same scrim as the round controls, and for the same reason — these sit
@@ -660,8 +663,11 @@ const PARAMS = {
      so a node gets a chance roughly every 33 ticks. `egain` is set so full sun
      funds a bud in rather less than that and full sun is therefore not
      limiting; half sun misses every other chance and deep shade most of them. */
-  energy:  0,       // master switch. 0 = off, and off is what ships until this
-                    // has been measured over a long run.
+  energy:  1,       // master switch. On since it was measured: at the default
+                    // tilt it is worth two seed sds (0.831 against 0.813) at no
+                    // cost in body size, and nearly all of the gain is
+                    // turnover -- 0.167 to 0.204 -- because a leaf that must
+                    // save before it can grow keeps the frontier churning.
   egain:   0.035,   // energy a node gathers per tick at full sun
   ebud:    1.0,     // energy a bud attempt costs
   ecap:    3.0,     // most a node may bank, in buds
@@ -1485,6 +1491,15 @@ const FADE = 52;                            // ticks a dead node takes to go
 const FADEIN  = Math.max(0, PARAMS.fadein|0);
 const FADEIN0 = Math.min(1, Math.max(0, PARAMS.fadein0));
 const WOODFADE = Math.max(0, PARAMS.woodfade|0);
+/* How far a piece of wood is into its going-out: 0 until the last FADE ticks
+   of its rot clock, then up to 1. Read by the wood itself and by every child
+   still drawing a branch to it, so the piece and its connections leave
+   together. Wood's NLIFE is written once, at the moment it becomes wood, and
+   the reaper skips the re-estimate for it — so this expression stays true. */
+function rotFade(i){
+  const d = (ptick-NBORN[i]) - (NLIFE[i]-FADE);
+  return d<=0 ? 0 : (d>=FADE ? 1 : d/FADE);
+}
 /* a few discrete node forms, so lineages are distinguishable at a glance */
 /* the four node forms, as fractions of the leaf-size range */
 const FORMSZ  = [0.00, 0.34, 0.68, 1.00];
@@ -1507,6 +1522,15 @@ const NE=new Float32Array(PMAX), NELAST=new Int32Array(PMAX), NATT=new Int32Arra
    from NLIFE and `rot`, exactly, but only while `rot` has not been touched
    since — and `rot` is a live parameter. */
 const NWOODAT=new Int32Array(PMAX);
+/* The cover a node's branch was last DRAWN with. The ghost reads it rather
+   than recomputing it, and that distinction is the whole fix: at the moment a
+   node dies its parent may have been freed since the last frame, and the
+   parent's state then says nothing about what the child's branch looked like
+   when anybody last saw it. A body culled whole had its branches at full
+   strength on its last frame and they should fade; a child whose parent rotted
+   away long ago has had no branch for some time and must not grow one to fade.
+   Both fall out of recording what was painted. */
+const NSTEMA=new Float32Array(PMAX);
 const PFRONT = new Int32Array(PMAX), PFREE = new Int32Array(PMAX);
 let nodeHigh = 0, liveN = 0, frontN = 0, freeN = 0;
 let plantDebt = 0;
@@ -2542,7 +2566,7 @@ function cellAt(x,y,z){
    been blended with its neighbours — so the sheet is rebuilt from the live set
    each tick instead, on the GPU, where fifty thousand quads cost nothing.
    Everything the look depends on becomes a per-node attribute for free. */
-const GHOSTN = 24576, GH_F = 13;     // the fading dead, drawn but not simulated
+const GHOSTN = 24576, GH_F = 15;     // the fading dead, drawn but not simulated
 const GC = new Float32Array(3);
 const INST = 9;                                  // floats per node
 /* the markers below are extra instances beyond one per node, and this is also
@@ -2574,10 +2598,83 @@ function orderByBody(){
   for(let i=0;i<nodeHigh;i++) if(NLIVE[i]!==0) ORDER[BOFF[PROOT[i]]++]=i;
 }
 
+/* ── what a node looks like, in one place ──────────────────────────────
+   Colour and cover, for the living and for the dying alike. It is here as one
+   function because it kept being two: the paint computed a node's appearance
+   and `ghost()` recomputed it, and every term the second copy failed to
+   reproduce was a jump on the frame of the death. Three of them shipped in a
+   row — the lift young tips are given (44 of 255 on red, so a tip that died
+   before it matured dropped that far in one frame), the heartwood drain (a
+   node already grey leapt back to bright green on the frame it was released),
+   and the selection red (a held plant's dead went white). Each was found by
+   eye, days apart, and each was the same mistake.
+
+   A ghost is now literally the last thing the node looked like, because it is
+   the same function that produced it. `out` is [r, g, b, cover]. */
+const PAINT = new Float32Array(4);
+function nodePaint(i, out){
+  const wood = NLIVE[i]===2;
+  const grow = wood ? 1 : Math.min(1, (ptick-NBORN[i])/Math.max(1,NMAT[i]));
+  const young = 1-grow;
+  geneColour(i*G, NPACE[i], GC);
+  let r=GC[0]+young*44, g=GC[1]+young*40, b=GC[2]+young*34, cover;
+
+  if(wood){
+    /* Dead wood is not black. Black would swamp hue, which is the channel
+       carrying niche, and half the standing structure would go to it — the
+       planet would read as scorched. Keep the lineage's hue, take the colour
+       and the value out of it, and let more ground show through.
+       Drained over WOODFADE ticks rather than on the tick it turns: dying into
+       wood is an event in the life of a plant and should look like one
+       happening, not one having happened. */
+    const wf = WOODFADE > 0 ? Math.min(1, (ptick-NWOODAT[i])/WOODFADE) : 1;
+    const lum=0.30*r+0.59*g+0.11*b;
+    r+=((r*0.24+lum*0.76)*0.52-r)*wf;
+    g+=((g*0.24+lum*0.76)*0.52-g)*wf;
+    b+=((b*0.24+lum*0.76)*0.52-b)*wf;
+    /* and leaves over the rot ramp, on the same curve the ghosts use, so a
+       piece of wood going and a leaf going look like the same kind of event */
+    const rf = rotFade(i);
+    cover = (1-0.10*wf)*(1-rf)*(1-rf);
+  } else cover = 1;
+  /* Arriving, turning to wood and going are three independent things that can
+     be true of a node at once, so they MULTIPLY. Written as a branch instead,
+     the wood arm discarded the fade-in and a node that became heartwood before
+     it had finished arriving jumped from nothing to full cover in one frame —
+     which is a flash, and is what the seam probe caught. */
+  if(FADEIN>0)
+    cover *= FADEIN0+(1-FADEIN0)*Math.min(1,(ptick-NBORN[i])/FADEIN);
+
+  /* The selected body, shown whole — and applied AFTER the wood is drained,
+     or the highlight is drained with it.
+   *
+   * That mattered more than it sounds. A plant here is held together by
+   * heartwood: a node that dies still holding children stops living but stays
+   * in the tree as structure, for up to `rot` ticks before the connection
+   * finally goes. So a body is routinely two or three patches of living growth
+   * strung on a thread of dead wood — genuinely one plant, and the highlight
+   * was right to take all of it. But reddening the wood before it was darkened
+   * left the thread almost black against open water, so the answer looked like
+   * a bug: two separate plants both lit up. Red the wood after, a little
+   * deeper than the living growth, and the reason they are one plant is
+   * visible in the same picture as the claim.
+   *
+   * Red because it is the one hue this palette never makes, for the same
+   * reason the size rings are magenta. Value is kept, so tips still read
+   * bright against trunk. */
+  if(selId>0 && NSEL[i]===selId && SELFADE>0){
+    const f=SELFADE, lum=(0.30*r+0.59*g+0.11*b)/255;
+    const tr = wood ? 70+90*lum : 90+165*lum;
+    const tg = wood ? 16*lum    : 26*lum;
+    const tb = wood ? 20*lum    : 32*lum;
+    r+=(tr-r)*f; g+=(tg-g)*f; b+=(tb-b)*f;
+  }
+  out[0]=r; out[1]=g; out[2]=b; out[3]=cover;
+}
+
 /* one node of a plant: pass 0 lays its branch, pass 1 its foliage */
 function emitNode(i, pass, w){
   if(NLIVE[i]===0) return w;
-    const wood = NLIVE[i]===2;
     const x=NPX[i], y=NPY[i], z=NPZ[i];
     const lat=Math.asin(Math.max(-1,Math.min(1,y))), lon=Math.atan2(z,x);
     const cl=Math.max(Math.cos(lat),1e-3);
@@ -2586,13 +2683,6 @@ function emitNode(i, pass, w){
     const he=-hx*sn + hz*cs;
     const hn=-hx*sl*cs + hy*cl - hz*sl*sn;
 
-    /* A branch reads as a branch because it tapers. Width comes from age, so
-       the old wood near the root is broad and the growing tips are fine —
-       which is also the frontier, and also what is about to die. One variable
-       tells all three. */
-    const age=ptick-NBORN[i];
-    const grow=wood ? 1 : Math.min(1, age/Math.max(1,NMAT[i]));
-    const go=i*G;
     /* The footprint scales with the step that actually placed this node, so
        the picture stops lying about what is claimed: a long-stepping lineage
        draws further apart because it *is* further apart, and the loose body it
@@ -2608,60 +2698,14 @@ function emitNode(i, pass, w){
 
     /* colour: the form's own, drifted by the sector's inherited tint and
        lifted at the young tips, so expansion reads as motion */
-    geneColour(go, NPACE[i], GC);
-    const young=1-grow;
-    let r=GC[0]+young*44, g=GC[1]+young*40, b=GC[2]+young*34;
-
-    /* Dead wood is not black. Black would swamp hue, which is the channel
-       carrying niche, and half the standing structure would go to it — the
-       planet would read as scorched. Keep the lineage's hue, take the colour
-       and the value out of it, and let more ground show through: one value
-       ramp from bright new tip to grey wood, so growth and die-back both read
-       as movement. */
-    /* Dying into wood is an event in the life of a plant, so it should look
-       like one happening rather than one having happened. Drained over
-       WOODFADE ticks instead of on the tick it turns: a node that was bright
-       living tissue does not become grey structure between two frames. The
-       ramp is the same shape the ghosts use going out and the buds use coming
-       in, and it costs one stored tick. */
-    let wf = 1;
-    if(wood){
-      wf = WOODFADE > 0 ? Math.min(1, (ptick-NWOODAT[i])/WOODFADE) : 1;
-      const lum=0.30*r+0.59*g+0.11*b;
-      const tr=(r*0.24+lum*0.76)*0.52, tg=(g*0.24+lum*0.76)*0.52, tb=(b*0.24+lum*0.76)*0.52;
-      r+=(tr-r)*wf; g+=(tg-g)*wf; b+=(tb-b)*wf;
-    }
-
-    /* The selected body, shown whole — and applied AFTER the wood is drained,
-       or the highlight is drained with it.
-     *
-     * That mattered more than it sounds. A plant here is held together by
-     * heartwood: a node that dies still holding children stops living but
-     * stays in the tree as structure, for up to `rot` ticks before the
-     * connection finally goes. So a body is routinely two or three patches of
-     * living growth strung on a thread of dead wood — genuinely one plant,
-     * and the highlight was right to take all of it. But reddening the wood
-     * before it was darkened left the thread almost black against open water,
-     * so the answer looked like a bug: two separate plants both lit up. Red
-     * the wood after, a little deeper than the living growth, and the reason
-     * they are one plant is visible in the same picture as the claim.
-     *
-     * Red because it is the one hue this palette never makes, for the same
-     * reason the size rings are magenta. Value is kept, so tips still read
-     * bright against trunk. */
-    if(selId>0 && NSEL[i]===selId && SELFADE>0){
-      const f=SELFADE, lum=(0.30*r+0.59*g+0.11*b)/255;
-      const tr = wood ? 70+90*lum : 90+165*lum;
-      const tg = wood ? 16*lum    : 26*lum;
-      const tb = wood ? 20*lum    : 32*lum;
-      r+=(tr-r)*f; g+=(tg-g)*f; b+=(tb-b)*f;
-    }
+    nodePaint(i, PAINT);
+    const r=PAINT[0], g=PAINT[1], b=PAINT[2];
 
     const rot=Math.atan2(hn,he);
-    /* Solid, once it has arrived. Growth and die-back are already carried by
-       colour — a young tip is lifted toward white, wood is drained toward grey
-       — so fading a node for its whole youth was saying the same thing twice
-       and costing every leaf its edge.
+    /* Cover, from the same function that decided the colour. Growth and
+       die-back are carried by colour as well — a young tip is lifted toward
+       white, wood is drained toward grey — so fading a node for its whole
+       youth was saying the same thing twice and costing every leaf its edge.
      *
      * But arriving at full strength in one frame made the whole planet
      * sparkle: several hundred buds a second each appearing from nothing, and
@@ -2672,10 +2716,7 @@ function emitNode(i, pass, w){
      * real seconds and each owes ECORATE ecology steps, so the ecology runs at
      * about 190 ticks a second whatever the time-lapse is set to, and `fadein`
      * is therefore in real time as well as in ticks. */
-    const fin = FADEIN > 0 ? Math.min(1, age/FADEIN) : 1;
-    /* wood's own cover arrives over the same ramp as its colour, or the leaf
-       would thin abruptly while the hue was still on its way */
-    const al=PARAMS.alpha*(wood ? 1-0.10*wf : FADEIN0+(1-FADEIN0)*fin);
+    const al=PARAMS.alpha*PAINT[3];
 
     /* the branch back to the parent: an ellipse lying along the step, centred
        between the two, so a body reads as connected structure rather than as a
@@ -2691,12 +2732,22 @@ function emitNode(i, pass, w){
       IBUF[w+2]=NSTEP[i]*0.56;
       IBUF[w+3]=PARAMS.stem*NSTEP[i];
       IBUF[w+4]=rot;
+      /* A branch belongs to the child and is drawn in the child's colour, so
+         when its parent goes the branch goes with it — and freeing the parent
+         used to take the whole fan of them in one frame. The child fades its
+         own branch over the parent's rot instead, on the same curve, so the
+         piece and everything hanging off it leave together. */
+      const parRot = NLIVE[par]===2 ? rotFade(par) : 0;
+      NSTEMA[i] = (1-parRot)*(1-parRot);
+      const alStem = al*NSTEMA[i];
       IBUF[w+5]=Math.min(255,r*PARAMS.stemdark)/255;
       IBUF[w+6]=Math.min(255,g*PARAMS.stemdark)/255;
       IBUF[w+7]=Math.min(255,b*PARAMS.stemdark)/255;
-      IBUF[w+8]=al;
+      IBUF[w+8]=alStem;
       w+=INST;
     }
+
+    else if(pass===0) NSTEMA[i]=0;
 
     if(pass===0) return w;
     IBUF[w  ]=(lon+Math.PI)/(Math.PI*2);
@@ -2762,7 +2813,9 @@ function buildInstances(){
     const gr=Math.min(255,(GHOST[g+3]+(lum-GHOST[g+3])*t*0.7)*k)/255;
     const gg=Math.min(255,(GHOST[g+4]+(lum-GHOST[g+4])*t*0.7)*k)/255;
     const gb=Math.min(255,(GHOST[g+5]+(lum-GHOST[g+5])*t*0.7)*k)/255;
-    const ga=PARAMS.alpha*0.62*(1.0-t)*(1.0-t);
+    /* starts at exactly the cover the node had when it died and falls from
+       there, so nothing steps on the frame of the death itself */
+    const ga=PARAMS.alpha*GHOST[g+13]*(1.0-t)*(1.0-t);
     const gw=GHOST[g+2]*(1.0-0.25*t);
     /* the branch goes at the same moment and at the same rate: fading the node
        while its branch had already vanished dissolved a plant in two stages */
@@ -2772,7 +2825,7 @@ function buildInstances(){
       IBUF[w+2]=GHOST[g+11]*0.56; IBUF[w+3]=PARAMS.stem*GHOST[g+11];
       IBUF[w+4]=GHOST[g+8];
       IBUF[w+5]=gr*d; IBUF[w+6]=gg*d; IBUF[w+7]=gb*d;
-      IBUF[w+8]=ga;
+      IBUF[w+8]=ga*GHOST[g+14];
       w+=INST;
     }
     IBUF[w  ]=GHOST[g]; IBUF[w+1]=GHOST[g+1];
@@ -2876,26 +2929,56 @@ function ghost(i){
   const sn=Math.sin(lon), cs=Math.cos(lon);
   const he=-NHX[i]*sn + NHZ[i]*cs;
   const hn=-NHX[i]*sl*cs + NHY[i]*cl - NHZ[i]*sl*sn;
-  geneColour(i*G, NPACE[i], GC);
+  /* A ghost has to start where the living node stopped, or the death is two
+     events: a jump, and then a fade. It was the gene colour that was stored
+     here, which is not what was on screen — a node that had already drained to
+     heartwood leapt back to bright green on the frame it was released, and
+     every death dropped its cover by nearly two fifths in one frame besides.
+     So the drawn colour is captured, drain and all, and the cover it was
+     carrying with it. The fade then continues from exactly there, which is what
+     makes the colour change part of the dying rather than a substitution before
+     it. */
+  /* Literally the last thing this node looked like: the same function the
+     paint uses, so a ghost starts exactly where the living node stopped and
+     the death is one event rather than a jump followed by a fade. */
+  nodePaint(i, PAINT);
+  const cr=PAINT[0], cg=PAINT[1], cb=PAINT[2], startA=PAINT[3];
   const form=NFORM[i];
   GHOST[g  ]=(lon+Math.PI)/(Math.PI*2);
   GHOST[g+1]=(Math.PI*0.5-lat)/Math.PI;
   GHOST[g+2]=(PARAMS.fatlo+(PARAMS.fathi-PARAMS.fatlo)*FORMSZ[form&3])*NSTEP[i];
-  GHOST[g+3]=GC[0]; GHOST[g+4]=GC[1]; GHOST[g+5]=GC[2];
+  GHOST[g+3]=cr; GHOST[g+4]=cg; GHOST[g+5]=cb;
+  GHOST[g+13]=startA;
   GHOST[g+6]=ptick;
   GHOST[g+7]=FORMASP[(form>>2)&3];
   GHOST[g+8]=Math.atan2(hn,he);
-  /* the branch goes with it: fading the node while its branch had already
-     vanished left a plant dissolving in two stages */
+  /* The branch goes with it: fading the node while its branch had already
+     vanished left a plant dissolving in two stages.
+     Carried even when the parent is ALREADY dead, which is the case this used
+     to refuse. Culling a body frees its nodes in index order and a parent is
+     nearly always the lower index, so by the time a child was ghosted its
+     parent had gone and the child's branch was dropped outright — measured at
+     83 of 4,909 deaths, and every one of them a line vanishing in a single
+     frame while the leaf beside it faded. Nothing is read from the parent
+     except its position, and that is read here and now and stored, so a slot
+     reused a moment later cannot spoil it. */
   const par=NPAR[i];
-  if(par>=0 && NLIVE[par]!==0 && NGEN[par]===NPGEN[i]){
+  if(par>=0 && NGEN[par]===NPGEN[i]){
     let mx=(x+NPX[par])*0.5, my=(y+NPY[par])*0.5, mz=(z+NPZ[par])*0.5;
     const ml=1/Math.hypot(mx,my,mz); mx*=ml; my*=ml; mz*=ml;
     GHOST[g+9]=(Math.atan2(mz,mx)+Math.PI)/(Math.PI*2);
     GHOST[g+10]=(Math.PI*0.5-Math.asin(Math.max(-1,Math.min(1,my))))/Math.PI;
-    GHOST[g+11]=NSTEP[i];
-  } else GHOST[g+11]=0;
-  GHOST[g+12]=0;
+    /* how faded the branch already was, taken from what the paint last drew
+       rather than recomputed from a parent that may have gone since */
+    GHOST[g+14]=NSTEMA[i];
+    GHOST[g+11]=NSTEMA[i]>0 ? NSTEP[i] : 0;
+  } else { GHOST[g+11]=0; GHOST[g+14]=0; }
+  /* the node this came from, tagged with its generation, so a harness can line
+     the last frame alive up against the first frame dead — and can tell when a
+     freed slot has been handed to a newborn in between, which is the same
+     an-array-index-is-not-an-identity trap this project has already been
+     caught by once in the frontier. */
+  GHOST[g+12]=tag(i);
 }
 
 function addNode(x,y,z,hx,hy,hz,src,par,amt,stepUsed){
@@ -3001,7 +3084,16 @@ function killNode(i){
        living out. Real crust sheds. Give it its own clock: when it rots
        through, whatever it was holding becomes a body in its own right — so
        decay, not ageing, is what fragments a plant, at a rate we choose. */
-    NLIFE[i] = (ptick - NBORN[i]) + (PARAMS.rot|0);
+    /* FADE longer than the rot clock, and the extra is a going-out. Wood used
+       to be freed on the tick its clock expired, and freeing it took every
+       branch its living children were drawing to it with it — a whole fan of
+       lines vanishing in one frame while the wood itself faded gently. That is
+       the severing event, the moment a plant comes apart, and it was the one
+       thing in the picture that popped. Now the last FADE ticks of a piece of
+       wood are spent fading, and the children fade their branches to it over
+       the same window. The cost is that a body stays joined 52 ticks longer
+       than it did, against a rot clock of 900. */
+    NLIFE[i] = (ptick - NBORN[i]) + (PARAMS.rot|0) + FADE;
   }
   else freeNode(i);
 }
@@ -6635,6 +6727,90 @@ window.__world = {
                  frontPerLive:+(s('front')/s('live')).toFixed(3) });
     }
     return { bodies:rows.length, bands:out };
+  },
+  /* Does a plant change appearance on the frame it dies?
+     Three separate flashes shipped before anyone measured this, each found by
+     eye days apart, and each was a term the dying path recomputed instead of
+     continuing. So it is asserted instead: for every node that dies in one
+     ecology step, what it was drawn as on its last frame alive is compared
+     against what its ghost is drawn as on its first frame dead. Both must
+     match. Leaf and stem are checked separately, because the stem is drawn by
+     the child in the child's colour and has its own way of going wrong.
+     Channels are 0..1 as they reach the instance buffer. */
+  seam(){
+    const before = new Map();
+    const d = PARAMS.stemdark;
+    for(let i=0;i<nodeHigh;i++){
+      if(NLIVE[i]===0) continue;
+      nodePaint(i, PAINT);
+      const al = PARAMS.alpha*PAINT[3];
+      const rec = { leaf:[PAINT[0]/255, PAINT[1]/255, PAINT[2]/255, al], stem:null,
+                    live:NLIVE[i], born:NBORN[i], mat:NMAT[i], life:NLIFE[i],
+                    wood:NWOODAT[i], par:NPAR[i] };
+      const par = NPAR[i];
+      if(PARAMS.stem>0 && par>=0 && NLIVE[par]!==0 && NGEN[par]===NPGEN[i]){
+        const parRot = NLIVE[par]===2 ? rotFade(par) : 0;
+        NSTEMA[i] = (1-parRot)*(1-parRot);
+        rec.stem = [Math.min(255,PAINT[0]*d)/255, Math.min(255,PAINT[1]*d)/255,
+                    Math.min(255,PAINT[2]*d)/255, al*NSTEMA[i]];
+      } else NSTEMA[i]=0;
+      before.set(i, rec);
+    }
+    const was = ptick;
+    plantsStep();
+    let n=0, worstLeaf=0, worstStem=0, wlWhich="", wsWhich="", noStem=0;
+    const dropWhy={}; let reused=0;
+    for(let k=0;k<GHOSTN;k++){
+      const g=k*GH_F;
+      if(GHOST[g+6]!==was+1) continue;          /* died in this step */
+      const v = GHOST[g+12]|0, i = v%PMAX;
+      /* and the slot still belongs to the node that died: a freed index goes
+         straight to the next birth, and comparing a ghost against whoever
+         moved in afterwards is comparing two different plants */
+      if(!same(v,i)){ reused++; continue; }
+      const b = before.get(i);
+      if(!b) continue;
+      n++;
+      /* the ghost at t=0, exactly as the paint loop computes it */
+      const t=0, k2=1;
+      const now=[GHOST[g+3]/255, GHOST[g+4]/255, GHOST[g+5]/255,
+                 PARAMS.alpha*GHOST[g+13]];
+      for(let c=0;c<4;c++){
+        const e=Math.abs(now[c]-b.leaf[c]);
+        if(e>worstLeaf){ worstLeaf=e;
+          wlWhich="node "+i+" ch"+c+" "+b.leaf[c].toFixed(3)+" -> "+now[c].toFixed(3)
+            +"  was live="+b.live+" age="+(was-b.born)+" mat="+b.mat
+            +" lifeLeft="+(b.life-(was-b.born))+" woodAgo="+(was-b.wood)
+            +" | ghost live="+NLIVE[i]+" bornNow="+NBORN[i]+" gen="+NGEN[i]; }
+      }
+      if(b.stem){
+        /* a branch already at nothing is not carried over, and should not be:
+           there is no flash in dropping something invisible */
+        if(GHOST[g+11]<=0 && b.stem[3]>0.001){
+          noStem++;
+          const pp=b.par;
+          const why = pp<0 ? "no parent"
+                    : (NGEN[pp]!==NPGEN[i] ? "parent slot reused" : "unknown");
+          if(!dropWhy[why]) dropWhy[why]=0;
+          dropWhy[why]++;
+          continue; }
+        const st=[Math.min(255,GHOST[g+3])/255*d, Math.min(255,GHOST[g+4])/255*d,
+                  Math.min(255,GHOST[g+5])/255*d, PARAMS.alpha*GHOST[g+13]*GHOST[g+14]];
+        for(let c=0;c<4;c++){
+          const e=Math.abs(st[c]-b.stem[c]);
+          if(e>worstStem){ worstStem=e;
+            wsWhich="node "+i+" ch"+c+" "+b.stem[c].toFixed(3)+" -> "+st[c].toFixed(3)
+              +"  was live="+b.live+" age="+(was-b.born)+" par="+b.par; }
+        }
+      }
+    }
+    return { deathsChecked:n,
+             worstLeaf:+worstLeaf.toFixed(4), leafAt:wlWhich,
+             worstStem:+worstStem.toFixed(4), stemAt:wsWhich,
+             /* a stem that simply vanishes: the node had one while alive and
+                its ghost carries none, which is the flash that cannot show up
+                as a colour difference because there is nothing to compare */
+             stemsDropped:noStem, dropWhy, slotReused:reused };
   },
   bodySpan(n){
     const sz=new Map();

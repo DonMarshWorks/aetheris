@@ -31,7 +31,6 @@ const fs = require('fs');
 const { chromium } = require('playwright');
 
 const ROOT = path.resolve(__dirname, '..');
-const PAGE = path.join(ROOT, 'index.html');
 
 const GL_ARGS = [
   '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
@@ -42,6 +41,31 @@ function arg(name, dflt) {
   const i = process.argv.indexOf('--' + name);
   return i === -1 ? dflt : process.argv[i + 1];
 }
+
+/* 4. The run works from a snapshot of index.html taken when it starts.
+ *
+ * Every page load reads the file off disk, so an edit made while a
+ * forty-minute sweep is running silently splits it between two different
+ * programs — and this has now happened. A 135,000-tick run comparing the
+ * energy model against its own absence was contaminated halfway through by an
+ * edit that gave heartwood 52 extra ticks before it is freed, which is a
+ * simulation change wearing a rendering change's clothes. Half the jobs
+ * measured one world and half the other, and the result had to be thrown away.
+ *
+ * tools/controls.js already did this; sweep.js is where it was needed.
+ */
+function freeze() {
+  const src = path.join(ROOT, 'index.html');
+  const dir = path.join(ROOT, '.measure');
+  fs.mkdirSync(dir, { recursive: true });
+  const body = fs.readFileSync(src);
+  let sum = 5381;
+  for (let i = 0; i < body.length; i++) sum = ((sum * 33) ^ body[i]) >>> 0;
+  const dst = path.join(dir, 'index-' + sum.toString(16) + '.html');
+  if (!fs.existsSync(dst)) fs.writeFileSync(dst, body);
+  return dst;
+}
+const PAGE = arg('page') ? path.resolve(arg('page')) : freeze();
 
 const hashOf = (params, seed) =>
   '#seed=' + seed + Object.entries(params).map(([k, v]) => `&${k}=${v}`).join('');
@@ -150,7 +174,8 @@ async function runJob(browser, job, plan) {
 }
 
 (async () => {
-  const plan = JSON.parse(fs.readFileSync(arg('plan'), 'utf8'));
+  const plan = JSON.parse(fs.readFileSync(arg("plan"), "utf8"));
+  console.log("measuring " + path.relative(ROOT, PAGE));
   const outPath = arg('out');
   const jobs = [];
   for (const c of plan.configs)

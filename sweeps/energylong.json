@@ -1,0 +1,12 @@
+{
+ "note": "Energy is on by default now. This branch has twice had a 20,000-tick verdict reverse at the horizon the piece actually runs at -- affinity modulation was a triumph at 9,000 and suspected of causing a monoculture at 44,600; tries=2 beat 8 at 20,000 and lost at 45,000 -- so the default gets a long run before it ships. The seed store arm is here to settle its own default: it costs nothing at tilt 24 and is the only thing that keeps every seed alive at tilt 90, which the panel now offers.",
+ "ticks": 135000,
+ "checkpoints": [45000, 90000, 135000],
+ "defaultEcorate": 16,
+ "seeds": [7, 31337, 424242, 999],
+ "configs": [
+  { "tag": "off",     "params": { "energy": 0 } },
+  { "tag": "on",      "params": { "energy": 1 } },
+  { "tag": "on-seed", "params": { "energy": 1, "eseed": 400 } }
+ ]
+}
