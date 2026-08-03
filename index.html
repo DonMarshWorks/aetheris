@@ -2569,7 +2569,7 @@ function cellAt(x,y,z){
    been blended with its neighbours — so the sheet is rebuilt from the live set
    each tick instead, on the GPU, where fifty thousand quads cost nothing.
    Everything the look depends on becomes a per-node attribute for free. */
-const GHOSTN = 24576, GH_F = 15;     // the fading dead, drawn but not simulated
+const GHOSTN = 24576, GH_F = 16;     // the fading dead, drawn but not simulated
 const GC = new Float32Array(3);
 const INST = 9;                                  // floats per node
 /* the markers below are extra instances beyond one per node, and this is also
@@ -2689,6 +2689,63 @@ function nodePaint(i, out){
     r+=(tr-r)*f; g+=(tg-g)*f; b+=(tb-b)*f;
   }
   out[0]=r; out[1]=g; out[2]=b; out[3]=cover;
+}
+
+/* one fading corpse: its branch, then its leaf, on the same clock */
+function emitGhost(n, w){
+  const g=n*GH_F, t=(ptick-GHOST[g+6])/FADE;
+  if(!(t>=0 && t<1) || GHOST[g+2]<=0) return w;
+  /* the colour drains as well as the cover: down in value and most of the
+     way to grey, so it reads as life leaving rather than as a dissolve */
+  const k=(1.0-t)*(1.0-0.55*t);
+  const lum=0.30*GHOST[g+3]+0.59*GHOST[g+4]+0.11*GHOST[g+5];
+  const gr=Math.min(255,(GHOST[g+3]+(lum-GHOST[g+3])*t*0.7)*k)/255;
+  const gg=Math.min(255,(GHOST[g+4]+(lum-GHOST[g+4])*t*0.7)*k)/255;
+  const gb=Math.min(255,(GHOST[g+5]+(lum-GHOST[g+5])*t*0.7)*k)/255;
+  /* starts at exactly the cover the node had when it died and falls from
+     there, so nothing steps on the frame of the death itself */
+  const ga=PARAMS.alpha*GHOST[g+13]*(1.0-t)*(1.0-t);
+  const gw=GHOST[g+2]*(1.0-0.25*t);
+  /* the branch goes at the same moment and at the same rate: fading the node
+     while its branch had already vanished dissolved a plant in two stages */
+  if(GHOST[g+11]>0){
+    const d=PARAMS.stemdark;
+    IBUF[w  ]=GHOST[g+9]; IBUF[w+1]=GHOST[g+10];
+    IBUF[w+2]=GHOST[g+11]*0.56; IBUF[w+3]=PARAMS.stem*GHOST[g+11];
+    IBUF[w+4]=GHOST[g+8];
+    IBUF[w+5]=gr*d; IBUF[w+6]=gg*d; IBUF[w+7]=gb*d;
+    IBUF[w+8]=ga*GHOST[g+14];
+    w+=INST;
+  }
+  IBUF[w  ]=GHOST[g]; IBUF[w+1]=GHOST[g+1];
+  IBUF[w+2]=gw*GHOST[g+7]; IBUF[w+3]=gw;
+  IBUF[w+4]=GHOST[g+8];
+  IBUF[w+5]=gr; IBUF[w+6]=gg; IBUF[w+7]=gb;
+  IBUF[w+8]=ga;
+  return w+INST;
+}
+
+/* The dead, bucketed by the lineage they belonged to and in the same ascending
+   key order the living are walked in, so the two can be merged. */
+const GORDER = new Int32Array(GHOSTN), GOFF = new Int32Array(PMAX+1);
+let gorderN = 0;
+function orderGhosts(){
+  GOFF.fill(0,0,nodeHigh+1);
+  gorderN = 0;
+  for(let n=0;n<GHOSTN;n++){
+    const g=n*GH_F, d=ptick-GHOST[g+6];
+    if(!(d>=0 && d<FADE) || GHOST[g+2]<=0) continue;
+    let k=GHOST[g+15]|0; if(k<0||k>=nodeHigh) k=0;
+    GOFF[k]++; gorderN++;
+  }
+  let run=0;
+  for(let r=0;r<nodeHigh;r++){ const c=GOFF[r]; GOFF[r]=run; run+=c; }
+  for(let n=0;n<GHOSTN;n++){
+    const g=n*GH_F, d=ptick-GHOST[g+6];
+    if(!(d>=0 && d<FADE) || GHOST[g+2]<=0) continue;
+    let k=GHOST[g+15]|0; if(k<0||k>=nodeHigh) k=0;
+    GORDER[GOFF[k]++]=n;
+  }
 }
 
 /* one node of a plant: pass 0 lays its branch, pass 1 its foliage */
@@ -2821,39 +2878,22 @@ function buildInstances(){
       w+=INST;
     }
   }
-  /* the dying, drawn first so the living paint over them */
-  for(let n=0;n<GHOSTN && w<WLIM;n++){
-    const g=n*GH_F, t=(ptick-GHOST[g+6])/FADE;
-    if(!(t>=0 && t<1) || GHOST[g+2]<=0) continue;
-    /* the colour drains as well as the cover: down in value and most of the
-       way to grey, so it reads as life leaving rather than as a dissolve */
-    const k=(1.0-t)*(1.0-0.55*t);
-    const lum=0.30*GHOST[g+3]+0.59*GHOST[g+4]+0.11*GHOST[g+5];
-    const gr=Math.min(255,(GHOST[g+3]+(lum-GHOST[g+3])*t*0.7)*k)/255;
-    const gg=Math.min(255,(GHOST[g+4]+(lum-GHOST[g+4])*t*0.7)*k)/255;
-    const gb=Math.min(255,(GHOST[g+5]+(lum-GHOST[g+5])*t*0.7)*k)/255;
-    /* starts at exactly the cover the node had when it died and falls from
-       there, so nothing steps on the frame of the death itself */
-    const ga=PARAMS.alpha*GHOST[g+13]*(1.0-t)*(1.0-t);
-    const gw=GHOST[g+2]*(1.0-0.25*t);
-    /* the branch goes at the same moment and at the same rate: fading the node
-       while its branch had already vanished dissolved a plant in two stages */
-    if(GHOST[g+11]>0 && w<WLIM-INST){
-      const d=PARAMS.stemdark;
-      IBUF[w  ]=GHOST[g+9]; IBUF[w+1]=GHOST[g+10];
-      IBUF[w+2]=GHOST[g+11]*0.56; IBUF[w+3]=PARAMS.stem*GHOST[g+11];
-      IBUF[w+4]=GHOST[g+8];
-      IBUF[w+5]=gr*d; IBUF[w+6]=gg*d; IBUF[w+7]=gb*d;
-      IBUF[w+8]=ga*GHOST[g+14];
-      w+=INST;
+  orderGhosts();
+  let gi = 0;
+  /* A lineage's dead, painted just under its living. They used to go down as
+     one block before every plant on the planet, so a node dropped from its
+     lineage's place in the order to the very back on the frame it died — the
+     last identifiable step in a death. Both streams are sorted by lineage key
+     ascending, so this is a merge: a lineage whose living are all gone simply
+     has no counterpart in the other stream and is painted in its own place. */
+  const upTo = (key, w) => {
+    while(gi<gorderN && w<WLIM){
+      const n=GORDER[gi];
+      if(key>=0 && GHOST[n*GH_F+15] > key) break;
+      w = emitGhost(n, w); gi++;
     }
-    IBUF[w  ]=GHOST[g]; IBUF[w+1]=GHOST[g+1];
-    IBUF[w+2]=gw*GHOST[g+7]; IBUF[w+3]=gw;
-    IBUF[w+4]=GHOST[g+8];
-    IBUF[w+5]=gr; IBUF[w+6]=gg; IBUF[w+7]=gb;
-    IBUF[w+8]=ga;
-    w+=INST;
-  }
+    return w;
+  };
   /* Leaves sit on top of the branches that carry them, so every branch of a
      plant goes down before any of its nodes — but per plant, not globally: one
      plant may legitimately stand over another, and flattening all the branches
@@ -2867,6 +2907,9 @@ function buildInstances(){
     const key = NDRAW[ORDER[a]];
     let b=a;
     while(b<orderN && NDRAW[ORDER[b]]===key) b++;
+    /* everything dead that sorts at or before this lineage, including whole
+       lineages with nothing living left */
+    w = upTo(key, w);
     if(limbs===0){
       for(let q=a;q<b && w<WLIM;q++){
         const i=ORDER[q];
@@ -2879,6 +2922,8 @@ function buildInstances(){
     }
     a=b;
   }
+  /* and the dead of lineages that sort after the last living one */
+  w = upTo(-1, w);
   instN=w/INST;
 }
 
@@ -2998,6 +3043,9 @@ function ghost(i){
      an-array-index-is-not-an-identity trap this project has already been
      caught by once in the frontier. */
   GHOST[g+12]=tag(i);
+  /* the lineage it belonged to, so it can be painted inside that lineage's
+     place in the order rather than underneath the whole world */
+  GHOST[g+15]=NDRAW[i];
 }
 
 function addNode(x,y,z,hx,hy,hz,src,par,amt,stepUsed){
