@@ -178,10 +178,16 @@ async function homeostasis(browser) {
    objects, which churn every few seconds and would be pure noise.
    ──────────────────────────────────────────────────────────────────────── */
 const DIVERSITY = {
-  ticks:    2813,   // climate updates at x100, each paid the `ecorate` ecology
-                    // steps the frame loop owes it — about 45,000 ecology
-                    // ticks, or where erosion became visible in a real
-                    // session. Counting climate updates and running one plant
+  ecoTicks: 45000,  // ECOLOGY ticks, and derived into climate updates from the
+                    // page's own ecorate rather than written down as one.
+                    // Written as 2813 climate updates it silently halved the
+                    // moment ecorate went from 16 to 8 — the acceptance test
+                    // quietly getting easier because a simulation parameter
+                    // moved underneath it, which is the exact drift the note
+                    // below already records happening once before. The horizon
+                    // is 45,000 ecology ticks, where erosion became visible in
+                    // a real session, and it stays 45,000 whatever ecorate is.
+                    // Counting climate updates and running one plant
                     // step each, as this harness once did, measures a world
                     // with far more drift per generation than anyone watches.
                     //
@@ -216,7 +222,16 @@ async function diversity(browser) {
     page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
     await page.goto('file://' + PAGE + seed);
     await page.waitForFunction(() => window.__world && window.__world.S.epoch0 > 0, { timeout: 180000 });
-    await page.evaluate(n => window.__world.runWorld(n, 100), DIVERSITY.ticks);
+    /* climate updates that owe exactly the ecology steps wanted, read from the
+       page so the two can never disagree again */
+    const eco = await page.evaluate(() => window.__world.params().ecorate);
+    const updates = Math.round(DIVERSITY.ecoTicks / eco);
+    let left = updates;
+    while (left > 0) {
+      const chunk = Math.min(left, 500);
+      await page.evaluate(n => window.__world.runWorld(n, 100), chunk);
+      left -= chunk;
+    }
     const p = await page.evaluate(() => window.__world.plants());
 
     const even = evennessOf(p.niche);

@@ -81,7 +81,7 @@ const TICKS = +arg('ticks', 20000);
   console.log(`\nthe ecology runs ${r.ecorate} steps per climate tick and the climate steps ~12x/s,`);
   console.log(`so moving every node every step would cost ${(perSecond / 1000).toFixed(1)} s of CPU per second.`);
   console.log(`That is ${(perSecond / 1000).toFixed(0)}x the entire machine, before anything is drawn.`);
-  const budget = await page.evaluate(() => window.__world.params().ecobudget);
+  const budget = await page.evaluate(() => window.__world.params().ecoshare*1000/60);
   console.log(`\nThe ecology's whole per-frame budget is ${budget} ms. One full pass is ` +
     `${(full / budget).toFixed(0)}x that.`);
   await browser.close();

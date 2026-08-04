@@ -44,8 +44,8 @@ const EXTRA = arg('params', '');   /* &k=v pairs appended to the hash */
 (async () => {
   const browser = await chromium.launch({ args: GL_ARGS });
   console.log(`
-  What the frame loop can afford: it pays the ecology PARAMS.ecobudget ms a`);
-  console.log(`  frame and owes it ECORATE steps per simulation tick, so at 60fps and 12`);
+  What the frame loop can afford: it pays the ecology a SHARE of each frame`);
+  console.log(`  (ecoshare) and owes it ECORATE steps per simulation tick, so at 60fps and 12`);
   console.log(`  ticks a second it needs a step to cost under about 1.25 ms. Past that the`);
   console.log(`  gate 'plantDebt <= 0' stops firing and it is the CLOCK that slows, not the`);
   console.log(`  plants — the piece goes on saying a year is 15 minutes and it is not.
@@ -85,7 +85,7 @@ const EXTRA = arg('params', '');   /* &k=v pairs appended to the hash */
       const p = w.plants();
       return { ms, live: p.live, bodies: p.bodies, frontier: p.frontier,
                starved: p.draws.starvedShare,
-               budget: w.params().ecobudget, eco: w.params().ecorate };
+               budget: w.params().ecoshare*1000/60, eco: w.params().ecorate };
     });
     const need = r.budget * 60 / (r.eco * 12);   /* ms a step may cost */
     console.log(

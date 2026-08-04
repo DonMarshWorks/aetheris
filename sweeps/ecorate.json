@@ -1,0 +1,14 @@
+{
+ "note": "How much ecology per climate tick can be given up, and what it costs. This is the deterministic lever on the clock: fewer plant steps per simulated second is less work per second, in the same proportion, and it is a parameter baked into the link rather than a property of the machine. plants-measured.md records 12 through 32 as inside the noise across a 2.7x range of climate exposure; 6 and 8 are below anything measured. Ticks count ECOLOGY steps, so every arm is compared at equal generations rather than equal weather.",
+ "ticks": 45000,
+ "checkpoints": [20000, 45000],
+ "defaultEcorate": 16,
+ "seeds": [7, 31337, 424242, 999],
+ "configs": [
+  { "tag": "eco16", "params": { "ecorate": 16 } },
+  { "tag": "eco12", "params": { "ecorate": 12 } },
+  { "tag": "eco8",  "params": { "ecorate": 8  } },
+  { "tag": "eco6",  "params": { "ecorate": 6  } },
+  { "tag": "eco4",  "params": { "ecorate": 4  } }
+ ]
+}

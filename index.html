@@ -865,16 +865,39 @@ const PARAMS = {
                     // was indistinguishable from a plant standing on ice. The
                     // one hue the palette cannot produce is the one that reads
                     // unambiguously as an annotation rather than as biology.
-  ecorate: 16,      // ecology steps owed per climate tick, and the single
+  ecorate: 8,       // ecology steps owed per climate tick, and the single
                     // number that decides how much the world moves under a
                     // plant's feet in one generation. Measured: at the ratios
                     // time-lapse used to produce, a *frozen* planet was the
                     // most diverse one and x20 the least — the brief's central
                     // claim, that a wandering climate is what keeps this world
                     // from degenerating, is backwards at the speeds the piece
-                    // actually runs. See the frame loop for why this must be
-                    // paid in full before the climate is allowed to move.
-  ecobudget: 4.0,   // milliseconds per frame spent paying that debt
+                    // actually runs.
+                    //
+                    // Halved from 16 to buy the clock back. The frame loop will
+                    // not step the climate until this debt is paid, so the cost
+                    // of the ecology per simulated second IS the speed of the
+                    // world, and at 16 nobody reached the rate the piece states
+                    // — measured at about a third of it on a full planet.
+                    // Measured across 16/12/8/6/4 at equal GENERATIONS: score
+                    // 0.824/0.819/0.803/0.805/0.796, every arm surviving, and
+                    // the cost showing up most honestly in mean fit —
+                    // 1.94/1.87/1.70/1.67/1.63 — which is the documented
+                    // mechanism, more weather per generation and adaptation
+                    // never catching up. 8 is one seed sd off the best and
+                    // twice the speed. Beauty and smoothness first was the
+                    // instruction, and this is what that costs.
+  ecoshare: 0.35,   // the SHARE of each frame spent paying that debt, and a
+                    // share rather than a fixed few milliseconds because a
+                    // per-frame budget quietly punishes a slow machine: 4ms at
+                    // 60fps is 240ms of ecology a second and at 30fps it is
+                    // 120, so halving the frame rate halved the world's
+                    // progress on top of whatever had slowed it. A share keeps
+                    // the plants' CPU per SECOND the same whatever the frame
+                    // rate, which is the whole of wanting it to feel the same
+                    // on a phone. At 60fps this is 4.2ms — what it was.
+  ecomax:  16.0,    // and the ceiling on that share, so one already-slow frame
+                    // cannot spend itself slower still
   sweep:   40,      // ticks between one pass of connected-component labelling
   perbody: 0,       // 1 = at most one bud per body per turn, 0 = by frontier
   spore:   0.001,   // chance a bud is thrown clear instead, founding a body.
@@ -5819,8 +5842,12 @@ function frame(now){
   frameAcc+=dt; frameN++;
   if(frameN>=45){
     const fps=frameN/frameAcc;
-    if(fps<38 && dpr>0.75){ dpr=Math.max(0.75,dpr*0.82); resize(); }
-    else if(fps>57 && dpr < Math.min(devicePixelRatio||1,2)-0.02){
+    /* Resolution is held down to 30fps rather than surrendered at 38. Detail
+       is the point of the piece and 30 is smooth enough to watch a planet
+       turn; dropping DPR to chase 60 was paying for a frame rate nobody asked
+       for with the one thing everybody sees. */
+    if(fps<27 && dpr>0.75){ dpr=Math.max(0.75,dpr*0.82); resize(); }
+    else if(fps>42 && dpr < Math.min(devicePixelRatio||1,2)-0.02){
       dpr=Math.min(Math.min(devicePixelRatio||1,2), dpr*1.08); resize(); }
     frameAcc=0; frameN=0;
   }
@@ -5882,7 +5909,8 @@ function frame(now){
      invisible, and on slow hardware the budget simply pays less. */
   if(plantsOn && plantDebt > 0 && !paused){
     const t0 = performance.now();
-    while(plantDebt > 0 && performance.now() - t0 < PARAMS.ecobudget){ plantsStep(); plantDebt--; }
+    const budget = Math.min(PARAMS.ecomax, PARAMS.ecoshare*dt*1000);
+    while(plantDebt > 0 && performance.now() - t0 < budget){ plantsStep(); plantDebt--; }
   }
 
   updateSun();
