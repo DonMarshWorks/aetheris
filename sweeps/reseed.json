@@ -1,9 +1,15 @@
-{ "ticks": 45000, "checkpoints": [5000,15000,45000], "defaultEcorate": 16,
-  "seeds": [7,31337,424242,999],
-  "configs": [
-    { "tag": "spore.001",        "params": { "spore": 0.001, "reseed": 0 } },
-    { "tag": "spore0",           "params": { "spore": 0, "reseed": 0 } },
-    { "tag": "spore0+reseed.05", "params": { "spore": 0, "reseed": 0.05 } },
-    { "tag": "spore0+reseed.20", "params": { "spore": 0, "reseed": 0.20 } },
-    { "tag": "spore0+reseed.60", "params": { "spore": 0, "reseed": 0.60 } }
-  ] }
+{
+ "note": "Extinction is absorbing: reseed is 0, so a dead planet stays dead, and the panel now offers tilts where dying is likely. Crossed with tilt because that is where the question bites -- at 24 degrees reseed has to cost nothing, at 90 it has to rescue the seeds that die. Four seeds, and score.js gates rather than averaging a corpse in.",
+ "ticks": 45000,
+ "checkpoints": [20000, 45000],
+ "defaultEcorate": 16,
+ "seeds": [7, 31337, 424242, 999],
+ "configs": [
+  { "tag": "r0-t24",   "params": { "reseed": 0,    "tilt": 24 } },
+  { "tag": "r05-t24",  "params": { "reseed": 0.05, "tilt": 24 } },
+  { "tag": "r30-t24",  "params": { "reseed": 0.30, "tilt": 24 } },
+  { "tag": "r0-t90",   "params": { "reseed": 0,    "tilt": 90 } },
+  { "tag": "r05-t90",  "params": { "reseed": 0.05, "tilt": 90 } },
+  { "tag": "r30-t90",  "params": { "reseed": 0.30, "tilt": 90 } }
+ ]
+}

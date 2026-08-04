@@ -63,6 +63,17 @@ const SIZES = want ? ALL.filter(s => want.split(',').includes(s.name)) : ALL;
     await page.waitForTimeout(1500);
     await page.screenshot({ path: path.join(OUT, `world-${s.name}.png`) });
 
+    /* and with controls pinned onto it, which is the layout most at risk of
+       burying the thing it is pointed at */
+    await page.evaluate(() => {
+      document.getElementById('gear').click();
+      for (const k of ['tgtocean', 'tgtice', '__sea'])
+        document.querySelector(`#setlist .card[data-key="${k}"] .pin`).click();
+      document.getElementById('setclose').click();
+    });
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: path.join(OUT, `pinned-${s.name}.png`) });
+
     /* the metrics overlay is a grid of the same cards now, so it gets looked
        at the same way */
     await page.click('#info');
