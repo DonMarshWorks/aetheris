@@ -63,12 +63,17 @@ const SIZES = want ? ALL.filter(s => want.split(',').includes(s.name)) : ALL;
     await page.waitForTimeout(1500);
     await page.screenshot({ path: path.join(OUT, `world-${s.name}.png`) });
 
-    /* and with controls pinned onto it, which is the layout most at risk of
-       burying the thing it is pointed at */
+    /* And with controls pinned onto it, which is the layout most at risk of
+       burying the thing it is pointed at. Four are asked for — the most the
+       piece will ever carry — because the shot is only worth taking at the
+       worst case the cap allows, and the cap answers differently on a phone
+       than on a laptop. Buttons that have gone grey are simply not clicked. */
     await page.evaluate(() => {
       document.getElementById('gear').click();
-      for (const k of ['tgtocean', 'tgtice', '__sea'])
-        document.querySelector(`#setlist .card[data-key="${k}"] .pin`).click();
+      for (const k of ['tgtocean', 'tgtice', '__sea', 'tilt']) {
+        const b = document.querySelector(`#setlist .card[data-key="${k}"] .pin`);
+        if (b && !b.disabled) b.click();
+      }
       document.getElementById('setclose').click();
     });
     await page.waitForTimeout(600);

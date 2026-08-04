@@ -135,6 +135,52 @@
      scrollbar is the invariant; an overlay that is taller than the phone it is
      read on is not, and forcing ten charts into one screen is what made them
      unreadable. */
+  /* Scrolling, said out loud.
+     The overlays hold more than a screen and the browser's own answer to that
+     is a hairline that appears while you drag and vanishes the moment you stop
+     — so a panel that had been scrolled looked like a panel whose top row was
+     cut off, which is exactly how it read. Two things fix it and both are
+     needed: a scrollbar that is always there and can be seen, and a fade at
+     whichever edge still has content behind it. The fade is the honest signal
+     because it appears only when there IS more, and disappears at the ends. */
+  .scrollwrap{position:relative;flex:1;min-height:0;display:flex}
+  .scrollwrap::before,.scrollwrap::after{
+    content:"";position:absolute;left:0;right:0;height:54px;pointer-events:none;
+    z-index:3;opacity:0;transition:opacity .18s ease}
+  /* the hairline is what makes it read as a CUT rather than as a shadow: a
+     card fading into the dark could be a card ending, a card fading under a
+     line is a card going somewhere */
+  .scrollwrap::before{top:0;
+    background:linear-gradient(rgba(6,9,14,.99) 34%,rgba(6,9,14,0)),
+               linear-gradient(rgba(233,240,255,.20),rgba(233,240,255,.20));
+    background-size:100% 100%,100% 1px;background-repeat:no-repeat}
+  .scrollwrap::after{bottom:0;
+    background:linear-gradient(rgba(6,9,14,0),rgba(6,9,14,.99) 66%),
+               linear-gradient(rgba(233,240,255,.20),rgba(233,240,255,.20));
+    background-position:0 0,0 100%;
+    background-size:100% 100%,100% 1px;background-repeat:no-repeat}
+  .scrollwrap.up::before{opacity:1}
+  .scrollwrap.down::after{opacity:1}
+  /* Chrome honours EITHER the standard scrollbar-width or the -webkit- pseudo
+     elements, never both — setting the standard one silently switched the bar
+     back to the platform default and took the styling with it, which is how
+     this looked untouched. So the pseudo-elements get Chrome and Safari, and
+     Firefox, which has no pseudo-elements to offer, gets the standard pair on
+     its own. */
+  #setlist::-webkit-scrollbar,#cscroll::-webkit-scrollbar{width:11px}
+  #setlist::-webkit-scrollbar-track,#cscroll::-webkit-scrollbar-track{
+    background:rgba(233,240,255,.055);border-radius:6px;
+    border:3px solid transparent;background-clip:content-box}
+  #setlist::-webkit-scrollbar-thumb,#cscroll::-webkit-scrollbar-thumb{
+    background:rgba(233,240,255,.30);border-radius:6px;
+    border:2px solid transparent;background-clip:content-box}
+  #setlist::-webkit-scrollbar-thumb:hover,#cscroll::-webkit-scrollbar-thumb:hover{
+    background:rgba(233,240,255,.50);background-clip:content-box}
+  @supports not selector(::-webkit-scrollbar){
+    #setlist,#cscroll{scrollbar-width:thin;
+      scrollbar-color:rgba(233,240,255,.30) rgba(233,240,255,.055)}
+  }
+
   /* the same grid of cards the settings use, and deliberately the same class
      names — one card shape learned once, whether it holds a control or a
      history */
@@ -171,9 +217,12 @@
      the same corner, carry the same scrim for the same reason — a pale control
      over an ice cap is invisible — and are capped in number so the interface
      can never bury the thing it is pointed at. */
-  #pins{pointer-events:auto;display:none;flex-direction:column;gap:7px;
+  /* Laid out even when empty, which costs nothing — an empty flex column is
+     zero pixels tall — and buys the one thing the cap needs: where this box
+     sits and how wide it is. A display:none element answers that with zeroes,
+     so nothing could be asked before the first pin existed. */
+  #pins{pointer-events:auto;display:flex;flex-direction:column;gap:7px;
     margin-top:11px;width:230px;margin-left:auto}
-  #pins.has{display:flex}
   .pinned{
     background:rgba(8,12,20,.55);border:1px solid var(--faint);border-radius:3px;
     padding:8px 10px 6px;box-shadow:0 1px 6px rgba(0,0,0,.45);
@@ -446,7 +495,7 @@
     </div>
     <button id="chartclose" type="button" aria-label="close">close &times;</button>
   </div>
-  <div id="cscroll"></div>
+  <div class="scrollwrap"><div id="cscroll"></div></div>
 </div>
 
 <div id="settings" aria-hidden="true">
@@ -456,10 +505,11 @@
       <div class="csub">change the world, then let it run &mdash; or start it again</div>
     </div>
   </div>
-  <!-- The actions card lives outside the list because buildSettings() empties
-       the list to rebuild it; it is moved back in at the front each time, which
-       keeps these buttons' listeners attached to the same elements for the life
-       of the page. -->
+  <!-- Fixed, above the scroller. It was inside the list and scrolled away with
+       everything else, which put the link and the way out of the panel behind a
+       scroll — and the panel is the one place somebody has to be able to leave
+       from. It also keeps these buttons' listeners attached to the same
+       elements for the life of the page. -->
   <div id="setactions" class="card">
     <div class="cardhead">
       <span class="cardname">this world, as a link</span>
@@ -474,7 +524,7 @@
     <input id="setlink" type="text" readonly spellcheck="false"
            aria-label="this world, as a link">
   </div>
-  <div id="setlist"></div>
+  <div class="scrollwrap"><div id="setlist"></div></div>
 </div>
 
 <div id="selbadge" aria-hidden="true"></div>
@@ -887,7 +937,7 @@ const PARAMS = {
                     // never catching up. 8 is one seed sd off the best and
                     // twice the speed. Beauty and smoothness first was the
                     // instruction, and this is what that costs.
-  ecoshare: 0.35,   // the SHARE of each frame spent paying that debt, and a
+  ecoshare: 0.25,   // the SHARE of each frame spent paying that debt, and a
                     // share rather than a fixed few milliseconds because a
                     // per-frame budget quietly punishes a slow machine: 4ms at
                     // 60fps is 240ms of ecology a second and at 30fps it is
@@ -1274,15 +1324,35 @@ const YEAR = 900;           // simulated seconds per orbit
    Everything else about the axis is derived: POLE, the ring plane, the daily
    spin and the camera all read it from here, so this is the only place it is
    written. */
-const TILT = clamp(PARAMS.tilt, 0, 90)*Math.PI/180;
+let TILT = clamp(PARAMS.tilt, 0, 90)*Math.PI/180;
 
 /* Which way the axis leans. The daily spin turns about this, so the axis
    itself is fixed in space — which is why the ring, which shares the plane,
    can be built once and never touched again. */
 const AZ0 = 0.34;
-const POLE = (()=>{ const ct=Math.cos(TILT), st=Math.sin(TILT),
-                    ca=Math.cos(AZ0), sa=Math.sin(AZ0);
-  return [-st*ca, ct, st*sa]; })();
+/* Live rather than fixed. Everything the axis touches is derived from these
+   three numbers — the ring plane, the daily spin, the camera's chase, the sun's
+   basis — and none of it costs anything to recompute, so leaning the world is a
+   thing that can be watched happening rather than a reason to start again. The
+   terrain is untouched by tilt, which is what makes this cheap: the six noise
+   octaves are built from the seed and know nothing about the axis. */
+const POLE = new Float32Array(3);
+function setTilt(deg){
+  TILT = clamp(deg, 0, 90)*Math.PI/180;
+  const ct=Math.cos(TILT), st=Math.sin(TILT), ca=Math.cos(AZ0), sa=Math.sin(AZ0);
+  POLE[0]=-st*ca; POLE[1]=ct; POLE[2]=st*sa;
+}
+setTilt(PARAMS.tilt);
+/* Leaning the world while it runs. The axis, the sun's basis and the ring's
+   geometry are all that depend on it — the terrain is built from the seed and
+   knows nothing about the axis, which is what makes this free. The ring is
+   assigned late, because its mesh does not exist yet at this point in the file. */
+let rebuildRingHook = null;
+function setTiltLive(deg){
+  setTilt(deg);
+  setSunBasis();
+  if(rebuildRingHook) rebuildRingHook();
+}
 
 const rotsPerOct = [];
 for(let o=0;o<OCT;o++) rotsPerOct.push(new Float32Array(9));
@@ -4179,7 +4249,7 @@ const RING = makeRing(256, RING_R0, RING_R1);
 const ringVAO = gl.createVertexArray();
 gl.bindVertexArray(ringVAO);
 const ringVBO=gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER,ringVBO); gl.bufferData(gl.ARRAY_BUFFER,RING.pos,gl.STATIC_DRAW);
+gl.bindBuffer(gl.ARRAY_BUFFER,ringVBO); gl.bufferData(gl.ARRAY_BUFFER,RING.pos,gl.DYNAMIC_DRAW);
 gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
 const ringSVBO=gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER,ringSVBO); gl.bufferData(gl.ARRAY_BUFFER,RING.side,gl.STATIC_DRAW);
@@ -4187,6 +4257,20 @@ gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,1,gl.FLOAT,false,0,0);
 const ringIBO=gl.createBuffer();
 gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ringIBO);
 gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,RING.idx,gl.STATIC_DRAW);
+/* The ring lies in the equatorial plane and is built once in WORLD coordinates
+   from POLE, which is why it does not spin with the surface. Lean the axis and
+   that plane moves, so the mesh is the one thing tilt cannot simply be read
+   from — it has to be made again. Only the positions change: the winding, the
+   side flags and the indices are the same ring however it is oriented. */
+function rebuildRing(){
+  const R = makeRing(256, RING_R0, RING_R1);
+  RING.pos.set(R.pos);
+  gl.bindVertexArray(ringVAO);
+  gl.bindBuffer(gl.ARRAY_BUFFER,ringVBO);
+  gl.bufferSubData(gl.ARRAY_BUFFER,0,RING.pos);
+  gl.bindVertexArray(null);
+}
+rebuildRingHook = rebuildRing;
 gl.bindVertexArray(null);
 
 const quadVAO=gl.createVertexArray();   /* fullscreen triangle, no attribs */
@@ -5786,10 +5870,15 @@ const rot3=new Float32Array(9);
    and down across the equator through the year — which gives the same
    advancing and retreating snow line as an orbit, without swinging the
    surface around or putting the world into phases. */
-const SUNU = (()=>{ const v=[0.80,0.0,0.60];
+const SUNU = new Float32Array(3);
+function setSunBasis(){
+  const v=[0.80,0.0,0.60];
   const dp=v[0]*POLE[0]+v[1]*POLE[1]+v[2]*POLE[2];
   const u=[v[0]-POLE[0]*dp, v[1]-POLE[1]*dp, v[2]-POLE[2]*dp];
-  const l=1/Math.hypot(u[0],u[1],u[2]); return [u[0]*l,u[1]*l,u[2]*l]; })();
+  const l=1/Math.hypot(u[0],u[1],u[2]);
+  SUNU[0]=u[0]*l; SUNU[1]=u[1]*l; SUNU[2]=u[2]*l;
+}
+setSunBasis();
 const SUN=[SUNU[0],SUNU[1],SUNU[2]];
 function updateSun(){
   const c=Math.cos(S.solarLat), s=Math.sin(S.solarLat);
@@ -5842,12 +5931,12 @@ function frame(now){
   frameAcc+=dt; frameN++;
   if(frameN>=45){
     const fps=frameN/frameAcc;
-    /* Resolution is held down to 30fps rather than surrendered at 38. Detail
-       is the point of the piece and 30 is smooth enough to watch a planet
-       turn; dropping DPR to chase 60 was paying for a frame rate nobody asked
-       for with the one thing everybody sees. */
-    if(fps<27 && dpr>0.75){ dpr=Math.max(0.75,dpr*0.82); resize(); }
-    else if(fps>42 && dpr < Math.min(devicePixelRatio||1,2)-0.02){
+    /* Back to chasing 60. Holding resolution down to 30 was tried and it looks
+       worse: more pixels on a choppier planet reads as worse, not better, when
+       the subject is a thing turning smoothly. Motion is the presentation here
+       and detail is second to it. */
+    if(fps<38 && dpr>0.75){ dpr=Math.max(0.75,dpr*0.82); resize(); }
+    else if(fps>57 && dpr < Math.min(devicePixelRatio||1,2)-0.02){
       dpr=Math.min(Math.min(devicePixelRatio||1,2), dpr*1.08); resize(); }
     frameAcc=0; frameN=0;
   }
@@ -6258,13 +6347,30 @@ function drawCharts(){
   }
 }
 
+/* Which edges still have something behind them. Driven from scroll, from a
+   resize and from every rebuild, because a list that has just grown a card is
+   as scrollable as one that has just been scrolled, and only one of those
+   fires a scroll event. */
+function markScroll(el){
+  const w = el && el.parentElement;
+  if(!w || !w.classList.contains("scrollwrap")) return;
+  const top = el.scrollTop, room = el.scrollHeight - el.clientHeight;
+  w.classList.toggle("up", top > 2);
+  w.classList.toggle("down", room > 2 && top < room - 2);
+}
+function watchScroll(el){
+  el.addEventListener("scroll", ()=>markScroll(el), {passive:true});
+  markScroll(el);
+}
+
 function setCharts(on){
   chartsOn=on;
   chartsEl.classList.toggle("on",on);
   document.getElementById("hud").classList.toggle("behind",on);
   chartsEl.setAttribute("aria-hidden",on?"false":"true");
   clearInterval(chartTimer);
-  if(on){ buildCharts(); drawCharts(); chartTimer=setInterval(drawCharts,1000); }
+  if(on){ buildCharts(); drawCharts(); markScroll(cscroll);
+          chartTimer=setInterval(drawCharts,1000); }
 }
 /* ── settings ──────────────────────────────────────────────────────────
    Every dial here already existed and was reachable only by editing the URL.
@@ -6318,9 +6424,9 @@ const SETTINGS = [
     28C and no ice, winter pole -13C under 72% ice, and an equatorial ice belt
     holding a third of the tropics. That is the standard high-obliquity result
     and it falls out of cos(lat - solarLat) with nothing added for it. */
- {key:"tilt", name:"Axial tilt", min:0, max:90, step:1, restart:true,
+ {key:"tilt", name:"Axial tilt", min:0, max:90, step:1, live:setTiltLive,
   lo:"no seasons", hi:"pole to the sun",
-  why:"How far the world leans, and how strong its seasons are. At zero the sun never leaves the equator, the ice line never moves, and plants don't have to adapt to seasonal changes. Turn it up and the summer pole is never dark while the winter pole never sees the sun rise, while ice forms at the equator.",
+  why:"How far the world leans, and how strong its seasons are. At zero the sun never leaves the equator, the ice line never moves, and plants don't have to adapt to seasonal changes. Turn it up and the summer pole is never dark while the winter pole never sees the sun rise, while ice forms at the equator. The ring lies in the equator, so it leans with the world as you move this.",
   fmt:v=>v===0?"upright — no seasons":v+"°"},
  {key:"relief", name:"Elevation change", min:0.3, max:2.0, step:0.05, restart:true,
   lo:"broad plains", hi:"archipelagos",
@@ -6401,9 +6507,60 @@ function nowPct(k){
    does. Capped, because the interface floats over the planet and a column of
    eleven controls would bury the thing they are for. Carried in the link like
    everything else: seed plus parameters already determine the world, and the
-   dials somebody was playing with are worth sending along with it. */
-const PINMAX = 4;
+   dials somebody was playing with are worth sending along with it.
+
+   The cap was the number four, and four is right on a laptop, where the column
+   stands in empty sky well clear of the disc. It is wrong on a phone: there the
+   disc fills the width, the column lands on top of it, and the fourth card
+   covers the sunlit limb — which is the best thing in the frame — while on a
+   short window the column runs into the clock as well. So the cap is not a
+   number any more. It is two things the interface may not do:
+
+     never bury more than a quarter of the planet
+     never reach the readout
+
+   Measured as a share of the disc, because that is the quantity the eye is
+   actually judging and it is the only one that tells a phone from a laptop.
+   Rendered at four window shapes, the share the column covers is:
+
+     390x844   0.00  0.02  0.22  0.42     (one pin, two, three, four)
+     360x640   0.02  0.23  0.49  runs into the clock
+     820x1180  0.00  0.00  0.03  0.05
+     1512x900  0.00  0.00  0.00  0.00
+
+   A quarter therefore gives three on a tall phone, two on a small one and four
+   everywhere else, which is what looking at the pictures says. */
+const PINMAX = 4;          // never more than this, however large the window
+const PINCOVER = 0.25;     // of the disc, at most
 let PINS = [];
+let pinFull = false;       // no room for another, whatever PINMAX says
+
+/* The disc as it lands on the screen, at the framing the piece OPENS in and
+   never at the current zoom: a cap that moved while somebody pinched would make
+   controls appear and vanish under their own fingers. */
+function discOnScreen(){
+  /* the canvas box, not innerHeight — a phone's address bar makes the two
+     disagree, and it is the painted area the disc is centred in */
+  const W = canvas.clientWidth || innerWidth, H = canvas.clientHeight || innerHeight;
+  const d = fitDist();
+  return {cx:W*0.5, cy:H*0.5,
+          r:(H*0.5)/(Math.sqrt(Math.max(1e-6,d*d-1))*Math.tan(FOVY*0.5))};
+}
+/* The share of the disc a box covers, integrated row by row. The closed form
+   for a circle against a rectangle is four inverse-trig cases and a sign
+   convention; this is five lines, and at 192 slices it is exact to a part in a
+   thousand, which is far finer than a decision between three cards and four. */
+function discCover(b){
+  const g = discOnScreen(); if(!(g.r>0)) return 0;
+  const y0 = Math.max(b.top, g.cy-g.r), y1 = Math.min(b.bottom, g.cy+g.r);
+  if(y1<=y0) return 0;
+  const N=192, dy=(y1-y0)/N; let a=0;
+  for(let i=0;i<N;i++){
+    const y=y0+(i+0.5)*dy, w=Math.sqrt(Math.max(0,g.r*g.r-(y-g.cy)*(y-g.cy)));
+    a += Math.max(0, Math.min(b.right,g.cx+w)-Math.max(b.left,g.cx-w))*dy;
+  }
+  return a/(Math.PI*g.r*g.r);
+}
 const pinnable = k => {
   const it = SETTINGS.find(s => s.key===k);
   return !!it && !it.group && !it.restart;
@@ -6411,14 +6568,56 @@ const pinnable = k => {
 function togglePin(k){
   const at = PINS.indexOf(k);
   if(at>=0) PINS.splice(at,1);
-  else if(PINS.length < PINMAX) PINS.push(k);
+  else if(!pinFull) PINS.push(k);
   writeHash(); buildPins();
 }
 const pinsEl = document.getElementById("pins");
 /* whatever survived the link: unknown or restart-only names are dropped rather
    than trusted, and the cap applies to a link as much as to a click */
 PINS = PINHASH ? PINHASH.split(",").filter(pinnable).slice(0, PINMAX) : [];
+/* the clock and the bars, which the column may not reach whatever the disc is
+   doing — on a short landscape window it clears the planet entirely and still
+   lands on the readout */
+function readoutTop(){
+  const el = document.querySelector(".corner.bl");
+  return el ? el.getBoundingClientRect().top : innerHeight;
+}
+function pinsFit(bottom){
+  const r = pinsEl.getBoundingClientRect();
+  return bottom <= readoutTop()-10 &&
+         discCover({left:r.left, right:r.right, top:r.top, bottom}) <= PINCOVER;
+}
+/* Asked of the column that is actually on screen rather than of a nominal card
+   height, because the decision turns on a dozen pixels: at 360x640 a card
+   guessed 14px too tall refuses the second pin, and the second pin is fine.
+   A card's height depends on the kind of control it holds — a row of buttons is
+   taller than a slider — so the room for one more is judged by the tallest
+   card present. */
+function pinRoom(){
+  const b = pinsEl.getBoundingClientRect().bottom;
+  let h = 89;                                  // a slider card, with none to measure
+  for(const c of pinsEl.children) h = Math.max(h, c.offsetHeight);
+  /* The first pin is always on offer and the first pin is always kept, at both
+     ends of this. A window too small to hold even one would otherwise show a
+     pin button that visibly does nothing, which is worse than a covered disc. */
+  return { fits: PINS.length<2 || pinsFit(b),
+           more: PINS.length===0 ||
+                 (PINS.length<PINMAX && pinsFit(b + 7 + h)) };
+}
+/* Render, then measure, then drop the last one and render again — at most four
+   passes, and it applies the same rule to a click, to a link and to a phone
+   turned on its side. One pin is always allowed: a window too small for even
+   that would leave a pin button that visibly does nothing. */
 function buildPins(){
+  renderPins();
+  let trimmed = false;
+  while(PINS.length>1 && !pinsFit(pinsEl.getBoundingClientRect().bottom)){
+    PINS.pop(); trimmed = true; renderPins();
+  }
+  pinFull = !pinRoom().more;
+  if(trimmed) writeHash();
+}
+function renderPins(){
   pinsEl.textContent="";
   /* the value readouts on the pinned copies are live for the same reason the
      cards' are: the climate takes minutes to arrive and a static number would
@@ -6443,20 +6642,20 @@ function buildPins(){
     for(let i=before;i<nowFields.length;i++) nowFields[i].pinned = true;
     pinsEl.appendChild(box);
   }
-  pinsEl.classList.toggle("has", PINS.length>0);
   clearInterval(pinTimer); pinTimer=0;
   if(PINS.length) pinTimer=setInterval(()=>{ for(const f of nowFields) if(f.pinned) f(); }, 900);
 }
 let pinTimer = 0;
-/* A control changed somewhere: bring the other copy of it up to date. The
-   panel covers the world while it is open so the two are never both visible,
-   but a value edited on a pinned control must be right when the panel is
-   opened, and vice versa. Rebuilding is cheap at four controls. */
-function syncControls(){ if(!setEl.classList.contains("on")) buildPins(); }
+/* Deliberately NOT rebuilt when a control changes. The two copies are never
+   both on screen — the panel covers the world — so the panel rebuilds its cards
+   when it opens and the strip rebuilds when the panel closes, and that is
+   enough. Rebuilding on input looked harmless and froze every pinned slider
+   mid-drag: it replaced the very element the pointer was captured on, so the
+   thumb stopped following the finger on the first pixel of travel. A control
+   must never be rebuilt by its own input. */
 
 const setEl = document.getElementById("settings");
 const setList = document.getElementById("setlist");
-const setActions = document.getElementById("setactions");
 /* The three climate cards show what the world currently is beside what has
    been asked of it, and that number is moving — a static one would make the
    controller look broken for the minute it takes to arrive. Refreshed on a
@@ -6657,7 +6856,7 @@ function buildControl(item, withEnds){
     item.choice.forEach(c=>{
       const b=document.createElement("button"); b.type="button"; b.textContent=c.label;
       b.addEventListener("click",()=>{ Object.assign(PARAMS,c.set); mark(); writeHash();
-                                       applyLive(); syncControls(); });
+                                       applyLive(); });
       wrap.appendChild(b);
     });
     box.appendChild(wrap); mark();
@@ -6670,7 +6869,7 @@ function buildControl(item, withEnds){
     const sl=makeSlider({min:item.min, max:item.max, step:item.step, label:item.name,
       values:[PARAMS[lo], PARAMS[hi]],
       onInput:vv=>{ PARAMS[lo]=vv[0]; PARAMS[hi]=vv[1]; show(); writeHash();
-                    applyLive(); syncControls(); }});
+                    applyLive(); }});
     box.appendChild(sl.el); if(withEnds) box.appendChild(ends(item)); show();
   } else {
     /* Some of these run backwards against the quantity they steer: colder
@@ -6687,18 +6886,17 @@ function buildControl(item, withEnds){
     const sl=makeSlider({min:item.min, max:item.max, step:item.step, label:item.name,
       values:[toUI(PARAMS[item.key])],
       onInput:vv=>{ PARAMS[item.key]=toUI(vv[0]); show(); writeHash();
-                    if(item.restart) markRestart(); else { applyLive(); syncControls(); } }});
+                    if(item.restart) markRestart();
+                    else { if(item.live) item.live(PARAMS[item.key]); applyLive(); } }});
     box.appendChild(sl.el); if(withEnds) box.appendChild(ends(item)); show();
   }
   return box;
 }
 
 function buildSettings(){
-  /* innerHTML would destroy the actions card, which lives here between
-     rebuilds; it is held by reference outside and put back at the front. Its
-     buttons keep the listeners bound at load either way. */
+  /* the actions card is fixed above this list now, so emptying it is simply
+     emptying it */
   setList.textContent="";
-  setList.appendChild(setActions);
   nowFields=[];
   for(const item of SETTINGS){
     if(item.group){
@@ -6724,11 +6922,11 @@ function buildSettings(){
       pin.innerHTML=PIN_SVG;
       const on = PINS.indexOf(item.key)>=0;
       pin.classList.toggle("on", on);
-      pin.disabled = !on && PINS.length>=PINMAX;
+      pin.disabled = !on && pinFull;
       pin.setAttribute("aria-pressed", on?"true":"false");
       pin.setAttribute("aria-label",(on?"unpin ":"pin ")+item.name);
       pin.title = on ? "remove from the world view"
-                : pin.disabled ? "only "+PINMAX+" at a time — unpin something first"
+                : pin.disabled ? "no room for another — unpin something first"
                 : "keep this control on the world view";
       pin.addEventListener("click",e=>{ e.stopPropagation(); togglePin(item.key); buildSettings(); });
       head.appendChild(pin);
@@ -6748,6 +6946,7 @@ function buildSettings(){
     row.appendChild(buildControl(item, true));
     setList.appendChild(row);
   }
+  markScroll(setList);
 }
 
 function setSettings(on){
@@ -6799,7 +6998,15 @@ document.getElementById("chartclose").addEventListener("click",e=>{
 ["pointerdown","pointerup","click","wheel","touchstart"].forEach(ev=>
   chartsEl.addEventListener(ev,e=>e.stopPropagation(),{passive:true}));
 addEventListener("keydown",e=>{ if(e.key==="Escape"&&chartsOn) setCharts(false); });
-addEventListener("resize",()=>{ if(chartsOn) drawCharts(); });
+addEventListener("resize",()=>{ if(chartsOn) drawCharts();
+  markScroll(setList); markScroll(cscroll);
+  /* Turn a phone on its side and the room changes, so the cap does. Rebuilt
+     only when the answer actually differs, because rebuilding replaces the
+     element a pointer may be captured on — the same trap that froze a pinned
+     slider mid-drag, and a phone hiding its address bar fires a resize. */
+  const room = pinRoom();
+  if(!room.fits || room.more===pinFull) buildPins(); });
+watchScroll(setList); watchScroll(cscroll);
 
 /* ---- go ---- */
 resize();
@@ -6825,6 +7032,18 @@ window.__world = {
                    qFromYawPitch(y, CAM.pitch, CAM.q); qFromYawPitch(y, CAM.pitch, CAM.tq);
                    if(z){CAM.zoom=CAM.tZoom=z;} CAM.dist=CAM.tDist=camDistOf(CAM.zoom); },
   sunDir(){ return [SUN[0],SUN[1],SUN[2]]; },
+  /* the axis and one ring vertex, so a harness can see that leaning the world
+     moved BOTH — the ring is geometry in world space and is the one thing that
+     has to be made again rather than read again */
+  pole(){ return [POLE[0],POLE[1],POLE[2]]; },
+  ringPoint(){ return [RING.pos[0],RING.pos[1],RING.pos[2]]; },
+  /* what the pinned column came to, and the two numbers that decided it. The
+     cap is a consequence of the window rather than a constant now, so a harness
+     has to be able to ask the world what it settled on rather than assume. */
+  pins(){ const b = pinsEl.getBoundingClientRect();
+          return {list:PINS.slice(), full:pinFull, max:PINMAX, limit:PINCOVER,
+                  cover:PINS.length?discCover(b):0, bottom:b.bottom,
+                  readout:readoutTop(), disc:discOnScreen()}; },
   cam(){ return CAM; },
   pointerCount(){ return ptrs.size; },
   params(){ return PARAMS; },
