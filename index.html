@@ -272,8 +272,18 @@
   @media (max-width: 620px){ #pins{width:190px} }
   /* the pin itself, on a card and on a pinned copy */
   .pin{cursor:pointer}
-  .pin:hover{color:rgba(233,240,255,.75)}
+  /* Only where a pointer actually hovers. On a touchscreen iOS leaves :hover
+     stuck on the last thing tapped until something else is tapped — so unpinning
+     left the pin lit, which is what PINNED looks like, and the control appeared
+     not to have done anything. Gated here, a tap returns it to grey. */
+  @media (hover: hover){ .pin:hover{color:rgba(233,240,255,.62)} }
   .pin.on{color:rgba(150,205,255,.95)}
+  /* Shape as well as colour, because at 22px on a phone colour alone is not a
+     difference anyone can rely on — and it is the same mark, so the eye reads
+     the change rather than having to compare two greys. The drawing is a
+     pushpin lying at 45 degrees; a pinned one stands upright. */
+  .pin svg{transition:transform .18s ease}
+  .pin.on svg{transform:rotate(-45deg)}
   .pin[disabled]{opacity:.28;cursor:default}
 
   /* Two lines, not one, and that is the measurement rather than a preference.
@@ -7931,10 +7941,17 @@ function markTouched(){ settingsTouched = true; noteLink(); updateBtns(); }
 function noteLink(){
   if(!setLinkNote) return;
   setLinkNote.classList.toggle("warn", settingsTouched);
+  /* It says the world took a PATH, not that the settings are wrong — which is
+     why putting the settings back does not clear it, and why the wording has to
+     make that obvious or the next person to press "set defaults" will fairly
+     wonder why the warning is still there. Restart is the way out and is named
+     as such: starting again with these settings makes the path and the settings
+     agree, and the reload clears this along with everything else. */
   setLinkNote.textContent = settingsTouched
-    ? "You have changed settings while this world was running, so this link "
-    + "starts a fresh world with the settings you have now — it will not "
-    + "retrace the path this one took."
+    ? "This world has been running under settings that were changed along the "
+    + "way, so it took a path no list of settings can describe — putting them "
+    + "back does not undo it. The link still works; it just starts a NEW world "
+    + "with these settings. Press restart to make this world match them again."
     : "This link starts the same world from its beginning. Leave it running to "
     + "reach what you are looking at now.";
 }
@@ -8275,11 +8292,15 @@ document.getElementById("setreset").addEventListener("click",e=>{
      other, and then the world on screen no longer matches its own settings.
      Compared by value, so a world already at the default for those needs no
      restart and is not asked for one. */
-  const was = {}; for(const k of RESTART_KEYS) was[k] = PARAMS[k];
+  const was = Object.assign({}, PARAMS);
   Object.assign(PARAMS,DEFAULTS);
   if(RESTART_KEYS.some(k => PARAMS[k] !== was[k])) markRestart();
   setTiltLive(PARAMS.tilt);
-  markTouched(); writeHash(); buildSettings(); applyLive(); updateBtns();
+  /* Only if it actually moved something. Pressing this on a world already at
+     its defaults changes nothing, and raising a warning about a path that was
+     never taken is how a warning stops being believed. */
+  if(Object.keys(PARAMS).some(k => PARAMS[k] !== was[k])) markTouched();
+  writeHash(); buildSettings(); applyLive(); updateBtns(); noteLink();
 });
 /* Always available, whether or not anything has been changed — on a phone this
    is the refresh button the browser makes hard to reach. */
