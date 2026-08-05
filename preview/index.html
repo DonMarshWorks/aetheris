@@ -102,8 +102,26 @@
      little legibility for nothing. */
   .rbtn svg{width:18px;height:18px;display:block;
     filter:drop-shadow(0 0 2px rgba(0,0,0,.55))}
-  /* held down reads as a state, not a hover */
-  .rbtn.on{border-color:rgba(233,240,255,.72);background:rgba(233,240,255,.20)}
+  /* Held down reads as a STATE, and it has to be unmistakable for the two
+     things next to it. At a .20 fill against hover's .14 it was not: the
+     difference between "the tour is running" and "the mouse happens to be here"
+     was six per cent of one alpha. And a button keeps focus after a click, so a
+     focused button sat in that same faint fill and read as activated.
+     The speed buttons already answered this in this same interface — an active
+     one INVERTS — so these do too, and the answer is learned once. */
+  .rbtn.on{
+    color:#0a0d14;background:rgba(233,240,255,.92);
+    border-color:rgba(233,240,255,.92);text-shadow:none;
+  }
+  /* the glyph's drop shadow exists to keep it legible over a cloud deck; on a
+     near-white disc it is a grey smear */
+  .rbtn.on svg{filter:none}
+  .rbtn.on:hover{background:#fff;border-color:#fff}
+  /* Focus is a RING and never a fill, or it cannot be told from a state. Only
+     for keyboard focus: a mouse click leaves focus behind it, and drawing a
+     ring there would mark every button anybody had touched. */
+  .rbtn:focus{outline:none}
+  .rbtn:focus-visible{outline:2px solid rgba(150,205,255,.95);outline-offset:3px}
   /* out of reach for the moment, and it must stop answering the hover too or
      it goes on offering something it will not do */
   .rbtn[disabled]{opacity:.30;cursor:default}
@@ -177,17 +195,21 @@
      this looked untouched. So the pseudo-elements get Chrome and Safari, and
      Firefox, which has no pseudo-elements to offer, gets the standard pair on
      its own. */
-  #setlist::-webkit-scrollbar,#cscroll::-webkit-scrollbar{width:11px}
-  #setlist::-webkit-scrollbar-track,#cscroll::-webkit-scrollbar-track{
+  #setlist::-webkit-scrollbar,#cscroll::-webkit-scrollbar,
+  #aboutscroll::-webkit-scrollbar{width:11px}
+  #setlist::-webkit-scrollbar-track,#cscroll::-webkit-scrollbar-track,
+  #aboutscroll::-webkit-scrollbar-track{
     background:rgba(233,240,255,.055);border-radius:6px;
     border:3px solid transparent;background-clip:content-box}
-  #setlist::-webkit-scrollbar-thumb,#cscroll::-webkit-scrollbar-thumb{
+  #setlist::-webkit-scrollbar-thumb,#cscroll::-webkit-scrollbar-thumb,
+  #aboutscroll::-webkit-scrollbar-thumb{
     background:rgba(233,240,255,.30);border-radius:6px;
     border:2px solid transparent;background-clip:content-box}
-  #setlist::-webkit-scrollbar-thumb:hover,#cscroll::-webkit-scrollbar-thumb:hover{
+  #setlist::-webkit-scrollbar-thumb:hover,#cscroll::-webkit-scrollbar-thumb:hover,
+  #aboutscroll::-webkit-scrollbar-thumb:hover{
     background:rgba(233,240,255,.50);background-clip:content-box}
   @supports not selector(::-webkit-scrollbar){
-    #setlist,#cscroll{scrollbar-width:thin;
+    #setlist,#cscroll,#aboutscroll{scrollbar-width:thin;
       scrollbar-color:rgba(233,240,255,.30) rgba(233,240,255,.055)}
   }
 
@@ -407,14 +429,9 @@
     flex-direction:column;gap:12px;
   }
   #settings.on{display:flex}
-  .setbtns{display:flex;gap:8px;align-items:flex-start;flex:none}
-  .setbtns button{
-    font:inherit;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--dim);background:transparent;border:1px solid var(--faint);
-    padding:6px 11px;cursor:pointer;transition:.25s;white-space:nowrap;
-  }
-  .setbtns button:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
-  #setrestart{color:rgba(240,190,120,.95);border-color:rgba(240,190,120,.35)}
+  /* .setbtns and #setrestart were each defined twice, a hundred lines apart,
+     and the later copy silently won. Defined once, below, next to the card they
+     belong to. */
   /* the list scrolls, never the document — same rule the graphs follow */
   /* Cards, not one long column. A single column across a laptop gives lines
      nobody can read and one setting per screen; the same content in a grid of
@@ -425,6 +442,11 @@
      Every card carries the same four things in the same places — name, why,
      what it reads now, and the control with its two ends named — so the eye
      learns one shape and then only reads the words that differ. */
+  #setlinknote{margin-top:8px;font-size:10.5px;line-height:1.5;
+    color:rgba(233,240,255,.5)}
+  /* the stronger of the two, in the amber the restart button already uses —
+     this is the one saying the link will NOT show what you are looking at */
+  #setlinknote.warn{color:rgba(240,190,120,.92)}
   #setlist{
     flex:1;min-height:0;width:100%;max-width:1560px;margin:0 auto;
     overflow-y:auto;overflow-x:hidden;
@@ -455,6 +477,20 @@
     flex:none;width:22px;height:22px;margin:-3px -3px 0 0;padding:0;border:0;
     background:transparent;color:rgba(233,240,255,.30);
     display:grid;place-items:center;cursor:default;
+    /* the target has to be able to grow past the button without moving it */
+    position:relative;
+  }
+  /* Twenty-two pixels is a mark, not a target. Apple asks for forty-four and
+     the reason bites hardest exactly here: this button sits inside a list with
+     touch-action:pan-y, so a tap that drifts a pixel or two is taken for the
+     start of a scroll and the click is never delivered. With a fingertip on a
+     22px square that happens often — which is why pinning a control worked and
+     UNPINNING the same control seemed not to, when what differs between the two
+     is nothing but luck. The mark keeps its size; only the reach grows, and it
+     grows outward from the centre so no layout moves. */
+  @media (pointer: coarse){
+    .pin::after{content:"";position:absolute;left:50%;top:50%;
+      width:44px;height:44px;transform:translate(-50%,-50%)}
   }
   .pin svg{width:12px;height:12px;fill:currentColor;pointer-events:none}
   .pin[disabled]{opacity:.5}
@@ -510,7 +546,49 @@
   /* The link and the buttons are a card like any other and scroll with them.
      It spans the grid because a URL is long and truncating the one thing the
      visitor is meant to copy would be perverse. */
-  #setactions{grid-column:1/-1}
+  /* Not one of the cards, and it should not pretend to be. Everything below it
+     is a thing about the WORLD that scrolls away; this is the panel's own
+     furniture and it stays put. So it takes the blue the interface already uses
+     for its own marks — the pinned pin, the focus ring — rather than the neutral
+     grey of a setting, and it is inset a little on its left edge to say it is
+     attached to the panel rather than floating in the grid with the rest. */
+  #setactions{
+    grid-column:1/-1;
+    background:rgb(50 67 108);
+    border-color:rgba(150,205,255,.30);
+    border-left:3px solid rgba(150,205,255,.65);
+    border-radius:3px;
+  }
+  /* Everything inside has to come up with the background. The card colours are
+     tuned against a near-black panel, and on a solid navy the note fell to 3.4:1
+     and the button borders all but vanished — measured, not guessed. Raising the
+     alphas here rather than everywhere keeps the setting cards untouched. */
+  #setactions .cardname{color:#fff}
+  #setactions #setlinknote{color:rgba(233,240,255,.78)}
+  /* the field reads as inset by being DARKER than what holds it, which on a
+     dark card meant lighter and on this one means the other way about */
+  #setactions #setlink{
+    background:rgba(6,9,14,.5);border-color:rgba(233,240,255,.50);
+    color:rgba(233,240,255,.92);
+  }
+  #setactions #setlink:focus{border-color:rgba(190,222,255,.75)}
+  #setactions #setcopy{
+    background:rgba(6,9,14,.35);border-color:rgba(233,240,255,.50);
+    color:rgba(233,240,255,.82);
+  }
+  #setactions #setcopy:hover{background:rgba(6,9,14,.6);color:#fff}
+  /* An edge needs 3:1 to be an edge. At the alphas these carry against a
+     near-black panel they measured 2.1 and 2.4 on this one — visible enough to
+     the person who drew them and not to anybody else. */
+  #setactions .setbtns button{
+    color:rgba(233,240,255,.88);border-color:rgba(233,240,255,.50);
+  }
+  #setactions .setbtns button:hover{color:#fff;border-color:rgba(233,240,255,.7)}
+  /* amber has plenty of contrast on navy, so it only needs to stop being dim */
+  #setactions #setlinknote.warn{color:rgba(255,205,135,.98)}
+  #setactions .setbtns button.wants{
+    color:rgba(255,205,135,1);border-color:rgba(255,205,135,.5);
+  }
   #setactions .cardhead{margin-bottom:8px;align-items:center}
   .setbtns{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
   .setbtns button{
@@ -519,13 +597,32 @@
     padding:6px 11px;cursor:pointer;transition:.25s;white-space:nowrap;
   }
   .setbtns button:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
-  #setrestart{color:rgba(240,190,120,.95);border-color:rgba(240,190,120,.35)}
+  /* amber only when something is actually waiting on a restart */
+  .setbtns button.wants{color:rgba(240,190,120,.95);border-color:rgba(240,190,120,.35)}
+  .setbtns button.wants:hover{color:rgba(255,210,150,1);border-color:rgba(240,190,120,.6)}
+  /* the link and its copy button are one object: shared edge, no gap, and the
+     button never shrinks however long the URL gets */
+  .setlinkrow{display:flex;align-items:stretch}
   #setlink{
-    width:100%;font:inherit;font-size:11px;color:rgba(233,240,255,.80);
+    flex:1;min-width:0;font:inherit;font-size:11px;color:rgba(233,240,255,.80);
     background:rgba(233,240,255,.05);border:1px solid var(--faint);
-    padding:8px 10px;border-radius:2px;
+    padding:8px 10px;border-radius:2px 0 0 2px;
   }
   #setlink:focus{outline:none;border-color:rgba(233,240,255,.42)}
+  #setcopy{
+    flex:none;font:inherit;font-size:10.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--dim);background:rgba(233,240,255,.05);
+    border:1px solid var(--faint);border-left-width:0;border-radius:0 2px 2px 0;
+    padding:0 13px;cursor:pointer;transition:.25s;white-space:nowrap;
+  }
+  #setcopy:hover{color:var(--ink);background:rgba(233,240,255,.12)}
+  /* the two that act on the world, under the link rather than beside it */
+  .setworldbtns{margin-top:10px;justify-content:flex-start}
+  /* Disabled is not merely dimmer — OK is dead until something has changed, and
+     a button that looks live and does nothing is worse than one that looks
+     dead. */
+  .setbtns button[disabled]{opacity:.3;cursor:default}
+  .setbtns button[disabled]:hover{color:var(--dim);border-color:var(--faint)}
   @media (max-width: 620px){
     #settings{padding:15px 14px}
     #setactions .cardhead{flex-direction:column;align-items:stretch;gap:9px}
@@ -743,8 +840,11 @@
     <h2>Sharing</h2>
 
     <p>The settings page has a link you can copy to share your world and its
-    settings. If you didn't change any settings part way through the simulation,
-    the link will reproduce the world you saw.</p>
+    settings. A link always starts its world from the beginning, so leave it
+    running to reach what you were looking at. And if you changed settings part
+    way through the simulation, it will not even do that &mdash; what you were
+    watching took a path that a list of settings cannot describe. The panel tells
+    you which of the two you have, underneath the link.</p>
 
   </div></div></div>
 </div>
@@ -753,7 +853,15 @@
   <div class="chead">
     <div>
       <div class="ctitle">settings</div>
-      <div class="csub">change the world, then let it run &mdash; or start it again</div>
+    </div>
+    <!-- The way out, in the corner every other overlay puts it. OK is dead
+         until something has actually changed, and the other one renames itself
+         rather than sitting beside a second button nobody needs: with nothing
+         changed there is nothing to cancel, and with something changed there is
+         no such thing as merely closing. -->
+    <div class="setbtns">
+      <button id="setok" type="button">ok</button>
+      <button id="setclose" type="button">close &times;</button>
     </div>
   </div>
   <!-- Fixed, above the scroller. It was inside the list and scrolled away with
@@ -764,16 +872,22 @@
   <div id="setactions" class="card">
     <div class="cardhead">
       <span class="cardname">this world, as a link</span>
-      <div class="setbtns">
-        <button id="setcopy" type="button">copy link</button>
-        <button id="setreset" type="button">defaults</button>
-        <button id="setcancel" type="button">cancel</button>
-        <button id="setrestart" type="button">restart world</button>
-        <button id="setclose" type="button">ok</button>
-      </div>
     </div>
-    <input id="setlink" type="text" readonly spellcheck="false"
-           aria-label="this world, as a link">
+    <!-- Copy sits at the end of the box it copies, where the eye already is
+         when it has finished reading the link. -->
+    <div class="setlinkrow">
+      <input id="setlink" type="text" readonly spellcheck="false"
+             aria-label="this world, as a link">
+      <button id="setcopy" type="button">copy</button>
+    </div>
+    <!-- What the link can and cannot promise. Written by the page rather than
+         left to the reader to remember, because the reader is the one person
+         who cannot see that they moved a dial twenty minutes ago. -->
+    <div id="setlinknote"></div>
+    <div class="setbtns setworldbtns">
+      <button id="setreset" type="button">set defaults</button>
+      <button id="setrestart" type="button" title="start the world again, fetching a fresh copy of the page">restart</button>
+    </div>
   </div>
   <div class="scrollwrap"><div id="setlist"></div></div>
 </div>
@@ -1527,7 +1641,19 @@ const oFreq = [1.25, 2.35, 4.4, 8.3, 15.5, 29.0];
    changes what the planet IS rather than how much of each thing it holds, and
    the controller absorbs the consequences for free — it targets a SHARE of
    ocean, so it simply finds a different sea level for the same coastline. */
-const oAmp  = [0.60, 0.30, 0.16, 0.085, 0.045, 0.024].map(a=>a*PARAMS.relief);
+/* Relief is applied where the amplitude is USED, not baked in here, which is
+   what lets the slider be live. rebuildBand recomputes `amp` every pass anyway
+   — the octaves breathe — so reading the parameter there costs one multiply and
+   the terrain rises or subsides as the rolling cursor sweeps the globe, inside
+   a second.
+
+   And it stays link-safe, which is the reason this one can be live and the
+   tectonic rate cannot. Elevation here is a pure function of seed, relief and
+   time — no history — so a link carrying the new relief reproduces exactly what
+   was on screen. The tectonic rate multiplies a SPIN, and an angle is
+   accumulated: change it live and the terrain either snaps to an unrelated
+   configuration or has to carry a phase offset that a link cannot express. */
+const oAmpBase = [0.60, 0.30, 0.16, 0.085, 0.045, 0.024];
 const oAxis = [], oSpin = [], oBreathA = [], oBreathW = [], oBreathP = [];
 (function(){
   let s=(SEED*2654435761)>>>0 || 7;
@@ -1628,7 +1754,7 @@ function rebuildBand(j0,j1,t){
 
   const amp=[];
   for(let o=0;o<OCT;o++)
-    amp.push(oAmp[o]*(1 + oBreathA[o]*Math.sin(t*oBreathW[o]+oBreathP[o])));
+    amp.push(oAmpBase[o]*PARAMS.relief*(1 + oBreathA[o]*Math.sin(t*oBreathW[o]+oBreathP[o])));
 
   for(let j=j0;j<j1;j++){
     for(let i=0;i<GW;i++){
@@ -6484,12 +6610,12 @@ function detailZoom(){
   return dMax/Math.max(1e-6, fitDist());
 }
 const SHOTS = [
- {name:"the world in space", weight:2, pick(){
+ {name:"the world in space", pick(){
     return {dir:litPick(8, o=>dirAt(POLE[0],POLE[1],POLE[2], 0.7+Math.random()*0.7, o),
                         0, false),
             zoom:2.0+Math.random()*0.6, hold:HOLD, rate:0}; }},
 
- {name:"the night side", weight:2, pick(){
+ {name:"the night side", pick(){
     /* Just off the anti-sun point, so a sliver of lit limb is already showing.
        The eye holds against the ground and the terminator comes to it: 0.70 of
        the turn is 25 degrees of solar angle over the dwell, which is a crescent
@@ -6498,16 +6624,16 @@ const SHOTS = [
     return {dir:dirAt(-SUN[0],-SUN[1],-SUN[2], 0.30+Math.random()*0.35, _tv),
             zoom:0.90, hold:HOLD, rate:0.70}; }},
 
- {name:"the sunlit side", weight:2, pick(){
+ {name:"the sunlit side", pick(){
     return {dir:dirAt(SUN[0],SUN[1],SUN[2], Math.random()*0.5, _tv),
             zoom:0.62+Math.random()*0.18, hold:HOLD, rate:1}; }},
 
- {name:"the planet turning", weight:2, pick(){
+ {name:"the planet turning", pick(){
     return {dir:litPick(8, o=>dirAt(POLE[0],POLE[1],POLE[2], 1.2+Math.random()*0.5, o),
                         0, false),
             zoom:1.00+Math.random()*0.25, hold:HOLD, rate:0}; }},
 
- {name:"holding one place", weight:3, pick(){
+ {name:"holding one place", pick(){
     /* over an actual plant if the planet has one, and over anywhere if it does
        not — a dead world should still get a tour */
     const n=livelyDirs();
@@ -6518,7 +6644,7 @@ const SHOTS = [
     return {dir:d, zoom:Math.min(0.42+Math.random()*0.18, detailZoom()),
             hold:HOLD, rate:1}; }},
 
- {name:"the shade line", weight:2, pick(){
+ {name:"the shade line", pick(){
     /* A right angle from the sun is the terminator seen side-on, and the eye
        must hold against the GROUND for the line to move across it at all —
        held against the sun instead, the lighting is nailed to the screen and
@@ -6530,12 +6656,12 @@ const SHOTS = [
                         1, true),
             zoom:0.72, hold:HOLD, rate:1}; }},
 
- {name:"the ring face on", weight:1, pick(){
+ {name:"the ring face on", pick(){
     return {dir:litPick(8, o=>dirAt(POLE[0],POLE[1],POLE[2], Math.random()*0.35, o),
                         0, false),
             zoom:1.55+Math.random()*0.35, hold:HOLD, rate:0}; }},
 
- {name:"the ring edge on", weight:2, pick(){
+ {name:"the ring edge on", pick(){
     /* the ring lies in the equator, so standing in that plane is what makes it
        a line — and a drift out of it is what makes it open again */
     return {dir:litPick(8, o=>dirAt(POLE[0],POLE[1],POLE[2],
@@ -6543,14 +6669,14 @@ const SHOTS = [
                         0.33, false),
             zoom:1.40+Math.random()*0.30, hold:HOLD, rate:0.33}; }},
 
- {name:"over a pole", weight:2, pick(){
+ {name:"over a pole", pick(){
     return {dir:litPick(8, o=>{ const s=Math.random()<0.5?1:-1;
               dirAt(s*POLE[0],s*POLE[1],s*POLE[2], 0.18+Math.random()*0.28, o); },
                         1, false),
             zoom:Math.min(0.46+Math.random()*0.14, detailZoom()),
             hold:HOLD, rate:1}; }},
 
- {name:"down the tangent", weight:3, pick(){
+ {name:"down the tangent", pick(){
     /* The shuttle window. The eye is low and looks along its own track rather
        than down at the ground, so the horizon is in frame and the surface runs
        underneath. Standing still in space at this height IS the orbit — the
@@ -6592,7 +6718,7 @@ const SHOTS = [
     const d=_cand[bi];
     return {dir:[d[0],d[1],d[2]], zoom:0.30, hold:HOLD, rate:0, tangent:true}; }},
 
- {name:"low over the plants", weight:3, pick(){
+ {name:"low over the plants", pick(){
     /* Don's note, and it is the whole reason the sun gets a vote: from this
        close, unlit ground is nothing at all to look at. The eye holds against
        the ground, so the light really does move during the dwell — 15 seconds
@@ -6606,7 +6732,6 @@ const SHOTS = [
     return {dir:d, zoom:Math.min(0.17+Math.random()*0.05, detailZoom()),
             hold:HOLD, rate:1}; }},
 ];
-const SHOTW = SHOTS.reduce((a,s)=>a+s.weight, 0);
 
 /* Where a leg ends. `up` is the pole for every shot but the tangent one, which
    takes the local vertical instead — that is what puts the planet along the
@@ -6672,13 +6797,40 @@ function tourFrom(){
   TOUR.fromR=TOUR.toR;
   TOUR.t=0; TOUR.held=0; TOUR.arrived=false;
 }
+/* A shuffled bag, dealt one at a time and refilled when it empties, rather than
+   a weighted draw with a guard against drawing the same thing twice running.
+   The guard was the whole of what the draw guaranteed, and it is the weaker half
+   of what is wanted: it stops a shot repeating IMMEDIATELY and says nothing at
+   all about a shot not appearing for twenty minutes. Independent draws do that
+   often — with eleven framings, the chance a particular one is missing from any
+   given eleven legs is better than one in three.
+
+   A bag gives both properties outright. Every framing appears exactly once per
+   cycle, so the longest anyone can wait for a particular one is two cycles, and
+   in the four minutes a cycle takes they will have seen all eleven.
+
+   The weights are gone with it. They were never measured — they were a guess at
+   which framings were worth more — and a rule with a guarantee is worth more
+   than an unmeasured preference. A dead field would be worse than either. */
+let TOURBAG = [];
+function nextShot(){
+  if(!TOURBAG.length){
+    for(let i=0;i<SHOTS.length;i++) TOURBAG.push(i);
+    for(let i=TOURBAG.length-1;i>0;i--){          /* Fisher-Yates */
+      const j=(Math.random()*(i+1))|0, t=TOURBAG[i]; TOURBAG[i]=TOURBAG[j]; TOURBAG[j]=t;
+    }
+    /* Dealt from the end, so the next one out is the last element — and the one
+       place a shuffle can still repeat immediately is a fresh cycle opening on
+       the shot the previous one closed with. */
+    const n=TOURBAG.length;
+    if(n>1 && TOURBAG[n-1]===TOUR.last){
+      const t=TOURBAG[n-1]; TOURBAG[n-1]=TOURBAG[0]; TOURBAG[0]=t;
+    }
+  }
+  return TOURBAG.pop();
+}
 function tourLeg(){
-  /* never the same shot twice running, so the route reads as a route */
-  let pickN, tries=0;
-  do{
-    let r=Math.random()*SHOTW;
-    pickN=0; while(pickN<SHOTS.length-1 && (r-=SHOTS[pickN].weight)>0) pickN++;
-  } while(pickN===TOUR.last && ++tries<8);
+  const pickN = nextShot();
   TOUR.last=pickN;
   const sh=SHOTS[pickN], p=poseFor(sh);
   tourFrom();
@@ -7433,7 +7585,7 @@ const SETTINGS = [
   lo:"no seasons", hi:"pole to the sun",
   why:"How far the world leans, and how strong its seasons are. At zero the sun never leaves the equator, the ice line never moves, and plants don't have to adapt to seasonal changes. Turn it up and the summer pole is never dark while the winter pole never sees the sun rise, while ice forms at the equator. The ring lies in the equator, so it leans with the world as you move this.",
   fmt:v=>v===0?"upright — no seasons":v+"°"},
- {key:"relief", name:"Elevation change", min:0.3, max:2.0, step:0.05, restart:true,
+ {key:"relief", name:"Elevation change", min:0.3, max:2.0, step:0.05,
   lo:"broad plains", hi:"archipelagos",
   why:"How smooth or rough the world is. Low values produce broad plains and simple continents. High values create snow-capped mountains, deep basins and archipelagos.",
   fmt:v=>v<0.7?"smooth":v<1.3?"ordinary":v<1.7?"mountainous":"broken"},
@@ -7681,15 +7833,70 @@ function ends(item){
    the running world, so the only honest choices are to restart or to drop the
    changes — and offering an OK that silently did neither would be a lie. */
 let setSnap = null, pendingRestart = false;
+/* Changed against the snapshot taken when the panel OPENED, which is the only
+   reference the two buttons in the corner can honestly use: OK keeps what you
+   did in this visit to the panel and Cancel undoes it. Compared by value rather
+   than by a flag, so moving a slider away and back again correctly counts as
+   having changed nothing. */
+function setDirty(){
+  if(!setSnap) return false;
+  for(const k in PARAMS) if(PARAMS[k]!==setSnap[k]) return true;
+  return false;
+}
 function updateBtns(){
-  const show=(id,on)=>{ document.getElementById(id).style.display = on?"":"none"; };
-  show("setcopy",   !pendingRestart);
-  show("setreset",  !pendingRestart);
-  show("setclose",  !pendingRestart);
-  show("setcancel",  pendingRestart);
-  show("setrestart", pendingRestart);
+  const dirty = setDirty();
+  const ok = document.getElementById("setok");
+  const close = document.getElementById("setclose");
+  const restart = document.getElementById("setrestart");
+  if(ok){
+    ok.disabled = !dirty;
+    /* Once a restart-only setting has moved there IS no "ok". The change is
+       real and in the link, but the world on screen was built before it and
+       cannot be told — so the button that accepts the change becomes the one
+       that makes it true, rather than closing over the top of a world that
+       does not match its own settings. */
+    ok.textContent = pendingRestart ? "restart" : "ok";
+    ok.classList.toggle("wants", pendingRestart);
+    ok.title = pendingRestart
+      ? "start the world again with these settings, which is the only way this change can take effect"
+      : "keep these settings";
+  }
+  if(close){
+    /* one button, renamed, because with nothing changed there is nothing to
+       cancel and with something changed there is no such thing as just closing */
+    /* the same mark the graphs and the about panel close with — one gesture,
+       one glyph, wherever you meet it */
+    close.textContent = (dirty ? "cancel" : "close") + " ×";
+    close.title = dirty ? "put the settings back as they were and close"
+                        : "close";
+  }
+  /* Restart is always available — it is how a restart-only setting takes effect,
+     and how anyone starts again from the settings they now have. It goes amber
+     only once something is waiting on it. */
+  if(restart) restart.classList.toggle("wants", pendingRestart);
 }
 function markRestart(){ if(!pendingRestart){ pendingRestart=true; updateBtns(); } }
+
+/* Start again, and FETCH THE PAGE AGAIN while doing it.
+   location.reload() is not enough: iOS Safari will serve the document out of
+   cache, and that is precisely the case this button exists for. Pulling down to
+   refresh is awkward on a phone, and somebody who has been sent a newer version
+   of this piece has no other way to reach it — so restart is the way, and it has
+   to work whether or not any setting has been touched.
+
+   A query that changes forces a genuine navigation. It is kept out of the
+   shareable link deliberately: that is built from origin + pathname + hash and
+   never carries this. `replace` rather than an assignment, so restarting five
+   times does not leave five entries to walk back through.
+
+   Date.now() is fine here where prnd() would not be. The world is still
+   determined entirely by the seed and parameters in the hash; this touches only
+   which copy of the file the browser goes and gets. */
+function restartWorld(){
+  writeHash();
+  const base = location.href.split('#')[0].split('?')[0];
+  location.replace(base + '?r=' + Date.now() + location.hash);
+}
 
 const setLink = document.getElementById("setlink");
 function writeHash(){
@@ -7710,6 +7917,27 @@ function writeHash(){
   if(setLink) setLink.value = location.origin+location.pathname+hash;
 }
 function applyLive(){ plantsDirty=true; updateHUD(); }
+
+/* Whether anything has been changed since this world started running.
+   The link carries the seed and the settings and cannot carry ELAPSED TIME, so
+   it always starts the world from its beginning. That is fine when nothing has
+   been touched — seed plus settings determine the whole run, so letting it run
+   as long gets to the same place. Move a dial part way through and it stops
+   being true: what is on screen took a path those settings do not describe, and
+   no link can express a path. */
+let settingsTouched = false;
+const setLinkNote = document.getElementById("setlinknote");
+function markTouched(){ settingsTouched = true; noteLink(); updateBtns(); }
+function noteLink(){
+  if(!setLinkNote) return;
+  setLinkNote.classList.toggle("warn", settingsTouched);
+  setLinkNote.textContent = settingsTouched
+    ? "You have changed settings while this world was running, so this link "
+    + "starts a fresh world with the settings you have now — it will not "
+    + "retrace the path this one took."
+    : "This link starts the same world from its beginning. Leave it running to "
+    + "reach what you are looking at now.";
+}
 
 /* ── the slider ────────────────────────────────────────────────────────
    One or two knobs on a shared track. See the CSS for why it is not an
@@ -7860,7 +8088,7 @@ function buildControl(item, withEnds){
       val.textContent=item.choice[at].why; };
     item.choice.forEach(c=>{
       const b=document.createElement("button"); b.type="button"; b.textContent=c.label;
-      b.addEventListener("click",()=>{ Object.assign(PARAMS,c.set); mark(); writeHash();
+      b.addEventListener("click",()=>{ Object.assign(PARAMS,c.set); markTouched(); mark(); writeHash();
                                        applyLive(); });
       wrap.appendChild(b);
     });
@@ -7873,7 +8101,7 @@ function buildControl(item, withEnds){
     const show=()=>{ val.textContent=item.fmt(PARAMS[lo],PARAMS[hi]); };
     const sl=makeSlider({min:item.min, max:item.max, step:item.step, label:item.name,
       values:[PARAMS[lo], PARAMS[hi]],
-      onInput:vv=>{ PARAMS[lo]=vv[0]; PARAMS[hi]=vv[1]; show(); writeHash();
+      onInput:vv=>{ PARAMS[lo]=vv[0]; PARAMS[hi]=vv[1]; markTouched(); show(); writeHash();
                     applyLive(); }});
     box.appendChild(sl.el); if(withEnds) box.appendChild(ends(item)); show();
   } else {
@@ -7890,7 +8118,7 @@ function buildControl(item, withEnds){
     const show=()=>{ val.textContent=item.fmt?item.fmt(PARAMS[item.key]):PARAMS[item.key]; };
     const sl=makeSlider({min:item.min, max:item.max, step:item.step, label:item.name,
       values:[toUI(PARAMS[item.key])],
-      onInput:vv=>{ PARAMS[item.key]=toUI(vv[0]); show(); writeHash();
+      onInput:vv=>{ PARAMS[item.key]=toUI(vv[0]); markTouched(); show(); writeHash();
                     if(item.restart) markRestart();
                     else { if(item.live) item.live(PARAMS[item.key]); applyLive(); } }});
     box.appendChild(sl.el); if(withEnds) box.appendChild(ends(item)); show();
@@ -7898,9 +8126,45 @@ function buildControl(item, withEnds){
   return box;
 }
 
+/* Update the pin buttons where they stand, rather than rebuilding the whole
+   panel because one boolean changed.
+
+   This was the iPhone bug, and it was never the button. buildSettings() begins
+   with `setList.textContent = ""`, and #setlist is a scroll container carrying
+   -webkit-overflow-scrolling:touch. Emptying it collapses its scrollHeight to
+   zero, iOS pins scrollTop to zero with it, and the content comes back without
+   the position. So: scroll down to a control, tap its pin — it pins, and the
+   list jumps to the top. Tap the same spot to unpin and you are now tapping a
+   different card. Which reads exactly as "you can't disable a pin once you have
+   enabled it", and only on the settings page, because the copy on the world view
+   is not inside a scroller at all.
+
+   It does not reproduce in Chromium, which restores scroll position across a
+   content swap where iOS Safari's momentum scroller does not — so the emulated
+   test that said "the list held its place" was true and told me nothing.
+
+   Rebuilding eighteen cards of sliders to change one class was wrong anyway. */
+function syncPinButtons(){
+  for(const b of setList.querySelectorAll(".card[data-key] .pin")){
+    const card = b.closest(".card"), key = card && card.dataset.key;
+    const item = SETTINGS.find(s2 => s2.key===key);
+    if(!item) continue;
+    const on = PINS.indexOf(key)>=0;
+    b.classList.toggle("on", on);
+    b.disabled = !on && pinFull;
+    b.setAttribute("aria-pressed", on?"true":"false");
+    b.setAttribute("aria-label",(on?"unpin ":"pin ")+item.name);
+    b.title = on ? "remove from the world view"
+            : b.disabled ? "no room for another — unpin something first"
+            : "keep this control on the world view";
+  }
+}
 function buildSettings(){
-  /* the actions card is fixed above this list now, so emptying it is simply
-     emptying it */
+  /* Emptying a scroll container throws its scroll position away — on iOS
+     because scrollHeight collapses to nothing and takes scrollTop with it, and
+     on anything else because it is not guaranteed either. Nothing that rebuilds
+     a list should move the reader's place in it. */
+  const wasAt = setList.scrollTop;
   setList.textContent="";
   nowFields=[];
   for(const item of SETTINGS){
@@ -7933,7 +8197,7 @@ function buildSettings(){
       pin.title = on ? "remove from the world view"
                 : pin.disabled ? "no room for another — unpin something first"
                 : "keep this control on the world view";
-      pin.addEventListener("click",e=>{ e.stopPropagation(); togglePin(item.key); buildSettings(); });
+      pin.addEventListener("click",e=>{ e.stopPropagation(); togglePin(item.key); syncPinButtons(); });
       head.appendChild(pin);
     }
     row.appendChild(head);
@@ -7951,6 +8215,7 @@ function buildSettings(){
     row.appendChild(buildControl(item, true));
     setList.appendChild(row);
   }
+  setList.scrollTop = wasAt;
   markScroll(setList);
 }
 
@@ -7959,7 +8224,7 @@ function setSettings(on){
   document.getElementById("hud").classList.toggle("behind",on);
   setEl.setAttribute("aria-hidden",on?"false":"true");
   clearInterval(nowTimer); nowTimer=0;
-  if(on){ setSnap=Object.assign({},PARAMS); pendingRestart=false;
+  if(on){ setSnap=Object.assign({},PARAMS); pendingRestart=false; noteLink();
           buildSettings(); updateBtns(); writeHash();
           nowTimer=setInterval(()=>{ for(const f of nowFields) f(); }, 900); }
   /* the panel covers the world, so the two copies are never both on screen —
@@ -7979,21 +8244,59 @@ document.getElementById("setcopy").addEventListener("click",async e=>{
   btn.textContent = ok ? "copied" : "press to copy";
   setTimeout(()=>{ btn.textContent=was; }, 1600);
 });
-document.getElementById("setclose").addEventListener("click",e=>{ e.stopPropagation(); setSettings(false); });
-document.getElementById("setcancel").addEventListener("click",e=>{
+document.getElementById("setok").addEventListener("click",e=>{
   e.stopPropagation();
-  if(setSnap) Object.assign(PARAMS,setSnap);
-  pendingRestart=false; writeHash(); applyLive(); setSettings(false);
+  if(pendingRestart){ restartWorld(); return; }
+  setSettings(false);
 });
+/* Close when nothing changed, Cancel when something did — the same button, and
+   the same handler, because "put it back as it was" is a no-op either way. */
+document.getElementById("setclose").addEventListener("click",e=>{
+  e.stopPropagation();
+  if(setSnap && setDirty()){
+    Object.assign(PARAMS,setSnap);
+    pendingRestart=false;
+    /* the two that are applied rather than merely read: the axis is derived
+       from POLE and has to be told, and the terrain re-reads relief on its own
+       next sweep */
+    setTiltLive(PARAMS.tilt);
+    writeHash(); buildSettings(); applyLive();
+  }
+  setSettings(false);
+});
+/* The settings that cannot be applied to a running world, taken from the panel
+   itself rather than listed again here — a second copy of this list would be one
+   more thing to forget when a setting changes side. */
+const RESTART_KEYS = SETTINGS.flatMap(it =>
+  it.restart ? (it.pair || (it.key && it.key[0]!=="_" ? [it.key] : [])) : []);
 document.getElementById("setreset").addEventListener("click",e=>{
-  e.stopPropagation(); Object.assign(PARAMS,DEFAULTS); writeHash(); buildSettings(); applyLive();
+  e.stopPropagation();
+  /* Going back to defaults can move a restart-only setting as easily as any
+     other, and then the world on screen no longer matches its own settings.
+     Compared by value, so a world already at the default for those needs no
+     restart and is not asked for one. */
+  const was = {}; for(const k of RESTART_KEYS) was[k] = PARAMS[k];
+  Object.assign(PARAMS,DEFAULTS);
+  if(RESTART_KEYS.some(k => PARAMS[k] !== was[k])) markRestart();
+  setTiltLive(PARAMS.tilt);
+  markTouched(); writeHash(); buildSettings(); applyLive(); updateBtns();
 });
+/* Always available, whether or not anything has been changed — on a phone this
+   is the refresh button the browser makes hard to reach. */
 document.getElementById("setrestart").addEventListener("click",e=>{
-  e.stopPropagation(); writeHash(); location.reload();
+  e.stopPropagation(); restartWorld();
 });
 ["pointerdown","pointerup","click","wheel","touchstart"].forEach(ev=>
   setEl.addEventListener(ev,e=>e.stopPropagation(),{passive:true}));
-addEventListener("keydown",e=>{ if(e.key==="Escape"&&setEl.classList.contains("on")) setSettings(false); });
+/* Escape is the same gesture as the button in the corner and must mean the same
+   thing. It used to close and keep, which was fine when the button also closed
+   and kept — now that the button reverts once something has changed, a keyboard
+   that quietly did the opposite would be the worst kind of difference: invisible
+   until it has thrown away or kept something you did not expect. */
+addEventListener("keydown",e=>{
+  if(e.key==="Escape" && setEl.classList.contains("on"))
+    document.getElementById("setclose").click();
+});
 
 document.getElementById("chartclose").addEventListener("click",e=>{
   e.stopPropagation(); setCharts(false);
@@ -8122,6 +8425,9 @@ window.__world = {
                   detailZoom:+detailZoom().toFixed(3),
                   shots:SHOTS.map(s=>s.name)}; },
   setTour(v){ setTour(!!v); },
+  /* the order the pilot will actually visit things in, without flying it: each
+     call finishes a leg and starts the next, so a whole cycle costs no time */
+  tourNext(){ tourLeg(); return TOUR.shot; },
   /* so a harness with the frame loop stopped can still fly the tour by hand,
      which is the only way to prove the tour changes nothing while the frame
      loop is not free to change something itself */

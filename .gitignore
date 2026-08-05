@@ -1,3 +1,12 @@
 node_modules/
 CLAUDE.local.md
 *.bak
+sweeps/*.jsonl
+sweeps/*.log
+.measure/
+# raw measurement output and working screenshots — the findings live in
+# docs/world-controls.md, the same way sweep results live in plants-measured.md
+docs/controls*.json
+docs/img/ui/
+docs/img/controls/
+docs/img/fade/

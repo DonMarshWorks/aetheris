@@ -165,6 +165,95 @@ async function homeostasis(browser) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────
+   3b. Diversity — the acceptance test the ecology is built around
+   ────────────────────────────────────────────────────────────────────────
+   "Genetic diversity must not collapse over a simulated hour." That has been
+   the stated acceptance test since the design was written and it has never
+   been enforced, which is exactly how a run reached 44,600 ticks with one
+   lineage holding 63% of the planet before anyone noticed. Watching is not
+   enough; that is how you ship something that looks alive for five minutes.
+
+   Measured genomically, per the brief — the spread of the colour projection
+   and the share held by the largest strategy — never by counting plant
+   objects, which churn every few seconds and would be pure noise.
+   ──────────────────────────────────────────────────────────────────────── */
+const DIVERSITY = {
+  ecoTicks: 45000,  // ECOLOGY ticks, and derived into climate updates from the
+                    // page's own ecorate rather than written down as one.
+                    // Written as 2813 climate updates it silently halved the
+                    // moment ecorate went from 16 to 8 — the acceptance test
+                    // quietly getting easier because a simulation parameter
+                    // moved underneath it, which is the exact drift the note
+                    // below already records happening once before. The horizon
+                    // is 45,000 ecology ticks, where erosion became visible in
+                    // a real session, and it stays 45,000 whatever ecorate is.
+                    // Counting climate updates and running one plant
+                    // step each, as this harness once did, measures a world
+                    // with far more drift per generation than anyone watches.
+                    //
+                    // It was 700, which was right only while runWorld defaulted
+                    // to 64 steps per climate update. That default stopped
+                    // matching the frame loop when ecorate became a parameter
+                    // and was set to 16, so this test was quietly checking an
+                    // ecology running four times faster against its climate
+                    // than the shipped piece — a calmer world, and an easier
+                    // one to pass. runWorld now defaults to ECORATE itself, so
+                    // the count here is climate updates and the product is the
+                    // ecology ticks that matter.
+  evenness: 0.45,   // niche evenness floor, 0 = one environment holds all life
+  largest:  0.50,   // ceiling on the biggest single strategy's share
+  strategies:  10,  // of 32 cells, how many must still be occupied
+  bodies:     200,  // and the world must not have shattered or emptied
+};
+function evennessOf(niche) {
+  const v = Object.values(niche), t = v.reduce((a, b) => a + b, 0);
+  if (!t) return 0;
+  let h = 0;
+  for (const x of v) if (x > 0) { const p = x / t; h -= p * Math.log(p); }
+  return h / Math.log(5);
+}
+
+async function diversity(browser) {
+  section('Diversity over a simulated hour of ecology');
+  for (const seed of ['#seed=31337', '#seed=7']) {
+    const page = await browser.newPage({ viewport: { width: 300, height: 300 } });
+    const errs = [];
+    page.on('pageerror', e => errs.push(e.message));
+    page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+    await page.goto('file://' + PAGE + seed);
+    await page.waitForFunction(() => window.__world && window.__world.S.epoch0 > 0, { timeout: 180000 });
+    /* climate updates that owe exactly the ecology steps wanted, read from the
+       page so the two can never disagree again */
+    const eco = await page.evaluate(() => window.__world.params().ecorate);
+    const updates = Math.round(DIVERSITY.ecoTicks / eco);
+    let left = updates;
+    while (left > 0) {
+      const chunk = Math.min(left, 500);
+      await page.evaluate(n => window.__world.runWorld(n, 100), chunk);
+      left -= chunk;
+    }
+    const p = await page.evaluate(() => window.__world.plants());
+
+    const even = evennessOf(p.niche);
+    const ok = even >= DIVERSITY.evenness
+            && p.topStrategy <= DIVERSITY.largest
+            && p.strategies >= DIVERSITY.strategies
+            && p.bodies >= DIVERSITY.bodies
+            && p.live > 0;
+    check(ok, `${seed} — evenness ${even.toFixed(2)} (>=${DIVERSITY.evenness}) ` +
+              `largest ${p.topStrategy} (<=${DIVERSITY.largest}) ` +
+              `strategies ${p.strategies} bodies ${p.bodies} live ${p.live}`);
+    /* not a pass/fail, but the numbers that say *why* if it ever goes */
+    console.log(`       fit ${p.meanFit} specialisation ${p.specialisation} ` +
+                `two-terrain ${p.body.twoTerrainBodies} lean ${p.body.leanGain} ` +
+                `mean plant ${p.meanBody} largest ${p.largestBody}`);
+    check(p.nonFinite === 0, `${seed} — no non-finite formula results (${p.nonFinite})`);
+    check(errs.length === 0, `${seed} — no errors` + (errs.length ? `: ${errs[0]}` : ''));
+    await page.close();
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────
    4. Served over HTTP — how it actually ships
    ──────────────────────────────────────────────────────────────────────── */
 function serve() {
@@ -298,6 +387,41 @@ async function touch(browser) {
     return was === h.classList.contains('hidden');
   });
   check(dragged, 'a drag does not toggle the interface');
+
+  // A near miss on a control must not hide the interface. The buttons are small,
+  // and a thumb that lands just beside pause used to read as a tap on the world
+  // and take the whole readout away.
+  const nearMiss = await page.evaluate(() => {
+    const c = document.getElementById('gl'), h = document.getElementById('hud');
+    if (h.classList.contains('hidden')) h.classList.remove('hidden');
+    const r = document.getElementById('playpause').getBoundingClientRect();
+    const o = { pointerId: 99, pointerType: 'touch', bubbles: true, cancelable: true,
+                clientX: r.right + 6, clientY: r.top + r.height / 2 };
+    c.dispatchEvent(new PointerEvent('pointerdown', o));
+    window.dispatchEvent(new PointerEvent('pointerup', o));
+    return !h.classList.contains('hidden');
+  });
+  check(nearMiss, 'a near miss on a control does not hide the interface');
+
+  // The readout is not a document: dragging across it must not select the clock.
+  const noSelect = await page.evaluate(() => {
+    const s = getComputedStyle(document.getElementById('hud'));
+    return (s.userSelect || s.webkitUserSelect) === 'none';
+  });
+  check(noSelect, 'interface text is not selectable');
+
+  // The metrics overlay must open, stay inside the viewport and close again.
+  const charts = await page.evaluate(() => {
+    document.getElementById('info').click();
+    const on = document.getElementById('charts').classList.contains('on');
+    const d = document.documentElement;
+    const fits = d.scrollWidth === d.clientWidth && d.scrollHeight === d.clientHeight;
+    document.getElementById('chartclose').click();
+    const off = !document.getElementById('charts').classList.contains('on');
+    return on && fits && off;
+  });
+  check(charts, 'metrics overlay opens, fits the viewport and closes');
+
   check(errs.length === 0, 'no errors during touch' + (errs.length ? `: ${errs[0]}` : ''));
 
   await ctx.close();
@@ -311,6 +435,7 @@ async function touch(browser) {
   try {
     await bootSeeds(browser);
     await homeostasis(browser);
+    if (!process.argv.includes('--quick')) await diversity(browser);
     await served(browser);
     await touch(browser);
   } finally {

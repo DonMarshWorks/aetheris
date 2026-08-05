@@ -1,0 +1,11 @@
+[
+  {"tag":"base",        "seed":31337, "params":{}},
+  {"tag":"ocean-low",   "seed":31337, "params":{"tgtocean":0.15}},
+  {"tag":"ocean-high",  "seed":31337, "params":{"tgtocean":0.90}},
+  {"tag":"ice-low",     "seed":31337, "params":{"tgtice":0.034}},
+  {"tag":"ice-high",    "seed":31337, "params":{"tgtice":0.194}},
+  {"tag":"desert-low",  "seed":31337, "params":{"tgtdesert":0.02}},
+  {"tag":"desert-high", "seed":31337, "params":{"tgtdesert":0.55}},
+  {"tag":"relief-low",  "seed":31337, "params":{"relief":0.3}},
+  {"tag":"relief-high", "seed":31337, "params":{"relief":2.0}}
+]
