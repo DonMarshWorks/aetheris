@@ -4853,6 +4853,9 @@ function renderDetail(){
 /* Sampled once per rebuild rather than per node, so every part of a plant is
    at the same point in its fade and the body cannot come back in stripes. */
 let SELFADE=0;
+/* How long the plant sheet must wait between rebuilds, in milliseconds, and
+   zero when the machine can afford one whenever the world changes. */
+let sheetGap = 0, lastSheet = 0, fpsNow = 60;
 function renderPlants(){
   SELFADE=selFade();
   /* Two different clocks. The planet-wide sheet only changes when the
@@ -4862,6 +4865,19 @@ function renderPlants(){
      a mipmap per frame for a window that had merely panned. */
   if(detailOn > 0.002) renderDetail();
   if(!plantsDirty) return;
+  /* On a machine that cannot keep up, this is the most expensive thing in the
+     frame: a quarter of a million instances rebuilt on the CPU, uploaded, drawn
+     into a 2048x1024 target and mipmapped. It is dirtied by every birth and
+     every death, so at one frame a second it was being rebuilt every frame —
+     the simulation was setting the render cost.
+
+     Rate-limited rather than skipped: the flag stays up, so nothing is lost and
+     the sheet simply lags the world by a fraction of a second. That is the
+     honest version of "slow the plants down to buy frames" — the ecology is not
+     slowed at all, only how often anyone is shown it. */
+  const nowMs = performance.now();
+  if(sheetGap > 0 && nowMs - lastSheet < sheetGap) return;
+  lastSheet = nowMs;
   plantsDirty=false;
   buildInstances();
   gl.bindBuffer(gl.ARRAY_BUFFER,instVBO);
@@ -6248,11 +6264,51 @@ document.querySelectorAll(".sp").forEach(b=>{
     updateHUD();
   });
 });
+/* ---- driving it without a pointer ----
+   A television remote has a d-pad and no mouse. Its browser papers over that
+   with a virtual cursor the d-pad nudges around, and that cursor is useless
+   here: one press sends it half way across the screen, and the thing underneath
+   is a planet rather than a row of links.
+
+   So the arrows drive the CAMERA. Taking them with preventDefault is also what
+   tells a television browser this page handles its own navigation, which is
+   what stops the cursor being drawn over the top of it.
+
+   The step is scaled by the lens for the same reason a drag is: at full
+   telephoto a fixed number of radians throws the view clear off the planet. It
+   is a fifth of the visible field per press, so five presses cross the frame
+   whatever the zoom. Held down, the browser's own key repeat carries it. */
+let lastKey = "";
+function nudge(dx, dy){
+  const r = camFov()*0.2;
+  qAxis(0,1,0,-dx*r,_q1); qMul(CAM.tq,_q1,_q2);
+  qAxis(1,0,0,-dy*r,_q1); qMul(_q2,_q1,CAM.tq);
+  qNorm(CAM.tq);
+}
 addEventListener("keydown",e=>{
+  lastKey = (e.key||"?") + " / " + (e.code||"?") + " / " + (e.keyCode|0);
+  /* a control with focus owns its own arrows — the sliders already use them */
+  const onControl = document.activeElement &&
+    document.activeElement !== document.body &&
+    document.activeElement.closest("#settings, #charts, #about, #hud");
   if(e.code==="Space"){ e.preventDefault(); setPaused(!paused); }
   else if(e.key==="h"||e.key==="H"){ setHud(!hudShown); }
   else if(e.key==="1"||e.key==="2"||e.key==="3"){
     const b=document.querySelectorAll(".sp")[+e.key-1]; if(b) b.click();
+  }
+  else if(!onControl && !touring() &&
+          (e.key==="ArrowLeft"||e.key==="ArrowRight"||e.key==="ArrowUp"||e.key==="ArrowDown")){
+    e.preventDefault();
+    nudge(e.key==="ArrowLeft" ? -1 : e.key==="ArrowRight" ? 1 : 0,
+          e.key==="ArrowUp"   ? -1 : e.key==="ArrowDown"  ? 1 : 0);
+  }
+  else if(!onControl && (e.key==="+"||e.key==="="||e.key==="PageUp")){
+    e.preventDefault();
+    CAM.tZoom = clamp(CAM.tZoom*0.80, ZMIN, 2.6); CAM.tDist = camDistOf(CAM.tZoom);
+  }
+  else if(!onControl && (e.key==="-"||e.key==="_"||e.key==="PageDown")){
+    e.preventDefault();
+    CAM.tZoom = clamp(CAM.tZoom*1.25, ZMIN, 2.6); CAM.tDist = camDistOf(CAM.tZoom);
   }
 });
 
@@ -7035,17 +7091,33 @@ function frame(now){
   let dt=(now-last)/1000; last=now;
   if(dt>0.25) dt=0.25;
 
-  /* adaptive resolution */
+  /* Adaptive resolution, sampled on TIME as well as on frames.
+     Forty-five frames is a fifth of a second at sixty and three quarters of a
+     MINUTE at one — so on a machine slow enough to actually need this, the thing
+     meant to rescue it had not run yet. Whichever comes first now, so a device in
+     trouble is helped inside a second. */
   frameAcc+=dt; frameN++;
-  if(frameN>=45){
+  if(frameN>=45 || frameAcc>=0.8){
     const fps=frameN/frameAcc;
     /* Back to chasing 60. Holding resolution down to 30 was tried and it looks
        worse: more pixels on a choppier planet reads as worse, not better, when
        the subject is a thing turning smoothly. Motion is the presentation here
-       and detail is second to it. */
-    if(fps<38 && dpr>0.75){ dpr=Math.max(0.75,dpr*0.82); resize(); }
+       and detail is second to it.
+
+       The floor is in two stages. 0.75 is as soft as a machine that is merely
+       struggling should ever be asked to look; but a set-top box at 1080p is
+       still drawing 1.4 million pixels there, and below about twelve frames a
+       second the picture has stopped being a moving image at all. So a device
+       that is still in real trouble at the first floor is allowed down to the
+       second, where it is drawing a quarter as many pixels — and a television is
+       watched from three metres, where that is a trade worth making. */
+    const floor = (fps < 12 && dpr <= 0.78) ? 0.42 : 0.75;
+    if(fps<38 && dpr>floor){ dpr=Math.max(floor,dpr*0.82); resize(); }
     else if(fps>57 && dpr < Math.min(devicePixelRatio||1,2)-0.02){
       dpr=Math.min(Math.min(devicePixelRatio||1,2), dpr*1.08); resize(); }
+    /* how much of a frame the plant sheet may have. See renderPlants. */
+    sheetGap = fps < 10 ? 900 : fps < 20 ? 450 : fps < 34 ? 200 : 0;
+    fpsNow = fps;
     frameAcc=0; frameN=0;
   }
 

@@ -1,8 +1,12 @@
 node_modules/
 CLAUDE.local.md
 *.bak
-sweeps/*.jsonl
-sweeps/*.log
+# the whole of it. This is scratch — sweep plans, result files, diagnostic
+# one-offs and working screenshots — and 13MB of it had been committed to the
+# working branch by the two lines that used to be here, which named only the
+# two extensions somebody happened to think of. The findings live in
+# docs/plants-measured.md; the raw output is not worth carrying.
+sweeps/
 .measure/
 # raw measurement output and working screenshots — the findings live in
 # docs/world-controls.md, the same way sweep results live in plants-measured.md
