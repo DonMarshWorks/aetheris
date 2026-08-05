@@ -95,10 +95,19 @@
     box-shadow:0 1px 6px rgba(0,0,0,.45);
   }
   .rbtn:hover{border-color:rgba(233,240,255,.60);background:rgba(233,240,255,.14)}
-  .rbtn svg{width:16px;height:16px;display:block;
+  /* 18 rather than 16 in a 40px button. The glyphs were sized when there were
+     four of them and all four were simple; a rocket has fins and a porthole to
+     spend its ink on, and two more units of grid is the difference between
+     reading them and guessing at them. Everything else in the row gains a
+     little legibility for nothing. */
+  .rbtn svg{width:18px;height:18px;display:block;
     filter:drop-shadow(0 0 2px rgba(0,0,0,.55))}
   /* held down reads as a state, not a hover */
   .rbtn.on{border-color:rgba(233,240,255,.72);background:rgba(233,240,255,.20)}
+  /* out of reach for the moment, and it must stop answering the hover too or
+     it goes on offering something it will not do */
+  .rbtn[disabled]{opacity:.30;cursor:default}
+  .rbtn[disabled]:hover{border-color:var(--faint);background:rgba(8,12,20,.34)}
   #info{font-size:18px;font-weight:700;line-height:1;
     text-shadow:0 0 3px rgba(0,0,0,.6)}
   .ctrls{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
@@ -125,12 +134,13 @@
   .ctitle{font-size:13px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink)}
   .csub{font-size:10px;letter-spacing:.11em;text-transform:uppercase;
     color:rgba(233,240,255,.5);margin-top:6px;font-variant-numeric:tabular-nums}
-  #chartclose{
+  /* one close button, learned once, whichever sheet it is on */
+  #chartclose, #aboutclose{
     font:inherit;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
     color:var(--dim);background:transparent;border:1px solid var(--faint);
     padding:6px 11px;cursor:pointer;transition:.25s;flex:none;
   }
-  #chartclose:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
+  #chartclose:hover, #aboutclose:hover{color:var(--ink);border-color:rgba(233,240,255,.38)}
   /* The canvas scrolls inside this, never the document. The page gaining a
      scrollbar is the invariant; an overlay that is taller than the phone it is
      read on is not, and forcing ten charts into one screen is what made them
@@ -244,6 +254,43 @@
   .pin.on{color:rgba(150,205,255,.95)}
   .pin[disabled]{opacity:.28;cursor:default}
 
+  /* Two lines, not one, and that is the measurement rather than a preference.
+     The name and the count on a single line run to 383px, which is wider than a
+     360px phone can hold, so it wrapped — into the readout underneath it. Split,
+     the widest either can be is about 200px and both fit anywhere.
+     Splitting also puts the name on its own line, where it stays put as the
+     state under it changes from arriving to observing; sharing a line, the name
+     jumped sideways every time the second half changed length. */
+  #tourline{display:none;margin-bottom:10px;
+    font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+    color:rgba(233,240,255,.58);font-variant-numeric:tabular-nums;
+    line-height:1.65;white-space:nowrap}
+  #tourline.on{display:block}
+  /* the count is the part that changes, so it is the part that is lit */
+  #tourwhen{color:var(--ink)}
+
+  /* The same words with the interface put away, which is how the tour is meant
+     to be watched. It has to be a second element rather than the same one moved:
+     the one above lives inside #hud, and #hud.hidden sets opacity to zero on the
+     PARENT, which no child can climb back out of. Two elements also buy a proper
+     cross-fade — one goes out with the interface over its 1.2s and this comes in
+     over its own — where moving a single node would make it jump to the middle
+     of the screen while everything around it was still fading.
+     Centred here and only here, because with the readout gone the bottom of the
+     window is empty and the middle of it is the only place that is not a corner
+     of something. */
+  #tourfloat{
+    position:fixed;left:0;right:0;bottom:30px;z-index:5;
+    text-align:center;pointer-events:none;
+    font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    color:rgba(233,240,255,.55);font-variant-numeric:tabular-nums;
+    line-height:1.9;white-space:nowrap;
+    text-shadow:0 1px 4px rgba(0,0,8,.85), 0 0 14px rgba(0,0,8,.55);
+    opacity:0;transition:opacity 1.2s ease;
+  }
+  #tourfloat.on{opacity:1}
+  #tourfloat .n{color:var(--ink)}
+
   #splash{
     position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     flex-direction:column;gap:14px;background:#000;z-index:10;transition:opacity 1.6s ease;
@@ -274,6 +321,82 @@
     .bar .val{font-size:10px}
     .scales{font-size:9.5px;letter-spacing:.09em;margin-top:12px;line-height:1.75}
     .sp{padding:7px 12px;font-size:11px}
+  }
+
+  /* the way in, under the world's name */
+  #aboutlink{
+    pointer-events:auto;display:block;margin-top:9px;padding:0;
+    font:inherit;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:rgba(233,240,255,.5);background:transparent;border:0;cursor:pointer;
+    border-bottom:1px solid rgba(233,240,255,.22);padding-bottom:2px;
+    transition:.25s;text-shadow:0 0 3px rgba(0,0,0,.55);
+  }
+  #aboutlink:hover{color:var(--ink);border-bottom-color:rgba(233,240,255,.55)}
+
+  /* Above the other two overlays, because it is the one you can reach FROM
+     them being open — and the same shell as the charts, deliberately, so that
+     one dark full-screen sheet with a close button in the corner is a shape
+     learned once. */
+  #about{
+    position:fixed;inset:0;z-index:42;display:none;overflow:hidden;
+    background:rgba(6,9,14,.994);padding:22px 26px;
+    flex-direction:column;gap:14px;
+  }
+  #about.on{display:flex}
+  #aboutscroll{flex:1;min-height:0;width:100%;overflow-y:auto;overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;touch-action:pan-y;padding:2px 4px 30px 0}
+  /* One measured column, centred, and NOT newspaper columns. Columns hold the
+     measure without wasting the width, which is why they were tried — but a
+     column that is taller than the window turns reading into scrolling to the
+     bottom and then hunting back up to the top of the next one, and nothing
+     about that is worth the tidier page. A maximum width does the same job for
+     the only thing that actually matters, which is line length: 600px at 15px
+     is about eighty characters, and past ninety the eye loses its place coming
+     back to the left margin. The header shares the measure so the title sits
+     over its own text rather than off in the corner alone. */
+  #aboutwrap{width:100%;max-width:600px;margin:0 auto}
+  #abouttext{width:100%;max-width:600px;margin:0 auto;
+    font-size:15px;line-height:1.7;color:rgba(233,240,255,.78)}
+  #abouttext p{margin:0 0 1.05em}
+  #abouttext .lede{color:var(--ink);font-size:16px;line-height:1.62}
+  #abouttext b{color:var(--ink);font-weight:500}
+  #abouttext em{color:var(--ink);font-style:italic}
+  #abouttext h2{
+    font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;font-weight:400;
+    color:rgba(233,240,255,.52);margin:1.9em 0 .85em;padding-bottom:7px;
+    border-bottom:1px solid rgba(233,240,255,.10)}
+  #abouttext h2:first-child{margin-top:0}
+  #abouttext ul{margin:0 0 1.05em;padding-left:1.15em}
+  #abouttext li{margin-bottom:.5em}
+  /* One row per control: the real button, then its name, then what it does.
+     The button is a CLONE of the live one rather than a copy of its drawing,
+     so the picture beside the description can never come to disagree with the
+     mark on the screen. */
+  .actrl{display:flex;gap:13px;align-items:flex-start;margin-bottom:1.05em}
+  /* 53px is the 40px button plus the 13px gap, so the words line up with every
+     other description rather than starting at the margin on their own */
+  .actrl.stack{display:block}
+  .actrl.stack .pic{margin-bottom:9px}
+  .actrl.stack .txt{margin-left:53px}
+  .actrl .pic{flex:0 0 auto;pointer-events:none}
+  .actrl .pic .rbtn{cursor:default}
+  .actrl .txt{min-width:0}
+  .actrl .nm{color:var(--ink);font-size:12px;letter-spacing:.05em;
+    margin-bottom:2px;display:block}
+  /* The speeds are three buttons that mean one thing, so they share a row. The
+     live strip carries margin-left:auto, which is what pins it to the right of
+     the corner it lives in — and a clone brings that with it and drifts to the
+     far side of a paragraph it is supposed to be introducing. */
+  .actrl .pic .speeds{box-shadow:none;margin-left:0}
+
+  @media (max-width: 620px){
+    #about{padding:15px 17px}
+    /* the measure is set by the window here, so the type comes down to keep the
+       line length from falling to forty characters */
+    #abouttext{font-size:13.5px}
+    #abouttext .lede{font-size:14px}
+    /* the round buttons come down to 36px here, so the indent follows */
+    .actrl.stack .txt{margin-left:49px}
   }
 
   #settings{
@@ -441,6 +564,10 @@
   <div class="corner tl">
     <div class="title">Aetheris</div>
     <div class="sub">world simulation</div>
+    <!-- Under the name rather than among the round controls on the other side.
+         Those are things you DO to the world; this is a thing to read about it,
+         and it belongs with the world's name. -->
+    <button id="aboutlink" type="button">What is this?</button>
   </div>
 
   <div class="corner tr">
@@ -452,6 +579,54 @@
     <div class="ctrls">
       <button id="playpause" class="rbtn" type="button" aria-label="pause" title="pause"></button>
       <button id="lock" class="rbtn" type="button" aria-label="hold the view" title="hold the view" aria-pressed="false"></button>
+      <button id="tour" class="rbtn" type="button" aria-label="take the tour" title="take the tour" aria-pressed="false">
+        <!-- Filled, not stroked, and that is the difference between a rocket
+             and a triangle: an outline at this size spends most of its ink on
+             the stroke, so the two walls of a 5-unit body close up and what is
+             left reads as a solid wedge.
+
+             Then the silhouette has to be SLIM, or it reads as a cursor
+             instead — a cursor is a wide wedge with a swept tail, and so was
+             this. What says rocket rather than arrowhead is a stretch of
+             PARALLEL sides between the nose cone and the base; a shape that
+             flares continuously from tip to tail is an arrowhead whatever is
+             hung off it. The body is 4.1 units across against 13.4 tall, a
+             ratio of 0.31 where the first attempt was 0.56.
+
+             The porthole is gone with it. It was the detail making the mark
+             read small — punched out of a 4.8-unit body it leaves one-pixel
+             walls at 18px and turns to mush — and the nozzle that replaces it
+             does the opposite job. Four widths were rendered side by side at
+             actual size against the lock and the gear: at 4.1 the mark is
+             lighter than either of its neighbours and the fins merge into the
+             silhouette, at 5.4 it is stubby enough to read as a cursor again,
+             and the nozzle is what settles it, because the weight it puts at
+             the BASE is exactly what the slim body took away. -->
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <!-- Parallel sides from y=6.9 to 13.0: six units of straight body
+               against a 4.8-unit width. That stretch is the whole of what says
+               rocket rather than arrowhead, so it gets the room, and everything
+               else here is sized not to crowd it. -->
+          <path fill="currentColor" d="M8 1.2 C9.3 3.0 10.4 5.0 10.4 6.9
+                                       V13.0 H5.6 V6.9 C5.6 5.0 6.7 3.0 8 1.2 Z"/>
+          <!-- A small bell, and small at BOTH ends: 1.9 units where it leaves
+               the body against the body's 4.8, flaring only to 4.0. Any wider
+               or taller and it stops reading as an engine and starts reading as
+               a skirt that the fins disappear into. It overlaps the body by two
+               tenths, or the two meet on a sub-pixel seam that reads as a crack
+               across the rocket. -->
+          <path fill="currentColor" d="M7.05 12.8 H8.95 L10.0 14.6 H6.0 Z"/>
+          <!-- Fins thrown OUT rather than swept down, and small: the tips reach
+               2.4 units clear of the body and stop at y=13.5, above the bell
+               mouth at 14.6. An earlier pair ran down alongside the bell to the
+               same depth and all three shapes merged into one silhouette at
+               18px — what separates a rocket from an arrowhead at this size is
+               something sticking out sideways, and it only has to be visible,
+               not large. -->
+          <path fill="currentColor" d="M5.6 9.9 L3.2 13.5 L5.6 13.0 Z
+                                       M10.4 9.9 L12.8 13.5 L10.4 13.0 Z"/>
+        </svg>
+      </button>
       <button id="gear" class="rbtn" type="button" aria-label="settings" title="settings">
         <!-- Drawn as a hub and eight teeth about (8,8), because the previous
              one was not centred: its teeth ran from y=1 to y=12.8, a midpoint
@@ -467,7 +642,7 @@
                    M10.76 5.24l1.27-1.27M5.24 10.76 3.97 12.03"/>
         </svg>
       </button>
-      <button id="info" class="rbtn" type="button" aria-label="the life of it" title="the life of it">i</button>
+      <button id="info" class="rbtn" type="button" aria-label="graphs" title="graphs">i</button>
     </div>
     <!-- controls lifted out of the settings panel to sit over the world, so a
          dial can be moved while watching what it does -->
@@ -475,6 +650,16 @@
   </div>
 
   <div class="corner bl">
+    <!-- What the pilot is doing, because a camera that has been still for
+         twenty seconds looks exactly like a camera that has stopped. The count
+         is the part that answers that, so it is the part that is lit.
+         In the flow above the clock rather than floating in a corner: measured,
+         a free-floating line collides with this block on a 360px phone, where
+         "CONTINENTS CHANGE IN 167 MIN" already reaches within 30px of the far
+         side of the screen and there is no empty corner left to put it in. -->
+    <div id="tourline" aria-hidden="true">
+      <div id="tourwhat"></div><div id="tourwhen"></div>
+    </div>
     <div class="clockrow">
       <div class="clock" id="clock">0:00:00</div>
     </div>
@@ -485,17 +670,83 @@
       <div id="selinfo"></div>
     </div>
   </div>
+
 </div>
 
 <div id="charts" aria-hidden="true">
   <div class="chead">
     <div>
-      <div class="ctitle">the life of it</div>
+      <div class="ctitle">graphs</div>
       <div class="csub" id="csub">nothing has happened yet</div>
     </div>
     <button id="chartclose" type="button" aria-label="close">close &times;</button>
   </div>
   <div class="scrollwrap"><div id="cscroll"></div></div>
+</div>
+
+<!-- An overlay rather than a page, and not because a second page would be hard.
+     This piece is one file that makes no network requests at all, which is what
+     lets it run from a memory stick, an aeroplane or a folder — and a link away
+     from it is the one thing that could not survive that. The prose costs a few
+     kilobytes and keeps the promise. -->
+<div id="about" aria-hidden="true">
+  <div id="aboutwrap" class="chead">
+    <div class="ctitle">Welcome to Aetheris!</div>
+    <button id="aboutclose" type="button" aria-label="close">close &times;</button>
+  </div>
+  <div class="scrollwrap"><div id="aboutscroll"><div id="abouttext">
+
+    <p class="lede">Aetheris simulates a world with evolving continents, changing
+    weather and terrain, and seasons. Plant life grows and adapts to changing
+    conditions and competition from other plants. You can change settings that
+    control the geography and ecology of the world.</p>
+
+    <p>The world has a subtle ring that helps orient you as you grab and turn
+    the world (you are actually changing your viewpoint, not spinning the
+    planet).</p>
+
+    <p>Plants emerge from seeds and grow in patterns determined by their genetic
+    code and responding to their environment and their neighbors. As they get older,
+    plants can divide into genetically related individuals, or they can spread
+    through spores (if you allow it).</p>
+
+    <p>Each plant prefers a certain type of terrain &mdash; forest, grassland,
+    desert, ice or sea. A plant will live longest in its preferred terrain, but
+    can survive for a while in other terrains. A plant can generalize to live in
+    multiple terrains, but it won't live as long as a plant that specializes for
+    particular conditions. A strongly specialized plant has strongly colored
+    leaves, while a generalist's colors are more muted.</p>
+
+    <h2>Three clocks</h2>
+
+    <p>The simulator has three clocks. Each <b>day</b> is one rotation of the
+    planet. This clock never changes, because otherwise it would be hard to see
+    details of the world. Each <b>year</b> is one orbit around the world's star.
+    This clock can run faster so you can see the yearly expansion and
+    contraction of ice sheets at the poles and on mountain tops. The third clock
+    is a <b>geological</b> clock. You can dramatically speed up this clock so you
+    can see the coastlines and habitats change quickly. Plants race each other to
+    adapt as quickly as they can (or die).</p>
+
+    <h2>Exploring</h2>
+    <ul>
+      <li>Drag to spin the world, scroll or pinch to zoom in or out.</li>
+      <li>Tap the world to hide the interface. Tap again to show it.</li>
+      <li>Press and hold a plant to see the plant's size and shape.</li>
+    </ul>
+
+    <h2>Controls</h2>
+    <!-- filled in from the live buttons at boot, so the pictures here cannot
+         drift away from the marks on the screen -->
+    <div id="aboutctrls"></div>
+
+    <h2>Sharing</h2>
+
+    <p>The settings page has a link you can copy to share your world and its
+    settings. If you didn't change any settings part way through the simulation,
+    the link will reproduce the world you saw.</p>
+
+  </div></div></div>
 </div>
 
 <div id="settings" aria-hidden="true">
@@ -525,6 +776,13 @@
            aria-label="this world, as a link">
   </div>
   <div class="scrollwrap"><div id="setlist"></div></div>
+</div>
+
+<!-- Outside #hud on purpose: this is the one thing that stays when the
+     interface is put away, because with the overlays off there is otherwise
+     nothing at all to say the tour is still running. -->
+<div id="tourfloat" aria-hidden="true">
+  <div id="tourfwhat"></div><div id="tourfwhen" class="n"></div>
 </div>
 
 <div id="selbadge" aria-hidden="true"></div>
@@ -3540,10 +3798,10 @@ const HSER = [
   {k:"top",   label:"biggest lineage share",v:new Float32Array(HCAP), lo:0, hi:1, want:0.50, above:false,
    why:"How much of the world the single most successful strategy holds. The other half of the acceptance test — one lineage taking more than half is the failure this piece exists to avoid."},
   {k:"mixed", label:"plants of two minds", v:new Float32Array(HCAP), lo:0, hi:1,
-   why:"The share of plants carrying more than one kind of node. It is the sign a single body has specialised internally — nursery nodes that sit and reproduce, scouts that run."},
+   why:"The share of plants carrying more than one kind of node. It is the sign a single body has specialized internally — nursery nodes that sit and reproduce, scouts that run."},
   {k:"pace",  label:"mean pace",           v:new Float32Array(HCAP), lo:0, hi:1,
    why:"How fast the average node matures, which it pays for in lifespan. High is a world of quick pioneers; low is one of slow persisters."},
-  {k:"spec",  label:"specialisation",      v:new Float32Array(HCAP), lo:0, hi:1,
+  {k:"spec",  label:"specialization",      v:new Float32Array(HCAP), lo:0, hi:1,
    why:"How committed the average lineage is to one environment rather than being a generalist. It drifts down under a moving climate, because following a niche that has relocated means crossing country only a generalist can cross."},
 ];
 const HT = new Float32Array(HCAP);            // tick each sample was taken at
@@ -5307,8 +5565,16 @@ function fitDist(){
 /* q is the orientation and tq is where a drag has asked it to go. yaw and
    pitch are derived from q each frame for the readout and the test hooks, and
    are never read back to rebuild anything. */
+/* `aim` is where the camera looks, and for everything except the tour it is the
+   centre of the world. The orientation puts the eye somewhere on a sphere about
+   the origin and the eye has always looked back down it — which is right for a
+   thing you are turning over in your hands, and wrong for a thing you are
+   flying past. Separating the two costs one vector and one argument to lookAt:
+   `q` still says where the eye IS and which way is up, and `aim` says what it
+   is pointed at. Held at the origin, every line below behaves exactly as it
+   did. */
 const CAM = {yaw:1.42, pitch:0.26, roll:0, q:[0,0,0,1], tq:[0,0,0,1],
-             dist:3.4, tDist:3.4, zoom:1.0, tZoom:1.0};
+             dist:3.4, tDist:3.4, zoom:1.0, tZoom:1.0, aim:[0,0,0], up:[0,0,0]};
 qFromYawPitch(1.42, 0.26, CAM.q); qFromYawPitch(1.42, 0.26, CAM.tq);
 let dragging=false, lastX=0, lastY=0;
 let paused=false, speed=1;
@@ -5463,6 +5729,89 @@ function qNlerp(a,b,t,o){
   for(let i=0;i<4;i++) o[i]=a[i]+(b[i]*k-a[i])*t;
   return qNorm(o);
 }
+/* Slerp for a direction, and it is the same argument as for orientations one
+   paragraph down. A straight line between two unit vectors sweeps its DIRECTION
+   unevenly: mildly at a right angle, and pathologically as the two approach
+   opposite, where the path passes close to the origin and the direction whips
+   through half a turn in a few frames. That is what the tour's "up" was doing.
+   Two framings can easily want opposite ups — a shuttle window over the far side
+   wants the local vertical, and the shot before it wanted the pole — and the
+   camera got there by rolling over sideways in a hurry rather than by banking
+   into it. Exactly opposite has no axis to turn about at all, so any
+   perpendicular is chosen and the half-turn is made about that. */
+function vSlerp(a,b,t,o){
+  let al=Math.hypot(a[0],a[1],a[2])||1, bl=Math.hypot(b[0],b[1],b[2])||1;
+  const ax=a[0]/al, ay=a[1]/al, az=a[2]/al;
+  const bx=b[0]/bl, by=b[1]/bl, bz=b[2]/bl;
+  let d=ax*bx+ay*by+az*bz; d = d<-1?-1:(d>1?1:d);
+  if(d>0.9995){                                  /* the same vector, near enough */
+    o[0]=ax+(bx-ax)*t; o[1]=ay+(by-ay)*t; o[2]=az+(bz-az)*t;
+  } else if(d<-0.9995){
+    const px = Math.abs(ay)<0.9 ? 0 : 1, py = Math.abs(ay)<0.9 ? 1 : 0;
+    let qx=py*az-0*ay, qy=0*ax-px*az, qz=px*ay-py*ax;
+    const ql=1/Math.max(1e-9,Math.hypot(qx,qy,qz)); qx*=ql; qy*=ql; qz*=ql;
+    const th=Math.PI*t, c=Math.cos(th), sn=Math.sin(th);
+    o[0]=ax*c+qx*sn; o[1]=ay*c+qy*sn; o[2]=az*c+qz*sn;
+  } else {
+    const th=Math.acos(d), sn=Math.sin(th);
+    const wa=Math.sin((1-t)*th)/sn, wb=Math.sin(t*th)/sn;
+    o[0]=ax*wa+bx*wb; o[1]=ay*wa+by*wb; o[2]=az*wa+bz*wb;
+  }
+  const l=1/Math.max(1e-9,Math.hypot(o[0],o[1],o[2]));
+  o[0]*=l; o[1]*=l; o[2]*=l; return o;
+}
+/* Slerp, where the frame loop's easing uses nlerp. The difference does not
+   matter a frame at a time — the two are indistinguishable over a fraction of a
+   degree, which is why nlerp is right there — and it matters a great deal over
+   a whole flight: nlerp's angular speed is not constant, so a hundred-and-
+   eighty-degree turn hurries through its middle. The tour shapes its own
+   acceleration and cannot have a second, unasked-for one underneath it. Falls
+   back to nlerp when the two are nearly parallel, where the sine divides by
+   almost nothing and slerp is both ill-conditioned and unnecessary. */
+function qSlerp(a,b,t,o){
+  let d=a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3];
+  const k = d<0 ? -1 : 1; d*=k;
+  if(d>0.9995) return qNlerp(a,b,t,o);
+  const th=Math.acos(Math.min(1,d)), s=Math.sin(th);
+  const wa=Math.sin((1-t)*th)/s, wb=Math.sin(t*th)/s*k;
+  for(let i=0;i<4;i++) o[i]=a[i]*wa+b[i]*wb;
+  return qNorm(o);
+}
+/* The orientation that puts the eye at `z` with `u` overhead. Built as the
+   basis lookAt would build and converted, so the two agree by construction
+   rather than by a convention written down twice: x = u x z, y = z x x, and
+   the eye looks back down its own +z. Shepperd's largest-component branch,
+   because the trace form loses all its precision at a half-turn. */
+function qFromBasis(zx,zy,zz, ux,uy,uz, o){
+  let l=1/Math.max(1e-9,Math.hypot(zx,zy,zz)); zx*=l; zy*=l; zz*=l;
+  let xx=uy*zz-uz*zy, xy=uz*zx-ux*zz, xz=ux*zy-uy*zx;
+  l=Math.hypot(xx,xy,xz);
+  /* an up hint parallel to the eye leaves no roll defined at all, so take any
+     perpendicular rather than a zero vector — the caller that cares supplies a
+     hint that cannot degenerate */
+  if(l<1e-6){ const t = Math.abs(zy)<0.9 ? [0,1,0] : [1,0,0];
+              xx=t[1]*zz-t[2]*zy; xy=t[2]*zx-t[0]*zz; xz=t[0]*zy-t[1]*zx;
+              l=Math.hypot(xx,xy,xz); }
+  l=1/l; xx*=l; xy*=l; xz*=l;
+  const yx=zy*xz-zz*xy, yy=zz*xx-zx*xz, yz=zx*xy-zy*xx;
+  /* The matrix is R = [X | Y | Z] by COLUMN, so R[row][col] reads across the
+     three vectors and not down one of them: R21 is Y's z component, R12 is Z's
+     y. Getting that transposed returns the conjugate — a camera facing exactly
+     the wrong way — and it is invisible in the algebra, because a conjugate is
+     a perfectly good unit quaternion. The check that catches it is arithmetic
+     rather than visual: z=(1,0,0) with u=(0,1,0) must give a +90 degree turn
+     about Y, which carries (0,0,1) to (1,0,0) and not to (-1,0,0). */
+  const tr=xx+yy+zz;
+  if(tr>0){ const s=Math.sqrt(tr+1)*2;
+    o[3]=0.25*s; o[0]=(yz-zy)/s; o[1]=(zx-xz)/s; o[2]=(xy-yx)/s; }
+  else if(xx>yy && xx>zz){ const s=Math.sqrt(1+xx-yy-zz)*2;
+    o[3]=(yz-zy)/s; o[0]=0.25*s; o[1]=(yx+xy)/s; o[2]=(zx+xz)/s; }
+  else if(yy>zz){ const s=Math.sqrt(1+yy-xx-zz)*2;
+    o[3]=(zx-xz)/s; o[0]=(yx+xy)/s; o[1]=0.25*s; o[2]=(zy+yz)/s; }
+  else { const s=Math.sqrt(1+zz-xx-yy)*2;
+    o[3]=(xy-yx)/s; o[0]=(zx+xz)/s; o[1]=(zy+yz)/s; o[2]=0.25*s; }
+  return qNorm(o);
+}
 /* the orientation whose eye direction is this yaw and pitch, with no roll */
 function qFromYawPitch(y,p,o){
   const qy=[0,0,0,1], qx=[0,0,0,1];
@@ -5476,6 +5825,12 @@ const _e=[0,0,0], _u=[0,0,0];
 /* A drag rotates the camera about its own up and its own right. In quaternion
    terms those are post-multiplications and no frame need be built at all. */
 function orbitBy(dx, dy){
+  /* The tour is a screensaver, not a steering aid — it holds the camera until
+     the rocket is pressed again, and a drag that half-moved the eye and was
+     then overwritten a frame later would read as the piece fighting the hand.
+     Everything that is not the camera goes on working: a tap still hides the
+     interface, a press still picks out a plant, every panel still opens. */
+  if(touring()) return;
   const r = orbitRate();
   qAxis(0,1,0,-dx*r,_q1); qMul(CAM.tq,_q1,_q2);
   qAxis(1,0,0,-dy*r,_q1); qMul(_q2,_q1,CAM.tq);
@@ -5663,7 +6018,7 @@ addEventListener("pointermove",e=>{
     lastX = e.clientX; lastY = e.clientY;
   } else if(mode === 2){
     const d = spread();
-    if(d > 12 && pinchSpread > 12){
+    if(d > 12 && pinchSpread > 12 && !touring()){
       /* fingers apart -> closer to the planet -> smaller camera distance.
          The gain falls as the gesture starts deeper: a plain ratio is
          scale-free, which is correct in principle and too eager in practice
@@ -5735,6 +6090,7 @@ document.addEventListener("visibilitychange", ()=>{ if(document.hidden) clearPoi
 
 canvas.addEventListener("wheel",e=>{
   e.preventDefault();
+  if(touring()) return;
   const gain = 0.5 + 0.5*Math.min(1, CAM.tZoom/0.44);
   CAM.tZoom = clamp(CAM.tZoom*Math.exp(e.deltaY*0.0011*gain), ZMIN, 2.6);
   CAM.tDist = camDistOf(CAM.tZoom);
@@ -5900,6 +6256,596 @@ let simRate = 1, rateT0 = 0, rateS0 = 0;
 let last=performance.now();
 let started=false;
 
+/* ══════════════════════════════════════════════════════════════════════
+   6b.  the tour — a pilot with somewhere to be
+   ══════════════════════════════════════════════════════════════════════
+   Screensaver rather than instrument: the camera picks a destination, flies
+   there and dwells, then picks another, for as long as it is left on. Nothing
+   about the world changes — the tour writes to the camera and to nothing else,
+   so a planet on tour is the same planet, differently attended.
+
+   Three things decide whether it is pleasant to sit in front of, and all three
+   are about acceleration rather than about position.
+
+   **The easing is smootherstep, not the frame loop's exponential.** An
+   exponential ease arrives beautifully and *departs* at full speed — its
+   velocity is greatest at the instant it starts, which is exactly the jerk a
+   passenger feels. `t^3(6t^2-15t+10)` has zero first AND second derivative at
+   both ends, so a leg begins and finishes with no acceleration at all, let
+   alone a step in it.
+
+   **Distance is interpolated geometrically.** Flying from ten radii to one and
+   a half, a linear ramp spends most of its time close in and the last stretch
+   reads as falling. What the eye judges is the rate of change of apparent
+   size, which is the rate of change of the LOGARITHM of distance, so that is
+   what is held even.
+
+   **How long a leg takes is derived from how far it goes**, in angle and in
+   log-distance together, so the speed of travel is roughly the same on every
+   leg and a small correction does not take as long as crossing the world.
+
+   Determinism: the tour uses Math.random and never `prnd()`. Seed plus
+   parameters must go on determining the world completely, and a camera that
+   drew from the simulation's stream would make the route decide the planet. */
+const TOUR = {
+  on:false, leaving:false,
+  t:0, dur:8, hold:14, held:0, arrived:false,
+  fromQ:[0,0,0,1], toQ:[0,0,0,1],
+  fromZ:1, toZ:1,
+  fromA:[0,0,0], toA:[0,0,0],
+  fromU:[0,1,0], toU:[0,1,0],        // which way is up, carried apart from `q`
+  fromR:0, toR:0,                    // how fast the eye rides with the ground
+  shot:"", last:-1,
+};
+const _tq=[0,0,0,1], _tv=[0,0,0];
+/* Zero velocity AND zero acceleration at both ends — smootherstep, not
+   smoothstep, which still starts with a step in acceleration. Named for the
+   tour because the sea-level controller has a local `ease` of its own meaning
+   something else entirely, and two things called the same thing in one file is
+   how a stale declaration once shadowed its replacement for four commits. */
+const tourEase = t => t<=0 ? 0 : t>=1 ? 1 : t*t*t*(t*(t*6-15)+10);
+const touring = () => TOUR.on || TOUR.leaving;
+
+/* ---- where the pilot might want to be ----
+   A direction on the unit sphere, at a given angle from an axis and a random
+   way round it. Every framing below is some version of this: near the sun,
+   away from it, near the pole, in the ring's plane. */
+function dirAt(ax,ay,az, ang, o){
+  /* any vector not parallel to the axis, made perpendicular to it */
+  let px = Math.abs(ay)<0.9 ? 0 : 1, py = Math.abs(ay)<0.9 ? 1 : 0, pz = 0;
+  let d = px*ax+py*ay+pz*az;
+  px-=ax*d; py-=ay*d; pz-=az*d;
+  let l=1/Math.max(1e-9,Math.hypot(px,py,pz)); px*=l; py*=l; pz*=l;
+  const qx=ay*pz-az*py, qy=az*px-ax*pz, qz=ax*py-ay*px;   // completes the frame
+  const th=Math.random()*Math.PI*2, ca=Math.cos(ang), sa=Math.sin(ang);
+  const c=Math.cos(th), s=Math.sin(th);
+  o[0]=ax*ca + (px*c+qx*s)*sa;
+  o[1]=ay*ca + (py*c+qy*s)*sa;
+  o[2]=az*ca + (pz*c+qz*s)*sa;
+  return o;
+}
+/* Somewhere worth watching, in WORLD coordinates: the centroid of one of the
+   larger plants on the planet, chosen at random from those the census ringed.
+   "Hopefully not just ocean" is answered by asking the ecology rather than the
+   terrain — a body of ten thousand nodes is on ground that suits something,
+   which is a better definition of interesting than any threshold on elevation.
+   The centroids are summed in the planet's own frame, so they have to be
+   carried through the spin to become a direction in space. */
+const NCAND = 16;
+const _cand = []; for(let i=0;i<NCAND;i++) _cand.push([0,0,0]);
+function livelyDirs(){
+  /* Reservoir sampling over one pass, so every qualifying body is equally
+     likely however many there turn out to be, nothing is allocated, and a
+     handful of candidates costs the same walk as one did. The handful is the
+     point: with sixteen to choose from the sun can be given a say. */
+  let seen=0;
+  const R=rot3;                                  // column-major, planet -> world
+  for(let r=0;r<nodeHigh;r++){
+    if(PROOT[r]!==r || PSIZE[r]<40) continue;
+    const n=PSIZE[r];
+    let x=BX[r]/n, y=BY[r]/n, z=BZ[r]/n;
+    const l=Math.hypot(x,y,z);
+    if(!(l>1e-6)) continue;                      // rejected BEFORE it takes a slot
+    /* rot3 is filled by the frame loop, so before the first frame it is all
+       zeroes and this would hand back a direction of no length — which becomes
+       a NaN orientation two functions later, where it is far harder to read */
+    x/=l; y/=l; z/=l;
+    const wx=R[0]*x+R[3]*y+R[6]*z, wy=R[1]*x+R[4]*y+R[7]*z, wz=R[2]*x+R[5]*y+R[8]*z;
+    if(!(Math.hypot(wx,wy,wz)>1e-6)) continue;
+    const j = seen<NCAND ? seen : (Math.random()*(seen+1))|0;
+    seen++;
+    if(j<NCAND){ const o=_cand[j]; o[0]=wx; o[1]=wy; o[2]=wz; }
+  }
+  return Math.min(seen, NCAND);
+}
+
+/* ---- letting the sun choose ----
+   Half of everything worth looking at is in the dark at any moment, and a low
+   pass over unlit ground shows nothing at all. The surface turns about POLE once
+   per DAY and the sun is fixed in space, so where a spot stands in its own day
+   is entirely a matter of how far round it has got — and `rate` decides whether
+   that changes while anyone is watching:
+
+     rate 0   the eye holds still against the SUN, so the lighting in frame is
+              frozen and only the ground moves through it
+     rate 1   the eye holds still against the GROUND, so the terminator sweeps
+              across it at the full rate — a spot really does go into evening
+
+   That is the opposite of what "watch the shade line arrive" sounds like, and
+   getting it backwards gives a shot in which nothing whatever happens. */
+const _lit=[0,0,0];
+const sunDot = d => d[0]*SUN[0]+d[1]*SUN[1]+d[2]*SUN[2];
+function sunAfter(d, secs, rate){
+  if(!rate) return sunDot(d);
+  qAxis(POLE[0],POLE[1],POLE[2], secs*rate*(Math.PI*2/DAY), _q1);
+  qApply(_q1, d, _lit);
+  return sunDot(_lit);
+}
+/* Score a framing by its light. `lit` is the level and `change` is the
+   terminator arriving or departing during the dwell, and the change is worth
+   more than the level: a spot that goes from sunlit to dark while somebody
+   watches it is a better thing to look at than permanent noon. Ground that is
+   dark from beginning to end is refused rather than merely marked down.
+   `edge` doubles down on the change, for the shots that want it now and then
+   rather than always. */
+function litScore(c0, c1, edge){
+  const lit=Math.max(c0,c1);
+  /* dark from beginning to end is refused rather than merely marked down */
+  if(lit < 0.08) return lit-10;
+  if(!edge) return lit + 0.9*Math.abs(c0-c1);
+  /* `edge` asks for the terminator to ARRIVE, and that is not the same thing as
+     a large change in the light — which is what this used to reward, and it is
+     wrong in a way only measurement finds. A framing swinging from 71 degrees
+     of solar angle to 42 changes enormously and stays in daylight the whole
+     time; scored on the size of the swing it wins, and six draws in forty
+     actually crossed the line. What a crossing IS, is the two ends falling on
+     OPPOSITE sides of ninety degrees, so that is what is asked for, and the
+     margin is the smaller of the two so a crossing that only grazes the line
+     scores below one that goes properly into evening.
+     No crossing available anywhere in the candidates falls through to the plain
+     sunniest, which is the fallback Don asked for in so many words. */
+  return ((c0>0)!==(c1>0)) ? 2 + Math.min(Math.abs(c0), Math.abs(c1)) : lit*0.5;
+}
+/* The window that is actually watched, which does NOT begin now. A geosynchronous
+   destination rides the ground while the camera is still flying to it, so by the
+   time anyone arrives the spot has turned by the whole travel time — nineteen
+   degrees of solar angle on a typical leg. Scoring the light from this instant
+   picks a spot that is beautifully lit at the moment nobody is looking at it.
+   FLIGHT is nominal because the real duration is derived from the pose, which
+   does not exist yet; it is close enough that the terminator lands inside the
+   dwell rather than before it. */
+const FLIGHT = 8;
+const litAt = (d, rate) => [sunAfter(d, FLIGHT, rate), sunAfter(d, FLIGHT+HOLD, rate)];
+/* generate n candidates with `gen` and keep the one the sun likes best */
+function litPick(n, gen, rate, edge){
+  let bi=0, bs=-1e9;
+  for(let i=0;i<n;i++){
+    gen(_cand[i]);
+    const p=litAt(_cand[i], rate), sc=litScore(p[0], p[1], edge);
+    if(sc>bs){ bs=sc; bi=i; }
+  }
+  return _cand[bi];
+}
+/* the same, over candidates already gathered */
+function litOf(n, rate, edge){
+  let bi=0, bs=-1e9;
+  for(let i=0;i<n;i++){
+    const p=litAt(_cand[i], rate), sc=litScore(p[0], p[1], edge);
+    if(sc>bs){ bs=sc; bi=i; }
+  }
+  return _cand[bi];
+}
+/* The ten things the pilot wants to see. Each returns where to stand, what to
+   look at, how wide the lens, how long to dwell and how fast to ride with the
+   ground — and that last number is the one that does the most work:
+
+     0    fixed in space, and the planet turns underneath
+     1    geosynchronous, holding one piece of ground still
+     between  a drift, which is what makes a terminator arrive
+
+   The drifts are sized against the dwell rather than picked for feeling slow.
+   The surface turns once in 150 seconds, so a rate r moves the eye r*2.4
+   degrees a second: over a 26-second dwell, 0.10 buys four degrees, which is
+   nothing anyone will notice, and 0.40 buys twenty-five, which is a crescent
+   visibly widening. Measured — the first set of these was chosen by feel and
+   the drift came out at 0.73 degrees in four and a half seconds.
+
+   `zoom` is the framing rather than the distance, because the piece already
+   converts one to the other in a way that lands on the same apparent size
+   whatever shape the window is. A phone stands further off for the same shot
+   and the lens compensates; the tour should not have to know that. */
+const HOLD = 15;                   // seconds spent looking at any one thing
+/* The closest framing that still buys the FINE plant sheet, and it is neither a
+   matter of taste nor the same number on every window.
+
+   The detail patch is refused outright once a corner ray misses the planet —
+   at that distance the limb is on screen with sky around it and a tangent plane
+   cannot reach the whole frame — and that happens at dist = 1/sin(corner), where
+   corner is the half-diagonal of the field. It also fades out on absolute
+   distance between 1.70 and 2.55. But a shot asks for a ZOOM, and the distance a
+   zoom buys depends on the window's shape: a tall phone stands two and a half
+   times further off than a laptop for the same framing, because it has to fit
+   the disc inside its short axis. So the same zoom number lands inside the patch
+   on one machine and outside it on another, and "holding one place" — a shot
+   whose entire subject is the ground — was drawing the coarse sheet at the top
+   of its own range on a laptop and everywhere on a phone.
+
+   0.90 rather than 1.00 of the corner limit keeps the span comfortably inside
+   the cap rather than on it, and the 2.0 keeps the distance fade from having
+   eaten most of the patch before it is even allowed. */
+function detailZoom(){
+  const asp = Math.max(1e-3, canvas.width/Math.max(1,canvas.height));
+  const corner = Math.atan(Math.tan(FOVY*0.5)*Math.hypot(1, asp));
+  /* 1.85 rather than 2.0, because the patch also FADES on absolute distance
+     between 1.70 and 2.55 and 2.0 is a fifth of the way into that: measured, a
+     phone and a tablet were both getting the fine sheet at 0.71 of strength
+     where 1.85 gives 0.92 and costs nothing anyone can see. */
+  const dMax = Math.min(1.85, 0.90/Math.max(1e-6, Math.sin(corner)));
+  return dMax/Math.max(1e-6, fitDist());
+}
+const SHOTS = [
+ {name:"the world in space", weight:2, pick(){
+    return {dir:litPick(8, o=>dirAt(POLE[0],POLE[1],POLE[2], 0.7+Math.random()*0.7, o),
+                        0, false),
+            zoom:2.0+Math.random()*0.6, hold:HOLD, rate:0}; }},
+
+ {name:"the night side", weight:2, pick(){
+    /* Just off the anti-sun point, so a sliver of lit limb is already showing.
+       The eye holds against the ground and the terminator comes to it: 0.70 of
+       the turn is 25 degrees of solar angle over the dwell, which is a crescent
+       visibly widening. Not asked to prefer the light — being in the dark is
+       what this shot IS. */
+    return {dir:dirAt(-SUN[0],-SUN[1],-SUN[2], 0.30+Math.random()*0.35, _tv),
+            zoom:0.90, hold:HOLD, rate:0.70}; }},
+
+ {name:"the sunlit side", weight:2, pick(){
+    return {dir:dirAt(SUN[0],SUN[1],SUN[2], Math.random()*0.5, _tv),
+            zoom:0.62+Math.random()*0.18, hold:HOLD, rate:1}; }},
+
+ {name:"the planet turning", weight:2, pick(){
+    return {dir:litPick(8, o=>dirAt(POLE[0],POLE[1],POLE[2], 1.2+Math.random()*0.5, o),
+                        0, false),
+            zoom:1.00+Math.random()*0.25, hold:HOLD, rate:0}; }},
+
+ {name:"holding one place", weight:3, pick(){
+    /* over an actual plant if the planet has one, and over anywhere if it does
+       not — a dead world should still get a tour */
+    const n=livelyDirs();
+    const d = n ? litOf(n, 1, false)
+      : litPick(8, o=>dirAt(POLE[0],POLE[1],POLE[2], 1.0+Math.random()*0.7, o), 1, false);
+    /* capped at what this window can actually render finely — the point of
+       holding still over one place is to watch the place */
+    return {dir:d, zoom:Math.min(0.42+Math.random()*0.18, detailZoom()),
+            hold:HOLD, rate:1}; }},
+
+ {name:"the shade line", weight:2, pick(){
+    /* A right angle from the sun is the terminator seen side-on, and the eye
+       must hold against the GROUND for the line to move across it at all —
+       held against the sun instead, the lighting is nailed to the screen and
+       the shot is a still life. So rate 1, and the candidate wanted is the one
+       whose own day is turning over while somebody is watching: `edge` is what
+       asks for that. */
+    return {dir:litPick(10, o=>dirAt(SUN[0],SUN[1],SUN[2],
+                                     Math.PI*0.5+(Math.random()-0.5)*0.9, o),
+                        1, true),
+            zoom:0.72, hold:HOLD, rate:1}; }},
+
+ {name:"the ring face on", weight:1, pick(){
+    return {dir:litPick(8, o=>dirAt(POLE[0],POLE[1],POLE[2], Math.random()*0.35, o),
+                        0, false),
+            zoom:1.55+Math.random()*0.35, hold:HOLD, rate:0}; }},
+
+ {name:"the ring edge on", weight:2, pick(){
+    /* the ring lies in the equator, so standing in that plane is what makes it
+       a line — and a drift out of it is what makes it open again */
+    return {dir:litPick(8, o=>dirAt(POLE[0],POLE[1],POLE[2],
+                                    Math.PI*0.5+(Math.random()-0.5)*0.16, o),
+                        0.33, false),
+            zoom:1.40+Math.random()*0.30, hold:HOLD, rate:0.33}; }},
+
+ {name:"over a pole", weight:2, pick(){
+    return {dir:litPick(8, o=>{ const s=Math.random()<0.5?1:-1;
+              dirAt(s*POLE[0],s*POLE[1],s*POLE[2], 0.18+Math.random()*0.28, o); },
+                        1, false),
+            zoom:Math.min(0.46+Math.random()*0.14, detailZoom()),
+            hold:HOLD, rate:1}; }},
+
+ {name:"down the tangent", weight:3, pick(){
+    /* The shuttle window. The eye is low and looks along its own track rather
+       than down at the ground, so the horizon is in frame and the surface runs
+       underneath. Standing still in space at this height IS the orbit — the
+       ground turns past at a revolution every two and a half minutes — so the
+       rate is zero and the motion comes free from the planet.
+
+       Zero rate also means the lighting cannot change while the dwell lasts, so
+       the interest has to be spatial rather than temporal: what matters is not
+       where the eye stands in its own day but whether the TRACK AHEAD crosses
+       the terminator, so that the ground runs out of the light somewhere down
+       the frame. That is the pair of numbers scored here — the sun under the
+       eye against the sun at the horizon ahead. And it is asked for two times
+       in five rather than always, because a shuttle ride is worth taking in
+       plain daylight too. */
+    const n=livelyDirs();
+    const edge=Math.random()<0.4;
+    const gen = n ? null : (o=>dirAt(POLE[0],POLE[1],POLE[2], 1.0+Math.random()*0.6, o));
+    const k = n || 10;
+    if(!n) for(let i=0;i<k;i++) gen(_cand[i]);
+    const D=Math.max(1.02, camDistOf(0.30)), th=Math.acos(Math.min(1, 1/D));
+    let bi=0, bs=-1e9;
+    for(let i=0;i<k;i++){
+      const d=_cand[i];
+      let fx=d[1]*POLE[2]-d[2]*POLE[1], fy=d[2]*POLE[0]-d[0]*POLE[2], fz=d[0]*POLE[1]-d[1]*POLE[0];
+      const fl=Math.hypot(fx,fy,fz); if(fl<1e-6) continue;
+      fx/=fl; fy/=fl; fz/=fl;
+      const c=Math.cos(th), sn=Math.sin(th);
+      _lit[0]=d[0]*c+fx*sn; _lit[1]=d[1]*c+fy*sn; _lit[2]=d[2]*c+fz*sn;
+      /* The refusal here is on the EYE and not on the pair. Asking only that
+         something in the frame be lit lets the shuttle fly through the night
+         toward a sunrise on the horizon — which sounds better than it looks,
+         because the ground immediately underneath is black and that ground is
+         most of the picture. Measured: seeking a crossing took this shot from
+         never dark to dark five times in forty. */
+      const cE=sunDot(d);
+      const sc = cE < 0.10 ? cE-10 : litScore(cE, sunDot(_lit), edge);
+      if(sc>bs){ bs=sc; bi=i; }
+    }
+    const d=_cand[bi];
+    return {dir:[d[0],d[1],d[2]], zoom:0.30, hold:HOLD, rate:0, tangent:true}; }},
+
+ {name:"low over the plants", weight:3, pick(){
+    /* Don's note, and it is the whole reason the sun gets a vote: from this
+       close, unlit ground is nothing at all to look at. The eye holds against
+       the ground, so the light really does move during the dwell — 15 seconds
+       is 36 degrees of solar angle — and `edge` prefers a candidate whose day
+       turns over while it is being watched: arriving as the shadow leaves, or
+       going into evening halfway through. Failing that it takes the sunniest
+       one it was offered, and it refuses ground that is dark throughout. */
+    const n=livelyDirs();
+    const d = n ? litOf(n, 1, true)
+      : litPick(10, o=>dirAt(POLE[0],POLE[1],POLE[2], 1.0+Math.random()*0.6, o), 1, true);
+    return {dir:d, zoom:Math.min(0.17+Math.random()*0.05, detailZoom()),
+            hold:HOLD, rate:1}; }},
+];
+const SHOTW = SHOTS.reduce((a,s)=>a+s.weight, 0);
+
+/* Where a leg ends. `up` is the pole for every shot but the tangent one, which
+   takes the local vertical instead — that is what puts the planet along the
+   bottom of the frame and the sky above it, and it is the whole difference
+   between a shuttle window and a tilted map. */
+function poseFor(sh){
+  const g = sh.pick();
+  const d = g.dir, l=1/Math.max(1e-9,Math.hypot(d[0],d[1],d[2]));
+  const ex=d[0]*l, ey=d[1]*l, ez=d[2]*l;
+  const aim=[0,0,0];
+  qFromBasis(ex,ey,ez, POLE[0],POLE[1],POLE[2], _tq);
+  /* Up is carried separately from the orientation and not derived from it,
+     because the two cannot always agree. `q` says where the eye STANDS, so its
+     own up is perpendicular to the line out to the eye — and out of a shuttle
+     window the up the picture wants is exactly that line, the local vertical.
+     Asking one quaternion for both is asking a vector to be perpendicular to
+     itself, and what comes back is whatever the degenerate branch chose. */
+  const up=[0,0,0];
+  qApply(_tq, AXIS_Y, up);                       // the pole-ish up, for everything else
+  if(g.tangent){
+    /* The shuttle window, and which way it faces is e x POLE and NOT the other
+       way round. A surface point's velocity is POLE x p, so that is the way the
+       ground TRAVELS — and facing the way the ground travels is facing the way
+       you have just come. Flown that way the world slides away from the nose
+       and it reads as going backwards, which is exactly how it read. A pilot
+       faces the ground rushing toward them and passing underneath, so the nose
+       points against the ground's motion.
+
+       How far to look DOWN is not a matter of taste: the ray that just grazes
+       the limb leaves the eye at 90 - asin(1/D) below the local horizontal, so
+       that angle puts the horizon exactly across the middle of the frame, and a
+       few degrees more sets it a little high and leaves the sky above it. D
+       comes from the same camDistOf every other distance does, so a phone and a
+       laptop frame the same picture. */
+    let fx=ey*POLE[2]-ez*POLE[1], fy=ez*POLE[0]-ex*POLE[2], fz=ex*POLE[1]-ey*POLE[0];
+    const fl=Math.hypot(fx,fy,fz);
+    if(fl>1e-6){ fx/=fl; fy/=fl; fz/=fl; } else { fx=1; fy=0; fz=0; }
+    const D=Math.max(1.02, camDistOf(g.zoom));
+    const b=Math.PI*0.5 - Math.asin(1/D) + 0.10;
+    const cb=Math.cos(b), sb=Math.sin(b);
+    /* the look ray itself, from the eye — a point ON the surface would have to
+       be inside the horizon to mean anything, and past it the aim silently
+       becomes a direction nobody chose */
+    aim[0]=ex*(D-sb)+fx*cb; aim[1]=ey*(D-sb)+fy*cb; aim[2]=ez*(D-sb)+fz*cb;
+    up[0]=ex; up[1]=ey; up[2]=ez;                // the local vertical
+  }
+  return {q:[_tq[0],_tq[1],_tq[2],_tq[3]], zoom:g.zoom, aim, up,
+          hold:g.hold, rate:g.rate};
+}
+
+/* Capture where the camera is now as the start of a leg. Taken from the eased
+   values rather than the targets, so a tour begun mid-drag starts from what is
+   actually on screen. */
+function tourFrom(){
+  TOUR.fromQ=[CAM.q[0],CAM.q[1],CAM.q[2],CAM.q[3]];
+  TOUR.fromZ=CAM.zoom;
+  TOUR.fromA=[CAM.aim[0],CAM.aim[1],CAM.aim[2]];
+  /* Where up is now, and if the tour has not been driving it that is whatever
+     the orientation says — so beginning a tour from a dragged view rolls from
+     the roll it was left at rather than snapping level. */
+  if(CAM.up[0]||CAM.up[1]||CAM.up[2]) TOUR.fromU=[CAM.up[0],CAM.up[1],CAM.up[2]];
+  else { qApply(CAM.q, AXIS_Y, _tv); TOUR.fromU=[_tv[0],_tv[1],_tv[2]]; }
+  TOUR.fromR=TOUR.toR;
+  TOUR.t=0; TOUR.held=0; TOUR.arrived=false;
+}
+function tourLeg(){
+  /* never the same shot twice running, so the route reads as a route */
+  let pickN, tries=0;
+  do{
+    let r=Math.random()*SHOTW;
+    pickN=0; while(pickN<SHOTS.length-1 && (r-=SHOTS[pickN].weight)>0) pickN++;
+  } while(pickN===TOUR.last && ++tries<8);
+  TOUR.last=pickN;
+  const sh=SHOTS[pickN], p=poseFor(sh);
+  tourFrom();
+  TOUR.toQ=p.q; TOUR.toZ=p.zoom; TOUR.toA=p.aim; TOUR.toU=p.up; TOUR.toR=p.rate;
+  TOUR.hold=p.hold; TOUR.shot=sh.name;
+  /* How long to take, from how far it is. Angle and apparent size are the two
+     things a passenger sees changing, so both pay: a half-turn is worth about
+     nine seconds and a tenfold change of distance about seven, and they add. */
+  let dot=0; for(let i=0;i<4;i++) dot+=TOUR.fromQ[i]*TOUR.toQ[i];
+  const ang=2*Math.acos(Math.min(1,Math.abs(dot)));
+  const mag=Math.abs(Math.log(Math.max(1e-3,TOUR.toZ)/Math.max(1e-3,TOUR.fromZ)));
+  /* Capped below the dwell. At a 15-second stop a 20-second flight makes the
+     tour mostly transit, which is the opposite of what it is for. */
+  TOUR.dur=Math.min(13, Math.max(5.0, 3.4 + 4.6*(ang/Math.PI) + 2.4*mag));
+}
+/* Rotate a leg's endpoints with the ground. Applied to BOTH ends, which is what
+   keeps the motion continuous: at the start of a leg the pose IS the start
+   endpoint, so if only the destination tracked, a camera that had been riding
+   with the surface would stop dead the moment it set off. The rate itself is
+   eased across the leg for the same reason — the two ends want different rates
+   and a step between them is a jolt. */
+function tourTrack(w){
+  qAxis(POLE[0],POLE[1],POLE[2], w, _q1);
+  qNorm(qMul(_q1, TOUR.fromQ, _tq)); TOUR.fromQ[0]=_tq[0]; TOUR.fromQ[1]=_tq[1]; TOUR.fromQ[2]=_tq[2]; TOUR.fromQ[3]=_tq[3];
+  qNorm(qMul(_q1, TOUR.toQ,   _tq)); TOUR.toQ[0]=_tq[0];   TOUR.toQ[1]=_tq[1];   TOUR.toQ[2]=_tq[2];   TOUR.toQ[3]=_tq[3];
+  qApply(_q1, TOUR.fromA, _tv); TOUR.fromA[0]=_tv[0]; TOUR.fromA[1]=_tv[1]; TOUR.fromA[2]=_tv[2];
+  qApply(_q1, TOUR.toA,   _tv); TOUR.toA[0]=_tv[0];   TOUR.toA[1]=_tv[1];   TOUR.toA[2]=_tv[2];
+  /* up goes round with everything else, or a geosynchronous shuttle window
+     would hold its ground and slowly roll over while doing it */
+  qApply(_q1, TOUR.fromU, _tv); TOUR.fromU[0]=_tv[0]; TOUR.fromU[1]=_tv[1]; TOUR.fromU[2]=_tv[2];
+  qApply(_q1, TOUR.toU,   _tv); TOUR.toU[0]=_tv[0];   TOUR.toU[1]=_tv[1];   TOUR.toU[2]=_tv[2];
+}
+function tourStep(dt, dSpin){
+  if(touring()) tourFly(dt, dSpin);
+  /* every frame, touring or not, because the line has to clear itself on the
+     way out as reliably as it appears on the way in */
+  tourSay();
+}
+function tourFly(dt, dSpin){
+  const s = TOUR.arrived ? 1 : tourEase(TOUR.t/TOUR.dur);
+  const rate = TOUR.fromR + (TOUR.toR-TOUR.fromR)*s;
+  if(dSpin && rate) tourTrack(dSpin*rate);
+
+  qSlerp(TOUR.fromQ, TOUR.toQ, s, CAM.q);
+  CAM.tq[0]=CAM.q[0]; CAM.tq[1]=CAM.q[1]; CAM.tq[2]=CAM.q[2]; CAM.tq[3]=CAM.q[3];
+  /* geometric in distance, so apparent size changes at an even rate */
+  const z = Math.max(ZMIN, TOUR.fromZ*Math.pow(TOUR.toZ/TOUR.fromZ, s));
+  CAM.zoom=CAM.tZoom=z;
+  CAM.dist=CAM.tDist=camDistOf(z);
+  for(let i=0;i<3;i++) CAM.aim[i]=TOUR.fromA[i]+(TOUR.toA[i]-TOUR.fromA[i])*s;
+  /* Turned about an axis rather than dragged along a chord, so the roll goes
+     round at an even rate for the whole leg. Lerped, a large change of up rolls
+     slowly at both ends and snaps through the middle, and near a half-turn it
+     snaps through almost all of it at once — which is an aeroplane flicking on
+     to its back rather than banking on to a new heading. */
+  vSlerp(TOUR.fromU, TOUR.toU, s, CAM.up);
+
+  if(!TOUR.arrived){
+    TOUR.t+=dt;
+    if(TOUR.t>=TOUR.dur){ TOUR.t=TOUR.dur; TOUR.arrived=true; TOUR.held=0; }
+  } else if(TOUR.leaving){
+    /* the way home is one leg and then the camera is the visitor's again */
+    TOUR.leaving=false; TOUR.shot="";
+    CAM.aim[0]=CAM.aim[1]=CAM.aim[2]=0;
+    CAM.up[0]=CAM.up[1]=CAM.up[2]=0;    // and up goes back to the orientation's
+  } else {
+    TOUR.held+=dt;
+    if(TOUR.held>=TOUR.hold) tourLeg();
+  }
+}
+/* Saying what the pilot is doing, which matters most exactly when nothing is
+   happening: a camera that has been still for twenty seconds looks the same as
+   a camera that has stopped working. The count is the part that answers that,
+   so it is the part that is lit.
+
+   The seconds are padded with a FIGURE SPACE, which is exactly one digit wide
+   in any font that has tabular numerals — so 9 becoming 10 does not shove the
+   rest of the line sideways once a second for the whole tour. */
+const tourWhat = document.getElementById("tourwhat");
+const tourWhen = document.getElementById("tourwhen");
+const tourLine = document.getElementById("tourline");
+const tourFWhat = document.getElementById("tourfwhat");
+const tourFWhen = document.getElementById("tourfwhen");
+const tourFloat = document.getElementById("tourfloat");
+let tourSaid = "";
+const pad2 = n => String(n).padStart(2, " ");
+function tourSay(){
+  let what="", when="";
+  if(TOUR.leaving) what="coming about";
+  else if(TOUR.on){
+    /* the name alone on its line, so it does not move when the line under it
+       changes from arriving to observing */
+    what = TOUR.shot;
+    /* rounded UP, so the last second of a count is a second that exists —
+       rounding down shows 0 for a whole second and then moves anyway */
+    const left = TOUR.arrived ? TOUR.hold-TOUR.held : TOUR.dur-TOUR.t;
+    if(left < 1e8) when = (TOUR.arrived ? "observing " : "arriving in ")
+                        + pad2(Math.max(0, Math.ceil(left))) + " sec";
+  }
+  /* hudShown is part of what this compares, because the two copies swap
+     over when the interface is put away and nothing else here would
+     notice that anything had changed */
+  const said = what+"|"+when+"|"+hudShown;
+  if(said===tourSaid) return;                    // the DOM only when it changed
+  tourSaid = said;
+  tourWhat.textContent = what;
+  tourWhen.textContent = when;
+  tourLine.classList.toggle("on", !!what);
+  tourLine.setAttribute("aria-hidden", what ? "false" : "true");
+  /* and the centred copy, which is the one that matters: with the overlays
+     off there is nothing else on the screen to say the tour is still going */
+  tourFWhat.textContent = what;
+  tourFWhen.textContent = when;
+  const floating = !!what && !hudShown;
+  tourFloat.classList.toggle("on", floating);
+  tourFloat.setAttribute("aria-hidden", floating ? "false" : "true");
+}
+
+const tourBtn = document.getElementById("tour");
+function setTour(v){
+  if(v===TOUR.on) return;
+  if(v){
+    TOUR.on=true; TOUR.leaving=false;
+    /* holding the view and touring both drive the camera off the same axis and
+       would take turns overwriting each other */
+    if(viewLock) setLock(false);
+    tourLeg();
+  } else {
+    TOUR.on=false;
+    /* "if the camera angle isn't facing toward the planet, smoothly reorient
+       it" — which is exactly the aim coming back to the centre of the world.
+       Where the eye stands and how far off it is are left alone: those are a
+       view somebody can carry on from, and moving them would be the tour
+       taking one last decision on the way out. */
+    const off=Math.hypot(CAM.aim[0],CAM.aim[1],CAM.aim[2]);
+    if(off>1e-4){
+      TOUR.leaving=true;
+      tourFrom();
+      TOUR.toQ=[CAM.q[0],CAM.q[1],CAM.q[2],CAM.q[3]];
+      TOUR.toZ=CAM.zoom; TOUR.toA=[0,0,0]; TOUR.toR=0;
+      /* Home for `up` is the orientation's own, which is what the frame loop
+         will read the moment this ends — so the roll arrives where it is going
+         instead of stepping there on the last frame. */
+      qApply(CAM.q, AXIS_Y, _tv); TOUR.toU=[_tv[0],_tv[1],_tv[2]];
+      TOUR.hold=0; TOUR.dur=2.2; TOUR.shot="coming about";
+    } else {
+      TOUR.shot="";
+      CAM.aim[0]=CAM.aim[1]=CAM.aim[2]=0;
+      CAM.up[0]=CAM.up[1]=CAM.up[2]=0;
+    }
+  }
+  tourBtn.classList.toggle("on", TOUR.on);
+  tourBtn.setAttribute("aria-pressed", TOUR.on ? "true" : "false");
+  tourBtn.title = TOUR.on ? "leave the tour" : "take the tour";
+  tourBtn.setAttribute("aria-label", tourBtn.title);
+  /* Holding the view means keeping the eye over one piece of ground, which is
+     something the tour decides for itself leg by leg. Left enabled the button
+     would set a flag the tour overwrites on the next frame — a control that
+     lights up and does nothing, which is worse than one that is plainly out of
+     reach for the moment. */
+  lockBtn.disabled = TOUR.on;
+  lockBtn.title = TOUR.on ? "the pilot has the view"
+                : viewLock ? "release the view" : "hold the view";
+  lockBtn.setAttribute("aria-label", lockBtn.title);
+}
+tourBtn.addEventListener("click", e=>{ e.stopPropagation(); setTour(!TOUR.on); });
+
 function resize(){
   /* measure the canvas box itself rather than innerHeight: on phones the
      address bar makes innerHeight disagree with what is actually painted */
@@ -5941,8 +6887,10 @@ function frame(now){
     frameAcc=0; frameN=0;
   }
 
-  if(!paused && !frozen){
-    const dSpin = dt*(Math.PI*2/DAY);
+  /* hoisted out of the branch below because the tour needs it too, and a
+     paused world hands it a zero rather than a different code path */
+  const dSpin = (!paused && !frozen) ? dt*(Math.PI*2/DAY) : 0;
+  if(dSpin){
     spin += dSpin;
     cloudDrift += dSpin*0.06;
     /* carry the eye with the ground it is over, about the axis the ground
@@ -6004,7 +6952,12 @@ function frame(now){
 
   updateSun();
 
-  /* ---- camera ---- */
+  /* ---- camera ----
+     The tour drives the eased values AND their targets, so the three lines
+     below become identities while it is flying and there is no second easing
+     underneath its own. It runs after updateSun because half its framings are
+     chosen relative to where the sun is. */
+  tourStep(dt, dSpin);
   CAM.dist += (CAM.tDist-CAM.dist)*Math.min(1,dt*3.0);
   CAM.zoom += (CAM.tZoom-CAM.zoom)*Math.min(1,dt*6.0);
   /* Angles ease too, and faster than the distance so a drag still feels
@@ -6041,6 +6994,11 @@ function frame(now){
   CAM.pitch = Math.asin(Math.max(-1,Math.min(1,_e[1])));
   qAxis(1,0,0,-bob,_q1); qNorm(qMul(CAM.q,_q1,_q2));
   qApply(_q2, AXIS_Z, _e); qApply(_q2, AXIS_Y, _u);
+  /* Up comes from the orientation unless something has said otherwise, and only
+     the tour ever does — out of a shuttle window the up the picture wants is
+     the local vertical, which is the very line the orientation puts the eye on
+     and therefore the one thing its own up can never be. Zero means unset. */
+  if(CAM.up[0]||CAM.up[1]||CAM.up[2]){ _u[0]=CAM.up[0]; _u[1]=CAM.up[1]; _u[2]=CAM.up[2]; }
   const eye=[_e[0]*CAM.dist, _e[1]*CAM.dist, _e[2]*CAM.dist];
   camEye[0]=eye[0]; camEye[1]=eye[1]; camEye[2]=eye[2];
   const W=canvas.width, Hh=canvas.height;
@@ -6048,7 +7006,7 @@ function frame(now){
   perspective(mProj, fovNow, W/Hh, 0.35, 30);
   /* up carries the roll that holding the view accumulates, or the ground turns
      underneath a held view */
-  lookAt(mView, eye,[0,0,0],_u);
+  lookAt(mView, eye, CAM.aim, _u);
   mul(mVP,mProj,mView); invert(mInvVP,mVP);
 
   /* planet orientation: a fixed tilted axis, spinning */
@@ -6105,17 +7063,64 @@ function frame(now){
       /* exactly how much globe is on screen: where the corner ray strikes the
          sphere, or the horizon if it misses */
       const asp=Math.max(1e-3, W/Hh);
-      const aMax=Math.atan(Math.tan(fovNow*0.5)*Math.hypot(1, asp));
-      const sMax=CAM.dist*Math.sin(aMax);
-      const half=(sMax>=1 ? 9 : (Math.asin(sMax)-aMax)*1.16 + 0.008);
-      detailSpan = Math.tan(Math.min(1.0, half));
-      /* Off unless the patch can cover the whole frame. A tangent plane runs to
-         infinity at 90 degrees from its centre, so the moment the limb is in
-         view there is a ring of screen it cannot reach — and a patch that
-         covers only part of the picture is worse than none, because the two
-         resolutions update on different clocks and tear apart as the view
-         turns. Also off when it would be no finer than the sheet it replaces. */
-      if(half > 0.80 || DW/(2*half) < (PH/Math.PI)*1.25) detailOn = 0;
+      /* aMax is the widest angle any corner ray makes with the axis from the
+         eye to the world's centre, and until the tour that was the view axis,
+         so the field of view alone gave it. Looking off-centre — down the
+         tangent, out of a shuttle window — swings the whole frustum away by the
+         angle between the two, and the ray that grazes closest to the planet is
+         further out by exactly that. Without this term an off-axis view reports
+         a small patch and paints it over ground the patch does not cover, and
+         the two resolutions tear apart as the view turns. Past ninety degrees
+         the extreme ray points away from the planet altogether and there is no
+         approach to measure, so it is simply refused. */
+      /* wx,wy,wz is the sub-camera point — the eye direction from the origin —
+         so its negative is the axis this angle is measured from */
+      const aimx=CAM.aim[0]-eye[0], aimy=CAM.aim[1]-eye[1], aimz=CAM.aim[2]-eye[2];
+      const aiml=Math.hypot(aimx,aimy,aimz);
+      const aimOff = aiml>1e-6
+        ? Math.acos(Math.max(-1,Math.min(1,-(aimx*wx+aimy*wy+aimz*wz)/aiml))) : 0;
+      const corner=Math.atan(Math.tan(fovNow*0.5)*Math.hypot(1, asp));
+      /* the arc from under the eye to the limb — the farthest ground there IS */
+      const horiz=Math.acos(Math.min(1, 1/Math.max(1.0001, CAM.dist)));
+      let half, cap;
+      if(aimOff <= 0.03){
+        /* Looking at the world's centre, which is every view but the tour's
+           tangent one. Untouched: a corner ray that misses the planet means the
+           limb is on screen with sky around it, the tangent plane runs to
+           infinity at ninety degrees from its centre, and a patch that covers
+           only part of the picture is worse than none — the two resolutions
+           update on different clocks and tear apart as the view turns. */
+        const sMax=CAM.dist*Math.sin(corner);
+        half=(sMax>=1 ? 9 : (Math.asin(sMax)-corner)*1.16 + 0.008);
+        cap=0.80;
+      } else {
+        /* Looking off-axis, out of a shuttle window, where a missing corner ray
+           means something else entirely: it misses because it is pointed at sky
+           ABOVE the limb, and the limb is the far edge of the ground rather
+           than a reason to give up. So the span is bounded by the horizon
+           instead of abandoned at it — there is nothing past it to cover. That
+           is the whole of it, and it buys the near ground about two and a half
+           times the resolution of the sheet: at 1.5 radii the patch spans 0.86
+           radians in 2048 texels against the sheet's 326 to the radian.
+
+           The cap moves with it, and only here. On-axis nothing changes by
+           construction, which is the point of splitting the two cases rather
+           than widening one. */
+        const aMax=corner + aimOff;
+        const sMax=aMax>=Math.PI*0.5 ? 9 : CAM.dist*Math.sin(aMax);
+        half=Math.min(horiz+0.02,
+                      sMax>=1 ? horiz+0.02 : (Math.asin(sMax)-aMax)*1.16 + 0.008);
+        /* horiz+0.03 is the real limit — there is nothing past the horizon to
+           cover — and 1.20 is only a backstop against a runaway tangent plane
+           near ninety degrees. At 1.05 the backstop was doing the refusing
+           rather than the geometry: a phone stands 2.09 radii off for the same
+           framing a laptop takes at 1.50, its horizon is 61 degrees rather than
+           48, and the shuttle window got the coarse sheet on every phone. */
+        cap=Math.min(1.20, horiz+0.03);
+      }
+      detailSpan = Math.tan(Math.min(1.2, half));
+      /* and off either way when it would be no finer than the sheet it replaces */
+      if(half > cap || DW/(2*half) < (PH/Math.PI)*1.25) detailOn = 0;
     }
   }
 
@@ -7008,6 +8013,73 @@ addEventListener("resize",()=>{ if(chartsOn) drawCharts();
   if(!room.fits || room.more===pinFull) buildPins(); });
 watchScroll(setList); watchScroll(cscroll);
 
+/* ── what am I looking at ───────────────────────────────────────────────
+   The control list is built from CLONES of the live buttons rather than from a
+   second drawing of each mark. A picture of a control in a help page is a copy
+   of something, and a copy is a thing that goes stale silently — this piece has
+   already lost time to two definitions of one shape drifting apart. Cloning
+   makes it impossible: change the rocket and the rocket in here changes with
+   it, because it is the same markup.
+
+   The clones are inert. They are inside a container with pointer-events off and
+   they carry no listeners, since cloneNode copies the element and not what was
+   bound to it — so they read as illustrations, which is what they are. */
+const aboutEl = document.getElementById("about");
+const aboutScroll = document.getElementById("aboutscroll");
+const ABOUT_CTRLS = [
+  {sel:".speeds", name:"time-lapse", stack:true,
+   why:"Speed up time so you can watch the world change. Some changes are so slow, you would never notice them otherwise."},
+  {id:"playpause", name:"pause",
+   why:"Freezes time. The world and its plants stop."},
+  {id:"lock", name:"hold the view",
+   why:"Lock your position to the world so it doesn't rotate away from what you want to look at."},
+  {id:"tour", name:"take the tour",
+   why:"A smart pilot takes you on a tour of the planet and its life. Click the button again to take back control of your location."},
+  {id:"gear", name:"settings",
+   why:"See a page with all the controls of the world: how much of it is sea, how warm, how wet, how mountainous, how far the axis leans, and how the plants grow. Most controls can be pinned to the main screen so you can see their effect immediately."},
+  {id:"info", name:"graphs",
+   why:"Graphs of how key metrics have changed since you arrived."},
+];
+function buildAbout(){
+  const box = document.getElementById("aboutctrls");
+  if(box.childElementCount) return;                // built once; nothing in it moves
+  for(const c of ABOUT_CTRLS){
+    const src = c.id ? document.getElementById(c.id) : document.querySelector(c.sel);
+    if(!src) continue;
+    const row = document.createElement("div");
+    /* A row of three buttons is not a disc and will not sit in a 40px gutter, so
+       it goes on a line of its own with the words beneath indented to the same
+       margin every other description keeps. */
+    row.className = c.stack ? "actrl stack" : "actrl";
+    const pic = document.createElement("div"); pic.className="pic";
+    pic.appendChild(src.cloneNode(true));
+    /* an id may exist exactly once in a document, and these are copies */
+    pic.querySelectorAll("[id]").forEach(e=>e.removeAttribute("id"));
+    pic.querySelectorAll("button").forEach(e=>{ e.tabIndex=-1; e.setAttribute("aria-hidden","true"); });
+    const txt = document.createElement("div"); txt.className="txt";
+    const nm = document.createElement("b"); nm.className="nm"; nm.textContent=c.name;
+    const why = document.createElement("span"); why.textContent=c.why;
+    txt.appendChild(nm); txt.appendChild(why);
+    row.appendChild(pic); row.appendChild(txt);
+    box.appendChild(row);
+  }
+}
+let aboutOn = false;
+function setAbout(on){
+  aboutOn = on;
+  buildAbout();
+  aboutEl.classList.toggle("on", on);
+  aboutEl.setAttribute("aria-hidden", on?"false":"true");
+  document.getElementById("hud").classList.toggle("behind", on || chartsOn);
+  if(on){ aboutScroll.scrollTop = 0; markScroll(aboutScroll); }
+}
+document.getElementById("aboutlink").addEventListener("click",e=>{ e.stopPropagation(); setAbout(true); });
+document.getElementById("aboutclose").addEventListener("click",e=>{ e.stopPropagation(); setAbout(false); });
+["pointerdown","pointerup","click","wheel","touchstart"].forEach(ev=>
+  aboutEl.addEventListener(ev,e=>e.stopPropagation(),{passive:true}));
+addEventListener("keydown",e=>{ if(e.key==="Escape"&&aboutOn) setAbout(false); });
+watchScroll(aboutScroll);
+
 /* ---- go ---- */
 resize();
 CAM.dist = CAM.tDist = fitDist();
@@ -7032,6 +8104,57 @@ window.__world = {
                    qFromYawPitch(y, CAM.pitch, CAM.q); qFromYawPitch(y, CAM.pitch, CAM.tq);
                    if(z){CAM.zoom=CAM.tZoom=z;} CAM.dist=CAM.tDist=camDistOf(CAM.zoom); },
   sunDir(){ return [SUN[0],SUN[1],SUN[2]]; },
+  /* The tour, for a harness that has to watch it move. `aim` is the thing that
+     cannot be inferred from anywhere else — with it at the origin the camera is
+     the one the piece has always had, and away from it the eye is looking past
+     the planet rather than at it. */
+  tour(){ return {on:TOUR.on, leaving:TOUR.leaving, shot:TOUR.shot,
+                  t:+TOUR.t.toFixed(3), dur:+TOUR.dur.toFixed(3),
+                  held:+TOUR.held.toFixed(3), hold:TOUR.hold,
+                  arrived:TOUR.arrived, rate:TOUR.toR,
+                  eye:[CAM.q[0],CAM.q[1],CAM.q[2],CAM.q[3]],
+                  aim:[CAM.aim[0],CAM.aim[1],CAM.aim[2]],
+                  zoom:CAM.zoom, dist:CAM.dist,
+                  /* whether the fine plant sheet is actually being drawn, which
+                     is the difference between a close shot and a close shot
+                     worth taking */
+                  detail:+detailOn.toFixed(3), detailSpan:+detailSpan.toFixed(3),
+                  detailZoom:+detailZoom().toFixed(3),
+                  shots:SHOTS.map(s=>s.name)}; },
+  setTour(v){ setTour(!!v); },
+  /* so a harness with the frame loop stopped can still fly the tour by hand,
+     which is the only way to prove the tour changes nothing while the frame
+     loop is not free to change something itself */
+  tourStep(dt, dSpin){ tourStep(dt||1/60, dSpin||0); },
+  /* fly to one named framing and stay there, so every shot can be photographed
+     rather than waited for. `secs` runs the flight forward without a clock. */
+  /* `fly` flies the leg properly instead of cutting to it, which is the only
+     way a harness can watch how the camera GETS somewhere rather than where it
+     ends up — and how it gets there is the whole of whether it is comfortable. */
+  tourGo(name, fly){
+    const n=SHOTS.findIndex(s=>s.name===name);
+    if(n<0) return false;
+    if(!TOUR.on) setTour(true);
+    TOUR.last=n;
+    const p=poseFor(SHOTS[n]);
+    tourFrom();
+    TOUR.toQ=p.q; TOUR.toZ=p.zoom; TOUR.toA=p.aim; TOUR.toU=p.up; TOUR.toR=p.rate;
+    TOUR.hold=1e9; TOUR.shot=SHOTS[n].name; TOUR.dur=0.001;
+    /* Arrived already, rather than a leg so short it lands on the next frame.
+       Those are not the same thing, and the difference cost a whole set of
+       photographs: at s = 0 the pose is the START of a leg, so for one frame
+       after this call the camera still shows the PREVIOUS framing. Invisible at
+       sixty frames a second, and the entire picture on a machine managing one
+       frame every several seconds — which is what a software renderer under
+       load is. Every shot in the set was a photograph of the one before it. */
+    if(fly){ TOUR.t=0; TOUR.arrived=false;
+             let dot=0; for(let i=0;i<4;i++) dot+=TOUR.fromQ[i]*TOUR.toQ[i];
+             const ang=2*Math.acos(Math.min(1,Math.abs(dot)));
+             const mag=Math.abs(Math.log(Math.max(1e-3,TOUR.toZ)/Math.max(1e-3,TOUR.fromZ)));
+             TOUR.dur=Math.min(13, Math.max(5.0, 3.4 + 4.6*(ang/Math.PI) + 2.4*mag)); }
+    else { TOUR.t=TOUR.dur; TOUR.arrived=true; TOUR.held=0; }
+    return true;
+  },
   /* the axis and one ring vertex, so a harness can see that leaning the world
      moved BOTH — the ring is geometry in world space and is the one thing that
      has to be made again rather than read again */
