@@ -106,7 +106,7 @@ desert.
 Two ways out. Point the humidity controller at *bare* land — desert plus tundra
 — which makes the whole range reachable and stops rainfall being measured by a
 statistic that a cold snap can move on its own; or bound the slider to what the
-world will honour, which is what the temperature slider already does. **Don's
+world will honor, which is what the temperature slider already does. **Don's
 call was to bound the slider**: `tgtdesert` now runs 0.02 to 0.55, and the card
 says why. The controller is untouched, so the shipped world is unchanged.
 

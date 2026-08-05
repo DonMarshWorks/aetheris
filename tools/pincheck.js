@@ -20,7 +20,7 @@
  * still lands on the clock, which is the case a width breakpoint cannot see.
  */
 'use strict';
-const path=require('path'); const {chromium}=require('playwright');
+const path=require('path'); const {chromium, devices}=require('playwright');
 const PAGE=path.resolve(__dirname,'..','index.html');
 const PAGEU=PAGE.split(path.sep).join('/');
 const A=['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--enable-webgl'];
@@ -137,6 +137,90 @@ let bad=0; const ok=m=>console.log('  \x1b[32mok\x1b[0m   '+m); const no=m=>{bad
   const back = await p.evaluate(()=>[...document.querySelectorAll('#pins .pinned')].map(e=>e.dataset.key));
   if(back.length===3) ok(`the link restores them: ${back.join(', ')}`); else no(`link restored ${back.length}: ${back.join(', ')}`);
 
+  // Toggling a pin must not rebuild the list it lives in.
+  //
+  // Reported from an iPhone as "you can't disable a pin once you have enabled
+  // it", and the fix was not the button: the handler called buildSettings(),
+  // which begins by emptying #setlist — a scroll container with
+  // -webkit-overflow-scrolling:touch. On iOS that collapses scrollHeight to
+  // zero and takes scrollTop with it, so the list jumps to the top and the
+  // second tap lands on a different card. It cannot be caught by asserting the
+  // VALUE changed, because it does; what has to be asserted is that the element
+  // survived and the list did not move. Chromium restores scroll across a
+  // content swap, which is why the first emulated test of this passed and
+  // proved nothing — so the check is on identity, which is browser-independent.
+  await p.setViewportSize({width:390, height:844});
+  await p.goto('file://'+PAGEU+'#seed=31337');
+  await p.waitForFunction(()=>window.__world&&window.__world.S.epoch0>0,{timeout:240000});
+  await p.click('#gear');
+  const survived = await p.evaluate(async () => {
+    const key = 'tilt';
+    const card = () => document.querySelector(`#setlist .card[data-key="${key}"]`);
+    card().scrollIntoView({block:'center'});
+    await new Promise(r => requestAnimationFrame(r));
+    const list = document.getElementById('setlist');
+    const before = { top: Math.round(list.scrollTop), pin: card().querySelector('.pin'),
+                     y: Math.round(card().getBoundingClientRect().y) };
+    before.pin.click();                                  // pin it
+    const mid = { top: Math.round(list.scrollTop), same: card().querySelector('.pin') === before.pin,
+                  y: Math.round(card().getBoundingClientRect().y),
+                  pinned: window.__world.pins().list.includes(key) };
+    card().querySelector('.pin').click();                // and off again
+    return { before, mid, off: !window.__world.pins().list.includes(key) };
+  });
+  /* Closed explicitly. goto() to a URL differing only in its hash is a
+     SAME-DOCUMENT navigation — it does not reload, so a panel left open here
+     stays open and intercepts the next click on the world behind it. */
+  await p.click('#setclose');
+  if (survived.mid.same && survived.mid.top === survived.before.top &&
+      survived.mid.y === survived.before.y && survived.mid.pinned && survived.off)
+    ok(`pinning does not rebuild the list under your finger: the same button ` +
+       `survives, the card stays at y=${survived.before.y}, and a second tap unpins`);
+  else
+    no(`pinning disturbs the list: button ${survived.mid.same ? 'survived' : 'was REPLACED'}, ` +
+       `scrollTop ${survived.before.top} -> ${survived.mid.top}, ` +
+       `card y ${survived.before.y} -> ${survived.mid.y}, unpinned ${survived.off}`);
+
+  // Can a finger actually hit it? The pin is a 22px mark, which is a mark and
+  // not a target: Apple asks for 44, and the reason bites hardest here because
+  // this button sits inside a list with touch-action:pan-y, so a tap that
+  // drifts a pixel is taken for the start of a scroll and the click is never
+  // delivered. Reported from an iPhone as "you can't disable a pin once you
+  // have enabled it" — which is what intermittent misses look like from the
+  // outside, since pinning and unpinning are the same tap on the same square.
+  /* In a context that actually reports a COARSE pointer. The enlarged target is
+     behind @media (pointer: coarse) — it is for fingers and a mouse does not
+     need it — so measuring it on the desktop page tests a rule that deliberately
+     does not apply there, and duly reported nothing at all. A phone context is
+     part of the claim, not a convenience. */
+  const touchCtx = await b.newContext({ ...devices['iPhone 13'], hasTouch:true, isMobile:true });
+  const tp = await touchCtx.newPage(); tp.setDefaultTimeout(300000);
+  await tp.goto('file://'+PAGEU+'#seed=31337');
+  await tp.waitForFunction(()=>window.__world&&window.__world.S.epoch0>0,{timeout:240000});
+  await tp.tap('#gear');
+  const reach = await tp.evaluate(()=>{
+    const b=document.querySelector('#setlist .card[data-key] .pin');
+    const r=b.getBoundingClientRect(), cx=r.x+r.width/2, cy=r.y+r.height/2;
+    let far=0;
+    for(let d=1; d<=30; d++){
+      const el=document.elementFromPoint(cx+d, cy+d);
+      if(el && el.closest('.pin')) far=d; else break;
+    }
+    return {mark:Math.round(r.width), reach:2*far,
+            coarse:matchMedia('(pointer: coarse)').matches};
+  });
+  await touchCtx.close();
+  if(!reach.coarse) no('the touch context did not report a coarse pointer, so this ' +
+                       'measured the desktop rule and proves nothing');
+  // the diagonal reach in each direction, so the effective square is 2*far
+  if(reach.reach >= 34)
+    ok(`the pin can be hit off-centre: a ${reach.mark}px mark with about `+
+       `${reach.reach}px of reach across the diagonal`);
+  else
+    no(`the pin is only ${reach.reach}px across the diagonal — a fingertip that `+
+       `lands off-centre misses it, and inside a pan-y scroller a near miss is `+
+       `read as a scroll and never becomes a click`);
+
   // What the cap comes to, at four window shapes. Four pins are asked for every
   // time and the world is asked what it kept — the limits come from the page so
   // that changing them here cannot make a broken layout pass.
@@ -147,7 +231,11 @@ let bad=0; const ok=m=>console.log('  \x1b[32mok\x1b[0m   '+m); const no=m=>{bad
                   {n:'tablet',     w:820,  h:1180},
                   {n:'squat',      w:1000, h:500}]){
     await p.setViewportSize({width:s.w, height:s.h});
-    await p.goto('file://'+PAGEU+'#seed=31337&pins='+FOUR);
+    /* A distinct URL per shape, because navigating to one that differs only in
+       its hash is a SAME-DOCUMENT navigation: the page does not reload, the
+       pins are not re-read from the link, and every shape after the first was
+       measuring the state the previous one left behind. */
+    await p.goto('file://'+PAGEU+'#seed=31337&shape='+s.n.replace(/\W/g,'')+'&pins='+FOUR);
     await p.waitForFunction(()=>window.__world&&window.__world.S.epoch0>0,{timeout:240000});
     const r = await p.evaluate(()=>window.__world.pins());
     kept.push({...s, r});

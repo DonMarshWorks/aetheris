@@ -15,7 +15,7 @@ niches redistributing unbidden, lineages committing to the sea nobody told them
 to take — but every lineage ends up much the same shape, because a number cannot
 say *when*. A formula can.
 
-## The target behaviour
+## The target behavior
 
 One plant, carrying **nursery nodes** that sit and reproduce and **scout nodes**
 that shoot a vine out as fast as they can, with the difference decided by where
@@ -97,7 +97,7 @@ node inherited:
 | 5 | 0, ±60, ±120° | a rosette |
 
 When a node is picked and has unused slots, one is chosen at random from those
-remaining. A slot blocked by a neighbour is simply not taken this time; the node
+remaining. A slot blocked by a neighbor is simply not taken this time; the node
 stays eligible and may be picked again later, by which time the obstruction may be
 gone.
 
@@ -185,10 +185,10 @@ per-pair. Not worth it when the step gives the same dimension free.
 
 ## Kept as it is
 
-**The five affinities stay a normalised vector, not a formula.** The fixed budget
+**The five affinities stay a normalized vector, not a formula.** The fixed budget
 is load-bearing: it is what stops the drift to a bland immortal generalist, and
 there are measurements showing what unconstrained affinity does. A formula output
-cannot easily be budget-constrained across five values. It is also what colour is
+cannot easily be budget-constrained across five values. It is also what color is
 projected from, and that projection is what makes convergent evolution visible.
 
 ## The instruction set
@@ -226,7 +226,7 @@ All scaled to roughly [-1, 1], so the genome need not discover units.
 - **latitude**
 - **slots already used**, and the **parent's capacity** — so an architecture can
   inherit a rule rather than a value
-- **local crowding** — living neighbours within a short radius
+- **local crowding** — living neighbors within a short radius
 - a constant **1**
 
 Later, once the rest works: the **environment gradient**, which would let a
@@ -278,7 +278,7 @@ becomes a step function of one sign bit** — the "constant wearing a program's
 clothes" the observability section was written to catch, caught by exactly the
 counter it asked for. Instruction results are now held to ±8.
 
-**2. Vigour's within-body normalisation is load-bearing, not bookkeeping.** The
+**2. Vigour's within-body normalization is load-bearing, not bookkeeping.** The
 brief says vigour ranks nodes within a plant and not plants against each other,
 but the growth loop draws from one global frontier, so there was no within-plant
 comparison to make. Scoring a candidate against its own body's running level is
@@ -296,11 +296,11 @@ asserting that a metric which *must* be 1.000 was, and finding 0.94.
 
 **4. The maturity gate needs a queue, or it wastes the draws it gates.** With the
 gate but no queue, four draws in five hit a node too young to bud, and nine in ten
-during colonisation. A node's maturity date is known when it is born, so it is
+during colonization. A node's maturity date is known when it is born, so it is
 bucketed by that date and spliced in when due — the same trick the death scheduler
 already uses. Nothing is scanned.
 
-**And the target behaviour is present.** About a third of the variation in pace
+**And the target behavior is present.** About a third of the variation in pace
 and in capacity is *within* single bodies rather than between them, and **half of
 all bodies carry more than one capacity**. Two plants each internally uniform
 would score zero on that and identically on every population statistic. Roughly
@@ -326,13 +326,13 @@ angle to be evolved instead, and getting there took three goes:
    gradient.**
 2. **The index fans and the genome evolves the width.** Works, and looks
    geometric, because it forces equal spacing and perfect symmetry.
-3. **A `slot` input.** The child's index, centred on the node's capacity and
+3. **A `slot` input.** The child's index, centered on the node's capacity and
    already scaled into the units the angle output is read in. Now `angle <- slot`
    is a *single output-address mutation* and yields a usable fan on its own, and
    everything past that is the genome's own business. The structural fan was
    deleted. Mean turn between siblings went 0.17 → 0.72 radians.
 
-The lesson generalises past angles: when a behaviour will not evolve, ask whether
+The lesson generalizes past angles: when a behavior will not evolve, ask whether
 it is unreachable before assuming it is unwanted. The fix was not more search
 pressure, it was putting the first working version one mutation away.
 
@@ -361,28 +361,28 @@ else changed underneath them. Neither announced it.
 ## Affinity: modulated, not replaced — and what it actually does
 
 Don's argument was that adjusting affinity is the only way a plant survives a
-terrain change, and that one body ought to be able to specialise for more than one
+terrain change, and that one body ought to be able to specialize for more than one
 terrain. Letting the formula *set* affinity outright is a trap: a node that can
 read the ground and name its own affinity copies whatever it stands on, scores
 maximum fit everywhere, and the niche structure dissolves into one immortal
-generalist wearing local colours — the failure the fixed budget exists to prevent,
+generalist wearing local colors — the failure the fixed budget exists to prevent,
 by a new road. So the program *modulates* a heritable vector, within a bounded
 multiplier.
 
 Measured at nine thousand ticks it looked like a triumph — evenness 0.42 → 0.71,
-all twenty strategies occupied, specialisation *up*. But two later measurements
+all twenty strategies occupied, specialization *up*. But two later measurements
 qualify it badly, and both matter:
 
 - **It is not sensing.** A node's own affinity fits its local ground better than
   its body's average affinity would by **0.01 against a mean fit of 2.4** — under
-  one per cent. The within-plant colour variation is real and two in five bodies
+  one per cent. The within-plant color variation is real and two in five bodies
   do span two terrains, but that is **drift between mutated sectors, not terrain
   tracking**. Modulation is working as a source of affinity *variation*. The
   plants have the terrain inputs and are barely using them for this.
 - **It may be feeding a monoculture.** Over 44,600 ticks niche evenness fell
   monotonically 0.75 → 0.30 while the largest lineage rose 0.15 → 0.63, with mean
-  fit saturating near its ceiling and specialisation climbing to 0.77. Being
-  highly specialised *and* able to grow anywhere should be impossible — that
+  fit saturating near its ceiling and specialization climbing to 0.77. Being
+  highly specialized *and* able to grow anywhere should be impossible — that
   trade-off is what held specialists and generalists in balance. This is the
   suspect, and it is under test.
 
@@ -393,7 +393,7 @@ was a triumph; forty thousand may say it is the disease.
 the joint search at 45,000 ticks over five seeds, with `affmod` at 1.0, 1.3 and
 2.2, the largest lineage's share is flat — 0.147, 0.140, 0.159 — so the
 runaway is not a function of how far the formula may swing an affinity.
-Turning modulation off altogether (`affmod = 1.0`) collapses specialisation
+Turning modulation off altogether (`affmod = 1.0`) collapses specialization
 0.61 → 0.32, drops mean fit 2.05 → 1.45 and loses one of the twenty strategies.
 So it is not merely harmless, it is doing the work it was built for.
 
@@ -412,7 +412,7 @@ signature, not a diagnosis.
   point of a fixed-length genome is that trying another is cheap — `#glen=48`.
 - **Long runs erode it.** At 9,000 ticks rather than 2,500, evenness falls to 0.50,
   the largest body to 81 nodes, and the within-body spread of pace to 0.18. Some
-  of that is the documented erosion of specialisation under a moving climate, but
+  of that is the documented erosion of specialization under a moving climate, but
   the collapse in body size and within-body variety is not obviously the same
   thing and is the next thing to understand.
 - ~~**Is the eligible set small enough?** The frontier currently saturates at
@@ -420,6 +420,6 @@ signature, not a diagnosis.
   grow. Slot-eligibility and the maturity gate should shrink it a great deal, but
   that wants measuring rather than assuming.~~ **Answered, and the answer was no
   — they shrank it not at all.** See the strike-through under *Capacity, and what
-  a slot is*. Retirement after one refusal plus readmission on a neighbour's death
+  a slot is*. Retirement after one refusal plus readmission on a neighbor's death
   brings the frontier to about two thirds of living nodes, and bud success from
   0.31 to 0.47.

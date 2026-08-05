@@ -79,20 +79,42 @@ async function setSlider(page, key, value) {
   /* ---- 1. change things, close the panel, reopen it ---- */
   console.log('\n\x1b[1mJourney 1 — change settings, close, reopen\x1b[0m');
   {
-    /* both live settings on purpose: touching a restart-only one is supposed
-       to take the close button away, and journey 3 tests that path */
+    /* Both live settings on purpose: touching a restart-only one turns OK into
+       RESTART, and journey 3 tests that path.
+
+       OK is what keeps an edit now, and the other button reverts it — it renames
+       itself from CLOSE to CANCEL once anything has changed, because with a
+       change on the table there is no such thing as merely closing. So this
+       journey walks both halves: keep, and then throw away. */
     const page = await open(browser, '#seed=31337');
     await page.click('#gear');
     await setSlider(page, 'tgtocean', 0.80);
     await setSlider(page, 'minfrag', 30);
     const afterEdit = await linkState(page);
-    await page.click('#setclose');
+    await page.click('#setok');
     await page.click('#gear');
     const afterReopen = await linkState(page);
     check(has(afterEdit.hash, 'tgtocean', 0.8) && has(afterEdit.hash, 'minfrag', 30),
       `the edit reaches the URL: ${afterEdit.hash}`);
     check(has(afterReopen.hash, 'tgtocean', 0.8) && has(afterReopen.hash, 'minfrag', 30),
-      `and survives closing and reopening: ${afterReopen.hash}`);
+      `ok keeps it through closing and reopening: ${afterReopen.hash}`);
+    /* and cancel puts it back — including in the world, not only in the link */
+    await setSlider(page, 'tgtocean', 0.30);
+    await page.click('#setclose');
+    const afterCancel = await page.evaluate(() => ({
+      hash: location.hash, ocean: window.__world.params().tgtocean }));
+    check(has(afterCancel.hash, 'tgtocean', 0.8) && afterCancel.ocean === 0.8,
+      `cancel puts the world back as it was: ${afterCancel.hash}`);
+    /* Escape is the same gesture and must mean the same thing */
+    await page.click('#gear');
+    await setSlider(page, 'tgtocean', 0.45);
+    await page.keyboard.press('Escape');
+    const afterEsc = await page.evaluate(() => ({
+      open: document.getElementById('settings').classList.contains('on'),
+      ocean: window.__world.params().tgtocean }));
+    check(!afterEsc.open && afterEsc.ocean === 0.8,
+      `escape does what the button does, not the opposite (ocean ${afterEsc.ocean})`);
+    await page.click('#gear');
     check(afterReopen.field.endsWith(afterReopen.hash),
       'the copy field agrees with the address bar');
     check(page.__errs.length === 0, 'no console errors' + (page.__errs[0] || ''));
@@ -122,32 +144,42 @@ async function setSlider(page, key, value) {
     const page = await open(browser, '#seed=31337');
     await page.click('#gear');
     await setSlider(page, 'tgtocean', 0.80);     // live
-    await setSlider(page, 'relief', 2.0);         // restart-only
-    const armed = await page.evaluate(() => ({
-      restart: getComputedStyle(document.getElementById('setrestart')).display !== 'none',
-      cancel: getComputedStyle(document.getElementById('setcancel')).display !== 'none',
-      close: getComputedStyle(document.getElementById('setclose')).display !== 'none',
-    }));
-    check(armed.restart && armed.cancel && !armed.close,
-      'touching a restart-only setting leaves only restart or cancel');
+    /* churn, not relief: elevation reads its parameter afresh on every terrain
+       sweep now and is applied live, so the restart-only setting to test with is
+       the one that multiplies a spin rate and cannot be */
+    await setSlider(page, 'churn', 2.0);
+    /* The panel no longer hides and shows buttons. OK becomes RESTART once a
+       restart-only setting has moved — because the change is real and in the
+       link, but the world on screen was built before it and cannot be told — and
+       the second button renames itself from close to cancel. */
+    const armed = await page.evaluate(() => {
+      const t = id => document.getElementById(id).textContent.trim().replace(/\s*×$/,'');
+      return { ok: t('setok'), close: t('setclose'),
+               amber: document.getElementById('setok').classList.contains('wants'),
+               restartEnabled: !document.getElementById('setrestart').disabled };
+    });
+    check(armed.ok === 'restart' && armed.amber && armed.close === 'cancel'
+          && armed.restartEnabled,
+      `touching a restart-only setting turns ok into restart: ` +
+      `[${armed.ok}] [${armed.close}]`);
     await Promise.all([
       page.waitForFunction(() => !window.__world, { timeout: 60000 }).catch(() => {}),
-      page.click('#setrestart'),
+      page.click('#setok'),
     ]);
     await page.waitForFunction(() => window.__world && window.__world.S.epoch0 > 0,
       { timeout: 180000 });
     const reloaded = await linkState(page);
-    check(has(reloaded.hash, 'relief', 2) && has(reloaded.hash, 'tgtocean', 0.8),
+    check(has(reloaded.hash, 'churn', 2) && has(reloaded.hash, 'tgtocean', 0.8),
       `the restart carries both settings: ${reloaded.hash}`);
     const applied = await page.evaluate(() => {
       const p = window.__world.params();
-      return { relief: p.relief, tgtocean: p.tgtocean };
+      return { churn: p.churn, tgtocean: p.tgtocean };
     });
-    check(applied.relief === 2 && applied.tgtocean === 0.8,
+    check(applied.churn === 2 && applied.tgtocean === 0.8,
       `and the restarted world is actually built with them: ${JSON.stringify(applied)}`);
     await page.click('#gear');
     const afterReopen = await linkState(page);
-    check(has(afterReopen.hash, 'relief', 2) && has(afterReopen.hash, 'tgtocean', 0.8),
+    check(has(afterReopen.hash, 'churn', 2) && has(afterReopen.hash, 'tgtocean', 0.8),
       `and reopening the panel does not throw them away: ${afterReopen.hash}`);
     await page.close();
   }

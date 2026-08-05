@@ -31,7 +31,7 @@ keeps every environment *present* and merely relocates it, so a specialist
 tuned to today is maladapted before long and adaptation never completes.
 
 **The mechanism holds and the conclusion does not.** Adaptation genuinely never
-completes under drift — but drift does not *maintain* specialisation, it
+completes under drift — but drift does not *maintain* specialization, it
 suppresses it, and a frozen planet is the most diverse one measured. What
 actually holds this world up is the niche structure and the ceiling on what
 suitability buys. Full evidence, including the two attempts it took to see,
@@ -81,13 +81,13 @@ is the existing climate system acting as a speciation engine, for free.
 ### The root dies first — and that is the life cycle, not a bug
 
 Lifespan derives from fit, age accumulates, and the oldest nodes are the ones
-nearest the root. So a plant is repeatedly **decapitated from the centre
+nearest the root. So a plant is repeatedly **decapitated from the center
 outward**: grow, hollow out, break into an expanding ring of independent
 fragments. That is a fairy ring, and it is what aspen clones, corals and crustose
 lichens actually do.
 
 Two consequences. Per-plant state must be **cheap to create**, because plant
-objects churn constantly. And identity for colour must be **genomic, never
+objects churn constantly. And identity for color must be **genomic, never
 per-plant** — a per-plant palette would strobe.
 
 **Measured, and it was not the fairy ring.** On a *frozen* planet — the growth
@@ -107,7 +107,7 @@ grandparent to reparent to.
 **What worked: heartwood.** A node that dies still holding children stops
 growing, stops counting as alive, and stays in the tree as structure — dead in a
 real trunk too, and still holding the tree up. It is released when its last child
-goes. Ageing then stops splitting anything, and mean body size went from 10.7 to
+goes. Aging then stops splitting anything, and mean body size went from 10.7 to
 508.
 
 ### The geometry has already decided several things
@@ -148,7 +148,7 @@ to 68 and the largest from 389 to 892.
 outward, so it climbed to 96,010 of 130,000 slots and squeezed the living out —
 population fell through 47,000 and kept going. It now has its own clock: when it
 **rots through**, whatever it was holding becomes a body in its own right. So
-decay fragments a plant, at a rate we choose, rather than ageing doing it at a
+decay fragments a plant, at a rate we choose, rather than aging doing it at a
 rate we do not. `rot` is the dial, and it is a straight trade — no decay gives
 bodies of 892 and a dying population; 900 ticks gives a stable 93,900 and bodies
 of 62.
@@ -199,7 +199,7 @@ sixty instructions either — it will only be far harder to see why.
   them always has somewhere to live, and never has it for long.
 - **pace**, which was supposed to buy growth with lifespan and in fact only ever
   charged the lifespan — see `formula-design.md`
-- **branch, turn, wander** — behaviour
+- **branch, turn, wander** — behavior
 - **spread, elongation** — morphology, and both purely cosmetic: neither ever
   touched the collision radius, so a broad lineage looked broad and claimed
   nothing
@@ -214,7 +214,7 @@ reads straight off fit and is never itself a gene.
 losing to persisters — while lineages committed to forest went from 665 nodes to
 4,559 and grass halved. Nothing wrote that.
 
-**And specialisation drifts down**, 0.42 to 0.32. The fixed budget stops affinity
+**And specialization drifts down**, 0.42 to 0.32. The fixed budget stops affinity
 *inflating* but nothing stops it *flattening*: a generalist scores one everywhere
 and can grow anywhere, while a specialist scores five in one place and cannot
 leave it, and on a world with this much edge breadth wins. See the open question
@@ -247,7 +247,7 @@ rather than neural.
 Inputs worth having: node age, depth from root, latitude, environment type and
 the five affinities, child count — and two more that earn their place:
 
-- **Local density of genetically similar neighbours.** This is Janzen–Connell
+- **Local density of genetically similar neighbors.** This is Janzen–Connell
   available for free, and it is the insurance against monoculture if climate drift
   proves insufficient on its own.
 - **The environment gradient, not just the environment.** A node that can sense
@@ -259,7 +259,7 @@ the five affinities, child count — and two more that earn their place:
 Seven quantities are wanted from the genome — five affinities, how badly a node
 wants to bud, and which way it turns. Do **not** give each its own instruction
 list. One program with seven designated output registers shares subexpressions,
-lets affinity and behaviour co-evolve coherently instead of drifting apart, and
+lets affinity and behavior co-evolve coherently instead of drifting apart, and
 collapses "genome length" to a single meaningful number.
 
 Length is a tuning parameter and belongs in the parameter block. Start short and
@@ -274,21 +274,21 @@ things about it:
 - **Fixed for a whole run, never within one.** Horizontal transfer copies
   instruction blocks between genomes; mixed lengths turn that into an alignment
   problem for no gain.
-- **Length is probably not where complex behaviour comes from.** Twenty
-  instructions with rich inputs — gradient sensing, similar-neighbour density,
+- **Length is probably not where complex behavior comes from.** Twenty
+  instructions with rich inputs — gradient sensing, similar-neighbor density,
   depth, age — will out-behave two hundred with poor ones. Expect the leverage to
   be in the input set, and reach for length last.
 - Evaluation cost multiplies against the death-scheduling pass, not the growth
   pass: 8 candidates per plant per turn is nothing, but re-estimating affinity as
   the climate drifts touches every node. See the implementation notes.
 
-### Normalise the five affinities to a fixed total
+### Normalize the five affinities to a fixed total
 
 Lifespan is monotonic in affinity and nothing costs affinity, so selection has no
 reason to keep any of the five low — they would all drift upward until every node
 likes everything and lives a long time everywhere. Not hyperspecialisation:
 **affinity inflation**, ending in a bland immortal generalist. A fixed budget
-makes specialisation zero-sum, so "generalists short-lived, specialists
+makes specialization zero-sum, so "generalists short-lived, specialists
 long-lived at home" follows structurally instead of by tuning.
 
 (Narrowing already has a natural cost — a narrow genome's frontier nodes die on
@@ -299,7 +299,7 @@ the overall *level* that needs constraining, not the shape.)
 
 Mutating every node means a thousand-node plant carries a thousand mutation
 events; drift within one organism would swamp variation between organisms,
-lineages blur, colours turn to mush and selection cannot accumulate.
+lineages blur, colors turn to mush and selection cannot accumulate.
 
 In a branching model there is a natural place to put it. A node's **first** child
 continues the sector and inherits the genome unchanged; its **second and later**
@@ -319,7 +319,7 @@ versus persisters, no fast-and-cheap versus slow-and-tough. The axis is nearly
 free and it makes disturbance meaningful, since cleared ground becomes an
 opportunity only weeds can exploit. It also restores a dimension in which genomes
 can be plainly better or worse rather than only differently placed — which
-normalising the affinities otherwise removes.
+normalizing the affinities otherwise removes.
 
 ## Seeding, dispersal and borrowed DNA
 
@@ -329,17 +329,17 @@ not one. A single lineage means no competition for a long time.
 **Ongoing seeding is dispersal from existing plants, not new random genomes.** A
 random genome dropped into a mature ecosystem is almost certainly unfit and dies,
 so it adds no diversity in practice; a spore from a lineage that is already
-working actually colonises. Mechanically: with small probability a bud places
+working actually colonizes. Mechanically: with small probability a bud places
 itself at a distant free location instead of adjacent. Keep it rare enough that
 each arrival reads as an event. Reserve de-novo seeding for near-extinction
 rescue.
 
 **Measured, and "rare enough that it reads as an event" was righter than it
 knew.** The earlier reading — that dispersal is the one thing slowing the erosion
-of specialisation, so more of it is better up to a point — asked only about
-*specialisation* and missed what dispersal does to *which niche wins*. A spore is
+of specialization, so more of it is better up to a point — asked only about
+*specialization* and missed what dispersal does to *which niche wins*. A spore is
 a copy of whatever is already succeeding, thrown across the planet, so a high rate
-is the current champion reseeding itself everywhere: it is a **homogenising**
+is the current champion reseeding itself everywhere: it is a **homogenizing**
 force. Taking the rate from 0.030 down to 0.006 moved niche evenness from 0.56 to
 0.86 and the largest lineage's share from 0.44 to 0.24. Both readings are true and
 they pull opposite ways; the low rate is much the better trade.
@@ -355,7 +355,7 @@ one-way ratchet described under heartwood, in a new place. 75 is already unstabl
 The pair `minfrag`/`settle` must move together.
 
 **Horizontal transfer between touching lineages.** Occasionally copy an
-instruction block from a neighbouring plant's genome. Adjacency is already known
+instruction block from a neighboring plant's genome. Adjacency is already known
 from the collision tests, so it costs almost nothing. It is thematically right —
 lichens are literally symbioses — and it works against both monoculture and the
 clonality that constant fragmentation would otherwise produce.
@@ -367,16 +367,16 @@ stable to count, since plant objects churn every few seconds.
 
 ## Rendering
 
-**Colour must be information, not decoration.** Map genome to colour through a
+**Color must be information, not decoration.** Map genome to color through a
 fixed projection, never random per lineage:
 
-- **hue** — which environment the affinity vector favours
-- **saturation** — how peaked it is, so generalists desaturate toward grey and
+- **hue** — which environment the affinity vector favors
+- **saturation** — how peaked it is, so generalists desaturate toward gray and
   specialists go vivid
 - **lightness** — the life-history axis
 
 Then related plants look related, convergent evolution shows up as the same
-colour appearing independently in similar places, and because hue tracks niche
+color appearing independently in similar places, and because hue tracks niche
 rather than lineage the planet bands naturally by climate and still reads as
 plausible biomes. Per-lineage jitter destroys all of that.
 
@@ -436,7 +436,7 @@ parallel-transport the tangent to the new position. An angle relative to a lat/l
 frame breaks at the poles and at the seam — this repo already has that scar; see
 the tangent-frame lesson in CLAUDE.md.
 
-**Do not scan every node every turn.** Ageing every node is O(total nodes) per
+**Do not scan every node every turn.** Aging every node is O(total nodes) per
 tick, tens of thousands before anything interesting happens. A node's death time
 is computable at birth, so bucket nodes by expected death turn and touch only
 those due. Climate drift makes the estimate stale, which is fixed the way this
@@ -482,7 +482,7 @@ anyone changing this code:
   alone buys +0.500 of niche evenness; adding both others buys +0.002 more.
 - **Dispersal fills the planet and spreads the incumbent at the same time**,
   and those pull opposite ways. Regional differentiation falls as the spore
-  rate rises; at zero, a quarter of the world is never colonised at all.
+  rate rises; at zero, a quarter of the world is never colonized at all.
 - **Extinction is absorbing.** Nothing in the original design could repopulate
   a planet whose plants had all died. `reseed` can.
 - **A short run judges nothing**, and neither does an untested harness.
@@ -522,7 +522,7 @@ Each stage should be watchable before moving on.
 2. **Frontier maintenance — done**, and the allocation rule turned out to matter
    more than the maintenance.
 3. **Branch mutation and inheritance — done.** Eleven-gene genome, life-history
-   axis, genome→colour projection.
+   axis, genome→color projection.
 4. **Test the central claim.** Everything so far was measured on a frozen planet.
    Does a *moving* climate maintain diversity on its own, as this document has
    assumed throughout? Nothing else should be added until that is known, because
@@ -547,7 +547,7 @@ Each stage should be watchable before moving on.
 - **Integration hazard.** The humidity controller currently measures desert as
   `veg < 0.18`. If plants replace that field, the climate governor starts steering
   the *ecology* — nudging global humidity because a lineage is losing. That may be
-  a stabiliser or a straitjacket, but it must be an explicit decision, not an
+  a stabilizer or a straitjacket, but it must be an explicit decision, not an
   accident.
 
 ## Acceptance test
@@ -555,6 +555,6 @@ Each stage should be watchable before moving on.
 Add to `tools/verify.js`, in the spirit of the existing homeostasis bounds:
 **genetic diversity must not collapse over a simulated hour.** Measure it
 genomically — mean pairwise distance across a sample of nodes, or the spread of
-the colour projection — not by counting plant objects, which churn constantly
+the color projection — not by counting plant objects, which churn constantly
 under fragmentation and would be pure noise. Watching it is not enough; that is
 how you ship something that looks alive for five minutes.

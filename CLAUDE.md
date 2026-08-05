@@ -14,7 +14,22 @@ requests**. Published to GitHub Pages at https://donmarshworks.github.io/aetheri
   software so results are deterministic on any machine. `npm run verify --
   --static` runs only the instant static checks.
 - `npm run serve` starts a local server on :8000.
-- Deploy: commit and push to `main`. Pages redeploys automatically.
+- **Deploy.** The work lives on `plants`; `main` is what GitHub Pages serves and
+  what the public browses. Never merge either way. Publish by copying from
+  `plants` into a **detached worktree** on `main` — never by switching branches
+  in the working tree, because background sweeps read `index.html` off disk and
+  an edit mid-run splits a measurement between two programs.
+
+  Copy `index.html` to both `index.html` and `preview/index.html`, **and**
+  `README.md`, `CLAUDE.md`, `docs/` and `tools/`. That last part is new and it
+  matters: for a long time only `index.html` was published, so `main` carried a
+  README that never mentioned the plants, two tools against this branch's twenty
+  and one document against four. The repository the public reads was describing a
+  different, smaller project.
+
+  `npm run verify` must be green on the exact `index.html` being published — check
+  the blob hash matches rather than assuming, since it takes about twelve minutes
+  and it is easy to edit the file while it runs.
 
 ## Invariants — do not break these
 
@@ -142,7 +157,7 @@ Two hazards it walked into and one it did not. `qFromBasis` builds its matrix by
 which is a perfectly good unit quaternion pointing every camera exactly the wrong
 way, and no length or dot product anywhere goes wrong. The detail patch sized
 itself from the field of view alone, which was right only while the view axis
-passed through the world's centre; off-axis it must add the angle between them.
+passed through the world's center; off-axis it must add the angle between them.
 And the tour draws from `Math.random` and **never `prnd()`** — a camera reaching
 into the simulation's stream would make the route decide the planet.
 `tools/tour.js` asserts two identical runs, one touring and one not, produce
@@ -198,16 +213,16 @@ easy to reintroduce.
   the rest of the shader is parsed as JavaScript. The failure is a syntax error
   somewhere else entirely and the offending line looks like ordinary prose.
   `verify.js` checks statically that every shader reaches its `void main`.
-- `smoothstep(a, b, x)` with `a > b` is **undefined behaviour**, not a reversed
+- `smoothstep(a, b, x)` with `a > b` is **undefined behavior**, not a reversed
   ramp. Always ascending; use `1.0 - smoothstep(lo, hi, x)` to descend. Symptom:
   the feature silently vanishes on some drivers (this hid the entire starfield).
   `verify.js` scans for this statically.
-- Noise gradient vectors must be **normalised to unit length**. Unnormalised
+- Noise gradient vectors must be **normalized to unit length**. Unnormalised
   hashes bias toward cube diagonals and produce a herringbone lattice.
 - **Never finite-difference the interpolated grid.** Smoothstep-bilinear has a
   gradient of exactly zero on every cell boundary, so differencing it beats
   against the grid and draws stripes across mountain belts. Use `heightCR()`,
-  which returns value and both derivatives from one 4×4 neighbourhood.
+  which returns value and both derivatives from one 4×4 neighborhood.
 - **Band-limit fine detail** against the pixel footprint (`pw`, `fadeA`,
   `fadeB`). Anything finer than a pixel aliases into moiré.
 - Compute `dFdx`/`dFdy` **before** any branching — derivatives inside
@@ -227,7 +242,7 @@ easy to reintroduce.
 **Looking like a planet, not a terrain demo**
 
 - **Relief is capped at ~13° of normal tilt.** From orbit Everest is 9 km against
-  a 6,370 km radius; ranges read by *snow and rock colour*, not shadow. Anything
+  a 6,370 km radius; ranges read by *snow and rock color*, not shadow. Anything
   stronger looks like a rendering bug.
 - The **terminator is driven by the geometric normal**, never the bumped one.
   With the sun near-tangent, small relief tilts throw whole regions into shadow
@@ -235,7 +250,7 @@ easy to reintroduce.
   the sun climbs.
 - **Clamp elevation at sea level before differentiating**, or the continental
   shelf drop reads as a cliff and every coastline throws a shadow.
-- **Barren ground colour must depend on temperature.** Cold desert is grey-brown
+- **Barren ground color must depend on temperature.** Cold desert is gray-brown
   rock; hot desert is sand. Keying both to sand means melting snow uncovers the
   Sahara at 45° latitude.
 - The **tangent frame must not switch basis** at high latitude — that draws a
@@ -257,17 +272,38 @@ easy to reintroduce.
   touch stacks report zeroes there.
 - Clear tracked pointers on `blur`/`visibilitychange`, or a lost release jams
   input permanently.
+- **Never empty a scroll container to rebuild it.** `buildSettings()` began with
+  `setList.textContent = ""`, and `#setlist` carries
+  `-webkit-overflow-scrolling: touch`. On iOS that collapses `scrollHeight` to
+  zero and takes `scrollTop` with it: scroll down to a control, tap its pin, and
+  the list jumps to the top, so the second tap lands on a different card. It
+  presented as "you can't disable a pin once you have enabled it", *and only on
+  the settings page* — the copy on the world view is not inside a scroller.
+  Update in place (`syncPinButtons`); rebuilding eighteen cards of sliders
+  because one boolean changed was wrong anyway.
+
+  Two things about how that was found, because both will recur. **It does not
+  reproduce in Chromium**, which restores scroll position across a content swap
+  where iOS Safari's momentum scroller does not — so the emulated test reporting
+  "the list held its place" was true and worthless. And the first diagnosis was
+  wrong: the pin is a 22px target where Apple asks 44, which is a real defect and
+  was fixed, but it was not this one. What killed that theory was the observation
+  that the *same button at the same size* worked on the world view and not in the
+  panel. **When two instances of one control disagree, the difference is not in
+  the control.**
 
 ## Style
 
-**American spelling in everything the visitor reads** — the about panel, the
-settings and graph cards, button labels. Comments and these documents stay
-British-ish. Comments explain *why* not *what*. The HUD states
+**American spelling throughout** — the about panel, the settings and graph
+cards, button labels, the README and these documents. Code comments inside
+`index.html` are the one place still written British-ish, and only because
+nobody has swept them; match the file you are editing. Comments explain *why*
+not *what*. The HUD states
 the three time scales explicitly (a day 2.5 min, a year 15 min, continents
 ~40 min) rather than inventing a single geological clock, because those are
 compressed by factors differing by nine orders of magnitude and any one counter
 would contradict the others. Erosion and real plate tectonics are **not**
-modelled — don't claim otherwise in the README.
+modeled — don't claim otherwise in the README.
 
 ## Next feature
 

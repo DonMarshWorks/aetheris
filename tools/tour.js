@@ -198,14 +198,18 @@ const check = (c, m) => c ? ok(m) : no(m);
     }
     const ang = (a, b) => Math.acos(Math.max(-1, Math.min(1,
                   a[0]*b[0] + a[1]*b[1] + a[2]*b[2])));
+    /* The total is the WHOLE arc and the peak is taken only over steps long
+       enough to estimate a derivative from. Summing the total over the same
+       filtered steps under-counts the denominator, so every ratio measured
+       against it comes out high — which is its own quiet way of failing a
+       correct motion, and it read 2.83 against a true 1.875. */
     let total = 0, peak = 0;
-    /* uneven frame times again - see the note on the journey profile above */
     const minDu = 0.4 / Math.max(1, s.length - 1);
     for (let i = 2; i < s.length; i++) {          /* see the note on the first sample */
-      const du = s[i].u - s[i-1].u; if (du < minDu) continue;
+      const du = s[i].u - s[i-1].u;
       const da = ang(s[i-1].v, s[i].v);
       total += da;
-      if (da / du > peak) peak = da / du;
+      if (du >= minDu && da / du > peak) peak = da / du;
     }
     let worst = 0, wi = 0;
     for (let i = 2; i < s.length; i++) {
@@ -234,6 +238,54 @@ const check = (c, m) => c ? ok(m) : no(m);
   });
   await page.evaluate(() => window.__world.setTour(true));
   await frames(page, 2);
+
+  // ---- the route visits everywhere before it repeats anywhere -------------
+  /* A shuffled bag, asserted as the two properties it exists to give: nothing
+     twice in a row, and nothing missing from any run of eleven. The old
+     weighted draw guaranteed only the first, and independent draws leave a
+     particular framing out of any given eleven legs better than a third of the
+     time — which is the drought that gets noticed.
+     Read without flying anything: each call finishes a leg and starts the next,
+     so a hundred of them cost no time at all. */
+  const route = await page.evaluate(n => {
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(window.__world.tourNext());
+    return out;
+  }, 66);
+  const names = [...new Set(route)];
+  let twice = 0;
+  for (let i = 1; i < route.length; i++) if (route[i] === route[i-1]) twice++;
+  /* What a bag actually guarantees is every framing once per ALIGNED cycle, and
+     therefore a gap between two appearances of at most 2N-1 — first out of one
+     cycle, last out of the next. It does NOT guarantee every sliding window of
+     N holds all N: a window straddling two cycles may repeat quite properly,
+     and asserting otherwise fails on a correct bag. */
+  /* Phase-independent, because this route does NOT start on a cycle boundary —
+     the bag is already part-consumed by the legs flown earlier in this file, so
+     blocks measured from the first sample straddle two cycles and a correct bag
+     fails. What holds whatever the phase: no framing waits more than 2N-1 legs,
+     and over a long run they all come up about equally often. */
+  const N = names.length;
+  const seen = {};
+  for (const r of route) seen[r] = (seen[r] || 0) + 1;
+  const counts = Object.values(seen);
+  const spread = Math.max(...counts) - Math.min(...counts);
+  let worst = 0;
+  for (const n of names) {
+    const at = route.map((r, i) => r === n ? i : -1).filter(i => i >= 0);
+    for (let i = 1; i < at.length; i++) worst = Math.max(worst, at[i] - at[i-1]);
+  }
+  check(twice === 0,
+    twice ? `${twice} immediate repeats in ${route.length} legs`
+          : `nothing twice running in ${route.length} legs`);
+  /* A spread of 2, not 1. The route starts at an arbitrary point INSIDE a cycle,
+     so it covers a part cycle, some whole ones, and another part — and a framing
+     can fall in both partials or in neither. With 66 legs over 11 framings that
+     is five to seven each, and demanding six or seven fails a correct bag. */
+  check(worst <= 2 * N - 1 && spread <= 2 && counts.length === N,
+    `all ${N} framings come up ${Math.min(...counts)}-${Math.max(...counts)} times ` +
+    `in ${route.length} legs, and the longest any of them went unvisited was ` +
+    `${worst} legs against the bag's bound of ${2 * N - 1}`);
 
   // ---- one leg follows another --------------------------------------------
   const legs = await page.evaluate(async () => {

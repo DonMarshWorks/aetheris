@@ -49,10 +49,10 @@ being the later function declaration, shadowed the genome one at every call site
 It read `sp.tlo` off a numeric offset, returned NaN, and `NaN|0` is `0`, so every
 lifespan fell back on the `hostile` floor. **Fit-based selection was switched off
 entirely**, and 99.7% of lifespan updates were NaN. Specialists never received the
-longer life their specialism was supposed to buy, so of course specialisation
+longer life their specialism was supposed to buy, so of course specialization
 drifted down whatever the climate did.
 
-With selection actually working, specialisation over fifteen thousand ticks:
+With selection actually working, specialization over fifteen thousand ticks:
 
 | | start | mid | end |
 |---|---|---|---|
@@ -65,16 +65,16 @@ And mean fit over the same runs: frozen 2.03 → 2.47, ×100 1.43 → 1.62.
 So the thesis holds in its mechanism and fails in its conclusion. **Adaptation
 genuinely never completes** — under drift, mean fit never catches up with a
 population that is always chasing ground that has moved, which is exactly what
-was claimed. But drift does **not** maintain specialisation, it *suppresses* it:
-a static world lets specialisation climb, and ×100 grinds it down. Following a
+was claimed. But drift does **not** maintain specialization, it *suppresses* it:
+a static world lets specialization climb, and ×100 grinds it down. Following a
 niche that has moved means growing through country only a generalist can cross,
-so drift is not neutral between the strategies — it favours breadth.
+so drift is not neutral between the strategies — it favors breadth.
 
 The instruction to lean on this "rather than adding artificial diversity
-pressure" is therefore wrong about specialisation. But see the next section
+pressure" is therefore wrong about specialization. But see the next section
 before concluding that anything needs fixing.
 
-### Measured: what actually holds specialisation up, and whether it matters
+### Measured: what actually holds specialization up, and whether it matters
 
 At ×100, over fifteen thousand ticks, against a baseline that falls 0.396 → 0.345:
 
@@ -86,9 +86,9 @@ At ×100, over fifteen thousand ticks, against a baseline that falls 0.396 → 0
 | dispersal ×7.5 | **0.360** | **−0.022** | **1.74** | 0.313 |
 | dispersal ×30 | 0.351 | −0.025 | 1.34 | 0.253 |
 
-**Frequency dependence does not touch specialisation, and could not have.** It
+**Frequency dependence does not touch specialization, and could not have.** It
 acts on *which* strategy is common — global rarity is the only thing that pulls
-the largest strategy's share down, 0.246 against 0.255 — and specialisation is a
+the largest strategy's share down, 0.246 against 0.255 — and specialization is a
 different axis entirely, being how committed a lineage is rather than which niche
 it commits to. Both mechanisms work; neither answers this question.
 
@@ -128,7 +128,7 @@ to a fixed pattern. Then two complete 2⁶ factorials, 64 cells each, where an
 effect is a clean contrast and nothing is aliased. Then confirmation of the
 finalists at 45,000 ticks and five seeds, a decomposition at eight seeds, and
 long runs at 135,000. Roughly 700 headless runs. `tools/sweep.js`,
-`tools/score.js`, `tools/analyse.js`, `tools/factorial.js`.
+`tools/score.js`, `tools/analyze.js`, `tools/factorial.js`.
 
 Three harness rules, each of which has already voided a round of measurement on
 this project if broken: count **ecology** ticks and not climate updates, since
@@ -204,7 +204,7 @@ improvement, and both are the same mistake.
 **Affinity modulation is exonerated and load-bearing.** The suspicion recorded
 in `formula-design.md` that it feeds a monoculture does not reproduce at 45,000
 ticks: dominance is flat across `affmod` 1.0 / 1.3 / 2.2 (0.853 / 0.860 /
-0.841). Turning it off collapses specialisation 0.61 → 0.32, drops mean fit to
+0.841). Turning it off collapses specialization 0.61 → 0.32, drops mean fit to
 1.45, and loses a strategy. Leave it on.
 
 **`ecorate` never bought anything by freezing, so the guard cost nothing.**
@@ -248,13 +248,13 @@ breaking apart where they already stand. 0.001 is inside a seed's noise of zero.
 `sporeviable`. Mutating a spore harder than an ordinary bifurcation does not
 help at a low rate (0.803 at ×8 against 0.814 at ×1) but clearly helps at the
 old default rate of 0.006: 0.750 → 0.771, and 0.780 with the landing filter
-relaxed too. So the intuition is right — heavy mutation offsets the homogenising
+relaxed too. So the intuition is right — heavy mutation offsets the homogenizing
 cost of dispersal — but throwing fewer spores is a bigger lever and the two do
 not stack. Restricting spores to fit nodes also helps (0.830 against 0.814), but
 its mean plant size of 110 is almost exactly what plain `spore = 0.0005` gives
 (109), so the evidence is equally consistent with it helping because it throws
 **fewer** spores rather than better ones. Separating those needs matched
-realised spore counts and has not been done.
+realized spore counts and has not been done.
 
 ### What the score got wrong
 
@@ -361,7 +361,7 @@ branches. The cheapest mechanism that could work is not messages but a **shared
 input**: one float per body that any node may add to through an `emit` output
 and any node may read as an input. No traversal, no per-node storage, and both
 halves are one output-address mutation from existing, which is what decides
-whether a behaviour is reachable at all.
+whether a behavior is reachable at all.
 
 It was built, and it was never adopted. Genomes wired the signal into a live
 output at 0.49–0.53 against a control whose register was **dead** at 0.53–0.56 —
@@ -387,13 +387,13 @@ genome.** The removed version needed a lineage to evolve an emitter and a reader
 together before either was worth anything, which is the plateau problem that
 also killed genome-named child headings — no mutation rate fixes an absent
 gradient. Here `vigour <- MUL(bodyfit, ...)` is one output-address mutation from
-existing, which is the condition under which a behaviour turned out to be
+existing, which is the condition under which a behavior turned out to be
 reachable at all.
 
-It also answers the diagnosis on its own terms. A node at the centre of a body
+It also answers the diagnosis on its own terms. A node at the center of a body
 straddling a coastline knows its own fit and cannot know that half of its body
 is drowning; that genuinely is something happening where it cannot see it. And
-the behaviour Don wants from it is legible — a well-suited body curling in and
+the behavior Don wants from it is legible — a well-suited body curling in and
 shortening its steps, a badly-suited one throwing long scouts — which is exactly
 the scout-and-nursery axis `formula-design.md` was built around, promoted from
 within-body to whole-body.
@@ -455,7 +455,7 @@ Stretching the grace by the same factor the maturity got trades extinction for
 debris: at 6,700 ticks the cull barely applies, so every two-node scrap
 survives and the mean plant falls from 82.6 to 6.7. Raising the floor gets three
 seeds of four through and seed 31337 still dies — `score.js` gates the whole
-configuration for it rather than averaging the corpse in, which is the behaviour
+configuration for it rather than averaging the corpse in, which is the behavior
 it exists for.
 
 **Verdict: the input stays, the pace scaling does not.** `sunfx` defaults to 0.
@@ -494,8 +494,8 @@ over four seeds (`tools/income.js`, `window.__world.bodyIncome()`):
 ratio is flat from 64 nodes to 1024 and if anything *rises* with size. So the
 frontier is not a perimeter and growth does not slow as 1/r: a body's share of
 attempts is very nearly proportional to its living node count. That is not new
-behaviour — `formula-design.md` already records retirement-after-one-refusal
-plus readmission-on-a-neighbour's-death bringing the frontier to "about two
+behavior — `formula-design.md` already records retirement-after-one-refusal
+plus readmission-on-a-neighbor's-death bringing the frontier to "about two
 thirds of living nodes" — but the design brief's *justification* never caught up
 with it.
 
@@ -517,7 +517,7 @@ energy store does not compensate for an asymmetry the energy model would
 introduce; it fixes one that is already there.
 
 **So the two proposals are not alternatives and the 2×2 is worth running.**
-Grace counted in bud attempts rather than ticks removes an *artefact* — the cull
+Grace counted in bud attempts rather than ticks removes an *artifact* — the cull
 killing a slow founder before it has had a fair number of chances — and does
 nothing to help it grow. A seed energy store is *substantive*: it gives a
 founder real attempts it would not otherwise get. One is necessary, the other
@@ -528,7 +528,7 @@ the question a crossed design answers and one-at-a-time does not. `marine`,
 One design note with a documented reason behind it. A seed store makes founders
 succeed, and founders arrive by two routes: `reseed`, a fresh random genome into
 an empty province, and `spore`, a copy of something already winning thrown
-across the world. This file records dispersal as a homogenising force —
+across the world. This file records dispersal as a homogenizing force —
 differentiation falls monotonically as the spore rate rises, 0.716 to 0.616 — so
 a store that pays both equally spends part of its budget spreading the
 incumbent. Paying `reseed` founders more than `spore` founders is the same trade
@@ -547,7 +547,7 @@ Accrual is **lazy**: a node's store is brought up to date when it is drawn, from
 the ticks since anyone last looked at it, so the mechanism costs nothing per
 tick and nothing is scanned. The **attempt** is what costs, not the success — a
 node that spends its store on a bud that collides has still spent it, which is
-what makes a plant boxed in by neighbours exhaust itself rather than hammering
+what makes a plant boxed in by neighbors exhaust itself rather than hammering
 at the same wall for free.
 
 **At the default tilt it is worth about two seed standard deviations**, and it
@@ -645,7 +645,7 @@ living nodes in 1,104 bodies:
 
 | | |
 |---|---|
-| one 27-bin neighbourhood pass over 1/7 of the population | 27.1 ms |
+| one 27-bin neighborhood pass over 1/7 of the population | 27.1 ms |
 | extrapolated to every living node | **189 ms** |
 | the ecology's entire per-frame budget | 4 ms |
 | ecology steps the frame loop owes per second | 192 |
@@ -657,7 +657,7 @@ would allow each node to be re-tested about four times a second — and that
 budget is *already* spent, on growth. There is no version of this that is merely
 tight.
 
-**But the behaviour it was wanted for is nearly free, and is already half
+**But the behavior it was wanted for is nearly free, and is already half
 designed.** A body that grows on one side and dies on the other migrates without
 anything moving, which is how clonal organisms actually travel; the fairy ring in
 `plants-design.md` is that mechanism with no preferred direction. Give it a
@@ -699,10 +699,10 @@ default the piece now ships with.
   recurring and now has a number attached.
 
 - **Frequency dependence still answers a question nobody is asking.** Tried a
-  second time, on niche balance rather than specialisation, and it fails there
-  too: evenness falls monotonically as `rare` rises, 0.82 to 0.72. It penalises a
-  common *strategy*, and a lineage can shift its specialisation without changing
-  which environment it favours, so it never pushes toward balance across the five.
+  second time, on niche balance rather than specialization, and it fails there
+  too: evenness falls monotonically as `rare` rises, 0.82 to 0.72. It penalizes a
+  common *strategy*, and a lineage can shift its specialization without changing
+  which environment it favors, so it never pushes toward balance across the five.
   Two hypotheses, two failures. It should probably be deleted rather than tried a
   third time.
 
