@@ -1355,6 +1355,11 @@ const PARAMS = {
   noatmo:  0,       // skip the atmosphere shell
   noring:  0,       // skip the ring
   noplanet: 0,      // skip the surface itself, leaving sky and atmosphere
+  /* How far the adaptive resolution may go down before it gives up. It is a
+     parameter rather than a constant because the machine that needs it most is
+     a television that cannot be attached to a profiler, and finding the floor
+     that machine actually wants should not cost a deploy each time. */
+  minres:  0.42,
   perf:    0,       // 1 shows where the milliseconds go, and what keys arrive.
                     // Off by default and drawn only when on: this exists because
                     // a Fire TV cannot be attached to a profiler and guessing at
@@ -4595,6 +4600,20 @@ const gl = canvas.getContext("webgl2",{antialias:true,alpha:false,powerPreferenc
 if(!gl){ document.getElementById("fail").style.display="flex";
          document.getElementById("splash").style.display="none"; return; }
 
+/* Which implementation is actually drawing. On the machine this was written
+   for, 204ms went somewhere no shader change would reach, and the difference
+   between a weak GPU and a software fallback decides whether there is anything
+   to optimise at all — a fallback can only be answered with fewer pixels.
+   WEBGL_debug_renderer_info is not universal and the plain strings are the
+   fallback; both are only ever shown inside #perf=1. */
+const GLINFO = (()=>{
+  try{
+    const d = gl.getExtension("WEBGL_debug_renderer_info");
+    const r = d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    return String(r || "?").slice(0, 58);
+  }catch(e){ return "?"; }
+})();
+
 function sh(type,src){
   const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
   if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))
@@ -4980,6 +4999,9 @@ function showPerf(fps){
     `  build ${(PERF.sbuild/k).toFixed(0)}  upload ${(PERF.supload/k).toFixed(0)}` +
     `  drawp ${(PERF.sdraw/k).toFixed(0)}  mipmap ${(PERF.smip/k).toFixed(0)}  (per rebuild)`,
     `live ${liveN}  bodies ${comps}  inst ${PERF.sinst}  sheetgap ${sheetGap}ms`,
+    `gl  ${GLINFO}`,
+    `    ${(canvas.width*canvas.height/1000).toFixed(0)}k px, ` +
+    `${(other>0.01 ? canvas.width*canvas.height/other/1000 : 0).toFixed(0)}k px/ms unaccounted`,
     `off: ${["noplanet","noclouds","noatmo","noring","detail"]
              .filter(k=>k==="detail"?PARAMS.detail<=0:PARAMS[k]).join(" ") || "nothing"}`,
     `keys ${perfKeys.join("  ") || "(press one)"}`,
@@ -6443,6 +6465,16 @@ addEventListener("keydown",e=>{
   else if(e.key==="1"||e.key==="2"||e.key==="3"){
     const b=document.querySelectorAll(".sp")[+e.key-1]; if(b) b.click();
   }
+  /* The isolation switches, live. They exist as URL parameters too, but the
+     machine that needs them is driven by a remote whose cursor cannot reliably
+     hit a button, and asking for four separate page loads there is asking a
+     lot. Only while the overlay is up, so an ordinary visitor cannot turn the
+     planet off by leaning on a number. */
+  else if(PARAMS.perf>0 && e.key>="4" && e.key<="7"){
+    const k = ["noplanet","noclouds","noatmo","noring"][+e.key-4];
+    PARAMS[k] = PARAMS[k] ? 0 : 1;
+    perfTxt = "";
+  }
   else if(!onControl && !touring() &&
           (e.key==="ArrowLeft"||e.key==="ArrowRight"||e.key==="ArrowUp"||e.key==="ArrowDown")){
     e.preventDefault();
@@ -7297,7 +7329,7 @@ function frame(now){
        that is still in real trouble at the first floor is allowed down to the
        second, where it is drawing a quarter as many pixels — and a television is
        watched from three metres, where that is a trade worth making. */
-    const floor = (fps < 12 && dpr <= 0.78) ? 0.42 : 0.75;
+    const floor = (fps < 12 && dpr <= 0.78) ? Math.max(0.15, PARAMS.minres) : 0.75;
     if(fps<38 && dpr>floor){ dpr=Math.max(floor,dpr*0.82); resize(); }
     else if(fps>57 && dpr < Math.min(devicePixelRatio||1,2)-0.02){
       dpr=Math.min(Math.min(devicePixelRatio||1,2), dpr*1.08); resize(); }
