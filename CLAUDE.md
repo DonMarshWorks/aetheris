@@ -14,22 +14,22 @@ requests**. Published to GitHub Pages at https://donmarshworks.github.io/aetheri
   software so results are deterministic on any machine. `npm run verify --
   --static` runs only the instant static checks.
 - `npm run serve` starts a local server on :8000.
-- **Deploy.** The work lives on `plants`; `main` is what GitHub Pages serves and
-  what the public browses. Never merge either way. Publish by copying from
-  `plants` into a **detached worktree** on `main` — never by switching branches
-  in the working tree, because background sweeps read `index.html` off disk and
-  an edit mid-run splits a measurement between two programs.
+- **Deploy.** Work on `main` and push; GitHub Pages serves it directly. The
+  `plants` branch is merged and done, and the detached-worktree dance that used
+  to publish it is retired — it existed only to keep `main` and `plants` from
+  ever touching, and there is no longer a second branch to keep apart.
 
-  Copy `index.html` to both `index.html` and `preview/index.html`, **and**
-  `README.md`, `CLAUDE.md`, `docs/` and `tools/`. That last part is new and it
-  matters: for a long time only `index.html` was published, so `main` carried a
-  README that never mentioned the plants, two tools against this branch's twenty
-  and one document against four. The repository the public reads was describing a
-  different, smaller project.
+  Keep `preview/index.html` byte-identical to `index.html` when you change
+  either.
 
-  `npm run verify` must be green on the exact `index.html` being published — check
+  `npm run verify` must be green on the exact `index.html` being pushed — check
   the blob hash matches rather than assuming, since it takes about twelve minutes
   and it is easy to edit the file while it runs.
+
+  Do not put "now running verify" in the last sentence of a message. Twice the
+  sentence stood in for the action and the gate never ran: writing the intent
+  discharges it, and a reply arriving before the next turn removes the only
+  chance to notice. The call goes in the *same* message as the claim.
 
 ## Invariants — do not break these
 
@@ -167,16 +167,73 @@ byte-identical ecologies.
 `advance()`, `runWorld()`, `freeze()`, `setView()`, `sunDir()`, `cam()`,
 `pole()`, `ringPoint()`, `pins()`, `tour()`, `setTour()`, `tourGo()`,
 `pointerCount()`, `debug()`, `params()`, `defaults()`, `settings()`,
-`holdClimate()`, and the plant hooks in `plants-design.md`. Used by
-`verify.js`, `sweep.js`, `controls.js` and `linkcheck.js`. Keep them working.
+`holdClimate()`, `instHash()`, `buildMs()`, and the plant hooks in
+`plants-design.md`. Used by `verify.js`, `sweep.js`, `controls.js` and
+`linkcheck.js`. Keep them working.
 `holdClimate()` pins the three dials so the world can be asked where it
 settles, which is the one question a controller steering toward a target can
 never answer about itself.
+`instHash()` rebuilds the plant sheet's instance buffer and hashes it, and
+`buildMs()` times the rebuild alone. They exist as a pair: an optimisation of
+the rebuild is only allowed to make `buildMs` smaller, and `instHash` is how you
+say it did nothing else. Both are useless without the rAF stub below.
+
+**Any probe that runs the world must stub `requestAnimationFrame` first.** The
+frame loop advances the same world `runWorld` advances, by an amount that
+depends on how many frames the machine managed — so two runs of *the same file*
+returned 80,739, then 81,373, then 84,121 live nodes. Let through exactly the
+first rAF call (the boot lives inside one and schedules the loop as its last
+act) and drop every call after; `tools/tour.js` has the recipe. Assert the probe
+agrees with itself before you let it compare anything.
+
+**The `#perf=1` overlay** breaks a frame into sim / eco / sheet / draw / other,
+with the rebuild split again into ghost / sort / emit and build / upload / draw /
+mipmap. Read `mean/worst`, never the mean alone — see the lesson below.
 
 ## Hard-won lessons
 
 Every one of these was a real bug that shipped and had to be diagnosed. They are
 easy to reintroduce.
+
+**Performance**
+
+- **A governor cannot correct an error it cannot see.** `dt` is clamped to 0.25s
+  so a backgrounded tab cannot hand the climate an hour in one step. The frame
+  rate was then computed as frames ÷ the sum of those *clamped* values — so it
+  could not report anything worse than **4.0** however slowly the machine was
+  going. A Fire TV at well under one frame a second read 4.0, and the adaptive
+  resolution and the plant sheet's rate limit both believed it. The tell was a
+  user saying "fps 4.0, but no way, it is actually less than 1". Measure the
+  frame rate on the wall clock, and keep it separate from whatever the
+  simulation is allowed to integrate.
+- **A mean over a window that may or may not contain the expensive event is a
+  coin toss, not a measurement.** The sheet rebuilds about once a second and the
+  sampling window is about a second. The first reading said `sheet 1.4ms`, and
+  that was written into a commit message as evidence the cost was elsewhere; the
+  second said `300`. Both were true of their own window and neither was true of
+  the frame. Report worst-in-window alongside the mean, and count how many of the
+  event the window actually saw.
+- **`other` clamped at zero is not evidence of nothing.** The overlay's
+  unaccounted-time column is `max(0, frameTime − Σphases)`. Once the accounted
+  phases exceed the frame time it reads 0, which looks like "no GPU wait" and
+  actually means the accounting has saturated.
+- **Look for a constant being recomputed before you look for work to skip.**
+  The rebuild cost 59ms and it was all in the emit loop, so the plan was to cull
+  the far hemisphere — real work, real staleness, real risk to the picture. But
+  `emitNode` was calling `asin`, two `atan2`, two `sin` and two `cos` per node
+  per pass to find where the node sits on the sheet and which way its leaf lies,
+  and *a node never moves*: `NPX/NPY/NPZ` and `NHX/NHY/NHZ` are written in one
+  place, in `addNode`, and never again. Fourteen transcendentals a node, 1.3
+  million a rebuild, all recomputing what was decided at birth. Moving them to
+  `addNode` as `NU/NV/NROT/NSU/NSV` — plus reusing the paint between a node's
+  two passes — took the rebuild **59.4ms → 13.8ms, 4.31×, byte-identical**. Grep
+  the hot loop for what its inputs are before designing around its cost.
+- **Cache from the stored value, not from the argument.** The first version of
+  that cache computed from `addNode`'s float64 parameters; the loop it replaced
+  read `NPX[i]`/`NHX[i]`, which are `Float32Array`. One rounding earlier, and
+  every instance moved in its last bit. The world was identical, the instance
+  count was identical, and the buffer hash was not — which is the only reason it
+  was caught, and is why `instHash()` exists.
 
 **JavaScript**
 

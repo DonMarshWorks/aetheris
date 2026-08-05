@@ -2076,6 +2076,24 @@ const FORMASP = [1.0, 1.0, 1.55, 0.72];
 const PMAX  = PARAMS.budget|0;
 const NPX=new Float32Array(PMAX), NPY=new Float32Array(PMAX), NPZ=new Float32Array(PMAX);
 const NHX=new Float32Array(PMAX), NHY=new Float32Array(PMAX), NHZ=new Float32Array(PMAX);
+/* Where this node lands on the plant sheet, and which way its leaf lies —
+   worked out once, when it is born.
+ *
+   These are functions of position and heading alone, and a node never moves:
+   NPX/NPY/NPZ and NHX/NHY/NHZ are written in exactly one place, in addNode,
+   and never again. The rebuild was recomputing them anyway — asin, two atan2,
+   two sin and two cos per node per pass, fourteen transcendentals a node, one
+   and a third million of them per rebuild, about a hundred and ninety times a
+   second — to arrive at the same numbers every time. That WAS the rebuild:
+   sort 1ms, ghosts 1ms, emit 62ms. Everything else in the loop is an array
+   read and a store.
+   NSU/NSV are the midpoint of this node and its parent, which is where the
+   branch between them is drawn; the parent cannot move either, so it is the
+   same constant. It is stored on the CHILD because the branch belongs to the
+   child — see the note in emitNode about a parent that goes first. */
+const NU=new Float32Array(PMAX), NV=new Float32Array(PMAX);
+const NROT=new Float32Array(PMAX);
+const NSU=new Float32Array(PMAX), NSV=new Float32Array(PMAX);
 const NKID=new Uint8Array(PMAX), NSLOT=new Uint8Array(PMAX);
 const NLIVE=new Uint8Array(PMAX), NBIN=new Int32Array(PMAX);
 const NBORN=new Int32Array(PMAX), NLIFE=new Int32Array(PMAX);
@@ -3199,6 +3217,8 @@ function orderByLineage(){
    A ghost is now literally the last thing the node looked like, because it is
    the same function that produced it. `out` is [r, g, b, cover]. */
 const PAINT = new Float32Array(4);
+/* which node PAINT currently holds, or -1 — see emitNode */
+let paintFor = -1;
 function nodePaint(i, out){
   const wood = NLIVE[i]===2;
   const grow = wood ? 1 : Math.min(1, (ptick-NBORN[i])/Math.max(1,NMAT[i]));
@@ -3319,13 +3339,9 @@ function orderGhosts(){
 /* one node of a plant: pass 0 lays its branch, pass 1 its foliage */
 function emitNode(i, pass, w){
   if(NLIVE[i]===0) return w;
-    const x=NPX[i], y=NPY[i], z=NPZ[i];
-    const lat=Math.asin(Math.max(-1,Math.min(1,y))), lon=Math.atan2(z,x);
-    const cl=Math.max(Math.cos(lat),1e-3);
-    const sl=Math.sin(lat), sn=Math.sin(lon), cs=Math.cos(lon);
-    const hx=NHX[i], hy=NHY[i], hz=NHZ[i];
-    const he=-hx*sn + hz*cs;
-    const hn=-hx*sl*cs + hy*cl - hz*sl*sn;
+    /* Everything geometric about this node was settled when it was born; see
+       the note on NU. What is left here changes every tick and cannot be
+       cached: the colour, which carries growth, wood and rot. */
 
     /* The footprint scales with the step that actually placed this node, so
        the picture stops lying about what is claimed: a long-stepping lineage
@@ -3342,10 +3358,17 @@ function emitNode(i, pass, w){
 
     /* colour: the form's own, drifted by the sector's inherited tint and
        lifted at the young tips, so expansion reads as motion */
-    nodePaint(i, PAINT);
+    /* The two passes are the branch and the leaf of the SAME node, drawn one
+       after the other, and they want the same colour — so it was mixed twice.
+       Only valid inside one rebuild, because the paint carries growth, wood
+       and rot and every one of those moves with the tick; buildInstances
+       clears it before it starts. (With limbs set, the passes are no longer
+       adjacent and the cache simply never hits, which is correct rather than
+       merely safe.) */
+    if(paintFor!==i){ nodePaint(i, PAINT); paintFor=i; }
     const r=PAINT[0], g=PAINT[1], b=PAINT[2];
 
-    const rot=Math.atan2(hn,he);
+    const rot=NROT[i];
     /* Cover, from the same function that decided the colour. Growth and
        die-back are carried by colour as well — a young tip is lifted toward
        white, wood is drained toward grey — so fading a node for its whole
@@ -3368,11 +3391,8 @@ function emitNode(i, pass, w){
        it is the direction of the branch too — no extra geometry needed. */
     const par=NPAR[i];
     if(pass===0 && PARAMS.stem>0 && par>=0 && NLIVE[par]!==0 && NGEN[par]===NPGEN[i]){
-      let mx=(x+NPX[par])*0.5, my=(y+NPY[par])*0.5, mz=(z+NPZ[par])*0.5;
-      const ml=1/Math.hypot(mx,my,mz); mx*=ml; my*=ml; mz*=ml;
-      const mlat=Math.asin(Math.max(-1,Math.min(1,my))), mlon=Math.atan2(mz,mx);
-      IBUF[w  ]=(mlon+Math.PI)/(Math.PI*2);
-      IBUF[w+1]=(Math.PI*0.5-mlat)/Math.PI;
+      IBUF[w  ]=NSU[i];
+      IBUF[w+1]=NSV[i];
       IBUF[w+2]=NSTEP[i]*0.56;
       IBUF[w+3]=PARAMS.stem*NSTEP[i];
       IBUF[w+4]=rot;
@@ -3394,8 +3414,8 @@ function emitNode(i, pass, w){
     else if(pass===0) NSTEMA[i]=0;
 
     if(pass===0) return w;
-    IBUF[w  ]=(lon+Math.PI)/(Math.PI*2);
-    IBUF[w+1]=(Math.PI*0.5-lat)/Math.PI;
+    IBUF[w  ]=NU[i];
+    IBUF[w+1]=NV[i];
     IBUF[w+2]=wid*asp;
     IBUF[w+3]=wid;
     IBUF[w+4]=rot;
@@ -3410,6 +3430,7 @@ function emitNode(i, pass, w){
 
 function buildInstances(){
   let w=0;
+  paintFor = -1;
   const WLIM=(MAXINST-2)*INST;
   /* One ring per plant, at its centroid, rather than an outline. Two things
      were tried and abandoned: marking every node of a plant floods it, because
@@ -3446,7 +3467,9 @@ function buildInstances(){
       w+=INST;
     }
   }
+  const _g0 = performance.now();
   orderGhosts();
+  PERF.bghost += performance.now() - _g0;
   let gi = 0;
   /* A lineage's dead, painted just under its living. They used to go down as
      one block before every plant on the planet, so a node dropped from its
@@ -3469,7 +3492,10 @@ function buildInstances(){
      drawn in must also never change between frames, or overlapping neighbours
      swap depth and the picture flickers, so they are walked by body in node
      order and both are stable. */
+  const _o0 = performance.now();
   orderByLineage();
+  const _o1 = performance.now();
+  PERF.bsort += _o1 - _o0;
   const limbs = PARAMS.limbs|0;
   for(let a=0;a<orderN && w<WLIM;){
     const key = NDRAW[ORDER[a]];
@@ -3492,6 +3518,7 @@ function buildInstances(){
   }
   /* and the dead of lineages that sort after the last living one */
   w = upTo(-1, w);
+  PERF.bemit += performance.now() - _o1;
   instN=w/INST;
 }
 
@@ -3620,6 +3647,32 @@ function addNode(x,y,z,hx,hy,hz,src,par,amt,stepUsed){
   const i = freeN>0 ? PFREE[--freeN] : nodeHigh++;
   NPX[i]=x; NPY[i]=y; NPZ[i]=z;
   NHX[i]=hx; NHY[i]=hy; NHZ[i]=hz;
+  /* The sheet coordinates and the leaf's lie, once and for life.
+     Read back OUT of the arrays rather than off the arguments: the emit loop
+     used to compute these from NPX/NHX, which are float32, and computing them
+     from the float64 arguments instead rounds one step earlier and moves the
+     last bit of every instance. The world was identical and the instance count
+     was identical and the buffer hash was not, which is what said so. */
+  {
+    const px=NPX[i], py=NPY[i], pz=NPZ[i];
+    const qx=NHX[i], qy=NHY[i], qz=NHZ[i];
+    const lat=Math.asin(Math.max(-1,Math.min(1,py))), lon=Math.atan2(pz,px);
+    const cl=Math.max(Math.cos(lat),1e-3);
+    const sl=Math.sin(lat), sn=Math.sin(lon), cs=Math.cos(lon);
+    NU[i]=(lon+Math.PI)/(Math.PI*2);
+    NV[i]=(Math.PI*0.5-lat)/Math.PI;
+    NROT[i]=Math.atan2(-qx*sl*cs + qy*cl - qz*sl*sn, -qx*sn + qz*cs);
+    /* The parent is read here and now, exactly as the ghost does it, so a slot
+       handed to a newborn later cannot spoil the branch. Whether the branch is
+       DRAWN is still decided at emit time by the generation tag; this is only
+       where it would go. */
+    if(par>=0){
+      let mx=(px+NPX[par])*0.5, my=(py+NPY[par])*0.5, mz=(pz+NPZ[par])*0.5;
+      const ml=1/Math.hypot(mx,my,mz); mx*=ml; my*=ml; mz*=ml;
+      NSU[i]=(Math.atan2(mz,mx)+Math.PI)/(Math.PI*2);
+      NSV[i]=(Math.PI*0.5-Math.asin(Math.max(-1,Math.min(1,my))))/Math.PI;
+    }
+  }
   NKID[i]=0; NSLOT[i]=0; NLIVE[i]=1; NSTEP[i]=stepUsed; NCAP[i]=1;
   /* A founder arrives with the seed's own store, which owes nothing to the
      sun; a child is given a share of its parent's, so an endowment spreads
@@ -4893,22 +4946,40 @@ let sheetGap = 0, lastSheet = 0, fpsNow = 60;
    ISSUING the draws and not executing them — which is exactly the distinction
    that matters here, because a phase that costs nothing to issue and everything
    to execute shows up as an idle frame rather than as time in this column. */
-const PERF = {sim:0, eco:0, sheet:0, draw:0, n:0};
+/* Sum AND worst, because a mean over a window that may or may not contain the
+   expensive event is not a measurement, it is a coin toss. The sheet rebuilds
+   about once a second and the window is about a second, so the first reading
+   off this said 1.4ms and the second said 300 — and the 1.4 was read as the
+   truth and written into a commit message. Both were true of their own window
+   and neither was true of the frame. Worst-in-window is the number that does
+   not move, and `sheets` says how many rebuilds the window actually saw. */
+const PERF = {sim:0, eco:0, sheet:0, draw:0, n:0,
+              xsim:0, xeco:0, xsheet:0, xdraw:0, xframe:0, sheets:0,
+              sbuild:0, supload:0, sdraw:0, smip:0, sinst:0,
+              bghost:0, bsort:0, bemit:0};
 let perfTxt = "", perfKeys = [];
 const perfEl = () => document.getElementById("perf");
 function showPerf(fps){
   const el = perfEl(); if(!el) return;
-  const n = Math.max(1, PERF.n), ms = v => (v/n).toFixed(1).padStart(6);
+  const n = Math.max(1, PERF.n);
+  const k = Math.max(1, PERF.sheets);
+  const pair = (sum,max) => ((sum/n).toFixed(0)+"/"+max.toFixed(0)).padStart(9);
   const other = Math.max(0, 1000/Math.max(0.01,fps)
                 - (PERF.sim+PERF.eco+PERF.sheet+PERF.draw)/n);
   const t = [
-    `fps ${fps.toFixed(1)}   dpr ${dpr.toFixed(2)}   ${canvas.width}x${canvas.height}`,
-    `sim   ${ms(PERF.sim)} ms   climate + terrain`,
-    `eco   ${ms(PERF.eco)} ms   plants`,
-    `sheet ${ms(PERF.sheet)} ms   rebuilding the plant texture`,
-    `draw  ${ms(PERF.draw)} ms   issuing the planet`,
-    `other ${other.toFixed(1).padStart(6)} ms   gpu wait, browser, everything else`,
-    `live ${liveN}  bodies ${comps}  sheetgap ${sheetGap}ms`,
+    `fps ${fps.toFixed(1)}  dpr ${dpr.toFixed(2)}  ${canvas.width}x${canvas.height}`,
+    `        mean/worst ms   over ${n} frames`,
+    `sim   ${pair(PERF.sim,PERF.xsim)}   climate + terrain`,
+    `eco   ${pair(PERF.eco,PERF.xeco)}   plants`,
+    `sheet ${pair(PERF.sheet,PERF.xsheet)}   plant texture, ${PERF.sheets} rebuilt`,
+    `draw  ${pair(PERF.draw,PERF.xdraw)}   issuing the planet`,
+    `other ${other.toFixed(0).padStart(9)}   gpu wait, browser, the rest`,
+    `frame ${(1000/Math.max(0.01,fps)).toFixed(0).padStart(4)}/${PERF.xframe.toFixed(0)}   worst frame in the window`,
+    `  ghost ${(PERF.bghost/k).toFixed(0)}  sort ${(PERF.bsort/k).toFixed(0)}` +
+    `  emit ${(PERF.bemit/k).toFixed(0)}`,
+    `  build ${(PERF.sbuild/k).toFixed(0)}  upload ${(PERF.supload/k).toFixed(0)}` +
+    `  drawp ${(PERF.sdraw/k).toFixed(0)}  mipmap ${(PERF.smip/k).toFixed(0)}  (per rebuild)`,
+    `live ${liveN}  bodies ${comps}  inst ${PERF.sinst}  sheetgap ${sheetGap}ms`,
     `off: ${["noplanet","noclouds","noatmo","noring","detail"]
              .filter(k=>k==="detail"?PARAMS.detail<=0:PARAMS[k]).join(" ") || "nothing"}`,
     `keys ${perfKeys.join("  ") || "(press one)"}`,
@@ -4938,11 +5009,14 @@ function renderPlants(){
      slowed at all, only how often anyone is shown it. */
   const nowMs = performance.now();
   if(sheetGap > 0 && nowMs - lastSheet < sheetGap) return;
-  lastSheet = nowMs;
+  lastSheet = nowMs; PERF.sheets++;
   plantsDirty=false;
+  const _b0 = performance.now();
   buildInstances();
+  const _b1 = performance.now();
   gl.bindBuffer(gl.ARRAY_BUFFER,instVBO);
   gl.bufferSubData(gl.ARRAY_BUFFER,0,IBUF,0,instN*INST);
+  const _b2 = performance.now();
   gl.bindFramebuffer(gl.FRAMEBUFFER,plantFBO);
   gl.viewport(0,0,PW,PH);
   gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
@@ -4964,8 +5038,13 @@ function renderPlants(){
     gl.bindVertexArray(null);
   }
   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  const _b3 = performance.now();
   gl.bindTexture(gl.TEXTURE_2D,plantTex);
   gl.generateMipmap(gl.TEXTURE_2D);
+  const _b4 = performance.now();
+  PERF.sbuild += _b1-_b0; PERF.supload += _b2-_b1;
+  PERF.sdraw  += _b3-_b2; PERF.smip    += _b4-_b3;
+  PERF.sinst = instN;
   /* the frame loop sets its own viewport before it draws anything */
 }
 
@@ -6531,7 +6610,15 @@ function updateSun(){
 const DAY = 150;                 // real seconds per rotation
 let spin=0, cloudDrift=0, frozen=false;
 let dpr = Math.min(devicePixelRatio||1, 2);
-let frameAcc=0, frameN=0;
+/* Wall clock, kept separate from the simulation's dt. dt is clamped to 0.25s
+   so that a tab returning from the background cannot hand the climate an hour
+   in one step — but the frame-rate readout was dividing the frame count by the
+   sum of those CLAMPED values, so it could not report anything worse than 4.0
+   however slowly the machine was actually going. On a Fire TV running at less
+   than one frame a second it said 4.0, and everything that steers on it — the
+   adaptive resolution, the plant sheet's rate limit — believed it. A governor
+   cannot correct an error it cannot see. */
+let frameAcc=0, frameN=0, frameWall=0;
 let simAccum=0, bandCursor=0, hudAcc=0, DEBUG=0;
 /* How fast the world is really moving, in simulated seconds per real second.
    Measured rather than assumed, because the climate waits for the ecology and
@@ -7182,6 +7269,7 @@ function frame(now){
   requestAnimationFrame(frame);
   frameTick++;
   let dt=(now-last)/1000; last=now;
+  const rawDt = dt;
   if(dt>0.25) dt=0.25;
 
   /* Adaptive resolution, sampled on TIME as well as on frames.
@@ -7190,8 +7278,13 @@ function frame(now){
      meant to rescue it had not run yet. Whichever comes first now, so a device in
      trouble is helped inside a second. */
   frameAcc+=dt; frameN++;
-  if(frameN>=45 || frameAcc>=0.8){
-    const fps=frameN/frameAcc;
+  frameWall += rawDt;
+  if(rawDt*1000 > PERF.xframe) PERF.xframe = rawDt*1000;
+  /* frames OR a second of real time, whichever comes first: at one frame a
+     second, waiting for 45 frames is waiting three quarters of a minute to
+     notice, which is most of the time the visitor was ever going to give it */
+  if(frameN>=45 || frameWall>=1.0){
+    const fps=frameN/Math.max(1e-3,frameWall);
     /* Back to chasing 60. Holding resolution down to 30 was tried and it looks
        worse: more pixels on a choppier planet reads as worse, not better, when
        the subject is a thing turning smoothly. Motion is the presentation here
@@ -7213,7 +7306,10 @@ function frame(now){
     fpsNow = fps;
     if(PARAMS.perf > 0) showPerf(fps);
     PERF.sim=PERF.eco=PERF.sheet=PERF.draw=PERF.n=0;
-    frameAcc=0; frameN=0;
+    PERF.xsim=PERF.xeco=PERF.xsheet=PERF.xdraw=PERF.xframe=PERF.sheets=0;
+    PERF.sbuild=PERF.supload=PERF.sdraw=PERF.smip=0;
+    PERF.bghost=PERF.bsort=PERF.bemit=0;
+    frameAcc=0; frameN=0; frameWall=0;
   }
 
   /* hoisted out of the branch below because the tour needs it too, and a
@@ -7268,7 +7364,8 @@ function frame(now){
     packTexture(); uploadData();
     hudAcc++; if(hudAcc>=4){ hudAcc=0; updateHUD(); }
   }
-  PERF.sim += performance.now() - _tSim;
+  const _simd = performance.now() - _tSim;
+  PERF.sim += _simd; if(_simd > PERF.xsim) PERF.xsim = _simd;
 
   /* Growth is *owed* by the simulation tick and *paid* across the frames that
      follow, against a wall-clock budget. Sixty-four steps in one lump is forty
@@ -7279,7 +7376,8 @@ function frame(now){
     const t0 = performance.now();
     const budget = Math.min(PARAMS.ecomax, PARAMS.ecoshare*dt*1000);
     while(plantDebt > 0 && performance.now() - t0 < budget){ plantsStep(); plantDebt--; }
-    PERF.eco += performance.now() - t0;
+    const _e = performance.now() - t0;
+    PERF.eco += _e; if(_e > PERF.xeco) PERF.xeco = _e;
   }
 
   updateSun();
@@ -7462,7 +7560,8 @@ function frame(now){
      the patch smears into bands. */
   const _tSheet = performance.now();
   renderPlants();
-  PERF.sheet += performance.now() - _tSheet;
+  const _sheetd = performance.now() - _tSheet;
+  PERF.sheet += _sheetd; if(_sheetd > PERF.xsheet) PERF.xsheet = _sheetd;
 
   const _tDraw = performance.now();
   gl.viewport(0,0,W,Hh);
@@ -7556,7 +7655,8 @@ function frame(now){
   if(!PARAMS.noatmo) gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
   gl.cullFace(gl.BACK);
   gl.bindVertexArray(null);
-  PERF.draw += performance.now() - _tDraw;
+  const _drawd = performance.now() - _tDraw;
+  PERF.draw += _drawd; if(_drawd > PERF.xdraw) PERF.xdraw = _drawd;
   PERF.n++;
 }
 
@@ -8599,6 +8699,27 @@ requestAnimationFrame(()=>{
 /* small hook used for testing / scripted fast-forward */
 window.__world = {
   S, F,
+  /* the rebuild alone, timed over several runs, so the cost of the sheet can
+     be compared between builds without waiting for the frame loop to happen
+     to contain one */
+  buildMs(n){
+    buildInstances();
+    const t=performance.now();
+    for(let k=0;k<(n||8);k++) buildInstances();
+    return (performance.now()-t)/(n||8);
+  },
+  /* The instance buffer the plant sheet is built from, hashed. This exists
+     because the geometry cache (NU/NV/NROT/NSU/NSV) is a pure refactor and
+     the only honest way to say so is to hash what the rebuild produces on
+     both sides of it and get the same number. Rebuilds first, so the hash is
+     of the world as it stands rather than of whenever the sheet last ran. */
+  instHash(){
+    buildInstances();
+    let h=2166136261>>>0;
+    const v=new Uint32Array(IBUF.buffer, IBUF.byteOffset, instN*INST);
+    for(let k=0;k<v.length;k++){ h=(h^v[k])>>>0; h=Math.imul(h,16777619)>>>0; }
+    return {inst:instN, hash:h>>>0};
+  },
   setSpeed(v){ speed=v; },
   debug(v){ DEBUG=v|0; },
   freeze(v){ spin=v; frozen=true; },
