@@ -44,6 +44,11 @@
     position:fixed;inset:0;width:100%;
     -webkit-tap-highlight-color:transparent;
   }
+  /* Focusable so a television browser has somewhere in the page to put focus —
+     in its direction mode the arrows go wherever focus is, and a page with
+     nothing focusable is a page it will not hand them to. No ring: the whole
+     window is the target and an outline round it means nothing. */
+  canvas#gl:focus{outline:none}
   canvas#gl{
     position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab;
     touch-action:none;-webkit-user-select:none;user-select:none;
@@ -674,7 +679,7 @@
 </style>
 </head>
 <body>
-<canvas id="gl"></canvas>
+<canvas id="gl" tabindex="0"></canvas>
 
 <div id="hud">
   <div class="corner tl">
@@ -1341,6 +1346,15 @@ const PARAMS = {
                     // the plants' CPU per SECOND the same whatever the frame
                     // rate, which is the whole of wanting it to feel the same
                     // on a phone. At 60fps this is 4.2ms — what it was.
+  /* Switches for finding out WHICH pass costs the time, on a machine that
+     cannot be profiled. One at a time, reading the fps off #perf=1, names the
+     culprit in three loads — which is three fewer guesses than this has already
+     cost. Not a quality setting: they turn things off outright and the piece
+     looks wrong without them. */
+  noclouds: 0,      // skip the cloud deck
+  noatmo:  0,       // skip the atmosphere shell
+  noring:  0,       // skip the ring
+  noplanet: 0,      // skip the surface itself, leaving sky and atmosphere
   perf:    0,       // 1 shows where the milliseconds go, and what keys arrive.
                     // Off by default and drawn only when on: this exists because
                     // a Fire TV cannot be attached to a profiler and guessing at
@@ -4895,6 +4909,8 @@ function showPerf(fps){
     `draw  ${ms(PERF.draw)} ms   issuing the planet`,
     `other ${other.toFixed(1).padStart(6)} ms   gpu wait, browser, everything else`,
     `live ${liveN}  bodies ${comps}  sheetgap ${sheetGap}ms`,
+    `off: ${["noplanet","noclouds","noatmo","noring","detail"]
+             .filter(k=>k==="detail"?PARAMS.detail<=0:PARAMS[k]).join(" ") || "nothing"}`,
     `keys ${perfKeys.join("  ") || "(press one)"}`,
   ].join(String.fromCharCode(10));
   if(t !== perfTxt){ perfTxt = t; el.textContent = t; }
@@ -6354,14 +6370,39 @@ addEventListener("keydown",e=>{
     nudge(e.key==="ArrowLeft" ? -1 : e.key==="ArrowRight" ? 1 : 0,
           e.key==="ArrowUp"   ? -1 : e.key==="ArrowDown"  ? 1 : 0);
   }
-  else if(!onControl && (e.key==="+"||e.key==="="||e.key==="PageUp")){
+  /* A television remote's transport keys, which is what actually arrives.
+     Measured on a Fire TV: fast-forward is 228, rewind 227, play/pause 179 —
+     and unlike the d-pad they reach the page in the browser's CURSOR mode,
+     where the arrows are eaten by the pointer and getting focus into the page
+     at all is a fight. So the one control scheme that works everywhere on that
+     device is built out of these three. Fast-forward comes closer and rewind
+     pulls back, which is the same direction of travel they mean in a video. */
+  else if(!onControl && (e.keyCode===228 || e.key==="MediaFastForward"
+                         || e.key==="+"||e.key==="="||e.key==="PageUp")){
     e.preventDefault();
-    CAM.tZoom = clamp(CAM.tZoom*0.80, ZMIN, 2.6); CAM.tDist = camDistOf(CAM.tZoom);
+    CAM.tZoom = clamp(CAM.tZoom*0.72, ZMIN, 2.6); CAM.tDist = camDistOf(CAM.tZoom);
   }
-  else if(!onControl && (e.key==="-"||e.key==="_"||e.key==="PageDown")){
+  else if(!onControl && (e.keyCode===227 || e.key==="MediaRewind"
+                         || e.key==="-"||e.key==="_"||e.key==="PageDown")){
     e.preventDefault();
-    CAM.tZoom = clamp(CAM.tZoom*1.25, ZMIN, 2.6); CAM.tDist = camDistOf(CAM.tZoom);
+    CAM.tZoom = clamp(CAM.tZoom*1.39, ZMIN, 2.6); CAM.tDist = camDistOf(CAM.tZoom);
   }
+  /* Play/pause starts the TOUR, and that is a considered swap rather than a
+     mistake. In its cursor mode a television gives the page three keys and no
+     way to hit a 40px button — the pointer is coarse and the frame rate makes
+     it coarser — so three keys have to carry the three things worth doing, and
+     pausing a thing you are watching from a sofa is not one of them. Play means
+     "play the show", and on this piece the show is the tour flying itself.
+     Space still pauses, for anyone with a keyboard. */
+  else if(e.keyCode===179 || e.key==="MediaPlayPause"){
+    e.preventDefault(); setTour(!TOUR.on);
+  }
+  /* and the rest, for a keyboard — every overlay reachable without a pointer,
+     because a button you cannot click may as well not be there */
+  else if(!onControl && (e.key==="t"||e.key==="T")){ setTour(!TOUR.on); }
+  else if(!onControl && (e.key==="g"||e.key==="G")){ setCharts(!chartsOn); }
+  else if(!onControl && (e.key==="?"||e.key==="/")){ setAbout(!aboutOn); }
+  else if(!onControl && e.key===","){ setSettings(!setEl.classList.contains("on")); }
 });
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -7466,7 +7507,7 @@ function frame(now){
   gl.uniform3fv(planetProg.u.uRingN, POLE);
   gl.uniform1f(planetProg.u.uRingFade, ringFade);
   gl.bindVertexArray(sphVAO);
-  gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
+  if(!PARAMS.noplanet) gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
 
   /* clouds — not while the view is held: at that range the deck is a shutter
      over the one thing being watched */
@@ -7485,12 +7526,12 @@ function frame(now){
   gl.uniform1f(cloudProg.u.uFade, smoothstep(1.55,2.50,CAM.dist));
   gl.uniform3fv(cloudProg.u.uRingN, POLE);
   gl.uniform1f(cloudProg.u.uRingFade, ringFade);
-  gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
+  if(!PARAMS.noclouds) gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
   }
 
   /* Ring. Same blend and culling the clouds just left set, and the depth the
      planet wrote already hides the far half. */
-  if(ringFade > 0.002){
+  if(ringFade > 0.002 && !PARAMS.noring){
     gl.useProgram(ringProg);
     gl.uniformMatrix4fv(ringProg.u.uVP,false,mVP);
     gl.uniform3fv(ringProg.u.uSun,SUN);
@@ -7512,7 +7553,7 @@ function frame(now){
   gl.uniform3fv(atmoProg.u.uSun,SUN);
   gl.uniform3fv(atmoProg.u.uCam,eye);
   gl.uniform1f(atmoProg.u.uAtmR,1.34);
-  gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
+  if(!PARAMS.noatmo) gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
   gl.cullFace(gl.BACK);
   gl.bindVertexArray(null);
   PERF.draw += performance.now() - _tDraw;
@@ -8546,6 +8587,9 @@ requestAnimationFrame(()=>{
   plantsSeed();
   updateHUD();
   started=true;
+  /* claim focus for the page, so a television that is willing to hand over its
+     arrows has somewhere to hand them to */
+  try{ canvas.focus({preventScroll:true}); }catch(_){ }
   buildPins();
   requestAnimationFrame(frame);
   setTimeout(()=>document.getElementById("splash").classList.add("gone"),120);
