@@ -84,8 +84,73 @@ exactly equinox. It is also penumbra-blurred in proportion to how far the
 shadow has been thrown, or the ring's fine banding survives to the ground and
 the band lands with cut edges.
 
+**The tour** is the rocket button: a screensaver that flies the camera between
+eleven chosen framings for as long as it is left on, and touches nothing but the
+camera. `tools/tour.js` asserts it and `tools/tourshots.js` photographs every
+framing. Several things about it are load-bearing.
+
+It eases on **smootherstep**, not the frame loop's exponential. An exponential
+ease arrives beautifully and *departs* at full speed — its velocity is greatest
+at the instant it starts — and that is the jerk a passenger feels.
+`t³(6t²−15t+10)` has zero first and second derivative at both ends. `tools/tour.js`
+asserts the curve by its peak speed, 1.875× the mean; smoothstep would read
+1.500 and a linear ramp 1.000.
+
+`CAM.aim` and `CAM.up` are **carried apart from the orientation**, because the
+two cannot always agree. `CAM.q` says where the eye *stands*, so its own up is
+perpendicular to the line out to the eye — and out of a shuttle window the up
+the picture wants is exactly that line. Asking one quaternion for both is asking
+a vector to be perpendicular to itself. Both default to zero, which means "as it
+always was", and every line behaves as it did before the tour existed.
+
+**`rate` means the opposite of what it sounds like, and two shots were built on
+the wrong reading.** It is how much of the planet's turn the eye shares. At **0**
+the eye holds still against the SUN, so the lighting is nailed to the screen and
+only the ground moves through it; at **1** it holds still against the GROUND, so
+the terminator sweeps across at the full rate and a place really does go into
+evening. "Watch the shade line arrive" therefore wants rate 1, not a slow drift,
+and at 0.45 it was neither a fixed composition nor a real transition.
+
+**The sun gets a vote on where to stand**, because half of everything is unlit at
+any moment and a low pass over dark ground shows nothing. Candidates are scored
+at `[flight, flight + dwell]` and not from the present instant — a geosynchronous
+destination rides the ground while the camera is still flying to it, so scoring
+now picks a spot beautifully lit at the moment nobody is looking at it. And
+`edge` asks for the two ends to fall on OPPOSITE sides of the terminator, not for
+a large change in the light: measured, rewarding the size of the swing picked
+framings that changed enormously and stayed in daylight throughout, and crossed
+6 times in 40 where asking for a crossing gives 34.
+
+**A shot that wants the fine plant sheet must cap its zoom against the window.**
+The detail patch is refused past `dist = 1/sin(corner)` and fades out on absolute
+distance, but a *zoom* buys a different distance on every window shape — a tall
+phone stands 2.5x further off than a laptop for the same framing. `holding one
+place` was drawing the coarse sheet at the top of its own range on a laptop and
+on every phone. `detailZoom()` derives the cap; `tour().detail` reports whether
+the fine sheet is actually being drawn, which is the counter that was missing.
+
+**Interpolate directions by turning, never by lerping.** A straight line between
+two unit vectors sweeps its direction unevenly, and pathologically as the two
+approach opposite — the path passes near the origin and the direction whips
+through half a turn in a few frames. The tour's `up` did exactly that, and the
+camera flicked on to its back rather than banking on to a new heading.
+`vSlerp` turns about an axis; the harness measures the peak roll rate against the
+mean and it reads 2.25 where the lerp read 27.
+
+Two hazards it walked into and one it did not. `qFromBasis` builds its matrix by
+**column**, so `R21` is Y's z and not Z's y; transposed it returns the conjugate,
+which is a perfectly good unit quaternion pointing every camera exactly the wrong
+way, and no length or dot product anywhere goes wrong. The detail patch sized
+itself from the field of view alone, which was right only while the view axis
+passed through the world's centre; off-axis it must add the angle between them.
+And the tour draws from `Math.random` and **never `prnd()`** — a camera reaching
+into the simulation's stream would make the route decide the planet.
+`tools/tour.js` asserts two identical runs, one touring and one not, produce
+byte-identical ecologies.
+
 **Test hooks.** `window.__world` exposes `S` (state), `F` (the fields),
 `advance()`, `runWorld()`, `freeze()`, `setView()`, `sunDir()`, `cam()`,
+`pole()`, `ringPoint()`, `pins()`, `tour()`, `setTour()`, `tourGo()`,
 `pointerCount()`, `debug()`, `params()`, `defaults()`, `settings()`,
 `holdClimate()`, and the plant hooks in `plants-design.md`. Used by
 `verify.js`, `sweep.js`, `controls.js` and `linkcheck.js`. Keep them working.
@@ -195,7 +260,9 @@ easy to reintroduce.
 
 ## Style
 
-British-ish spelling in prose, comments explain *why* not *what*. The HUD states
+**American spelling in everything the visitor reads** — the about panel, the
+settings and graph cards, button labels. Comments and these documents stay
+British-ish. Comments explain *why* not *what*. The HUD states
 the three time scales explicitly (a day 2.5 min, a year 15 min, continents
 ~40 min) rather than inventing a single geological clock, because those are
 compressed by factors differing by nine orders of magnitude and any one counter
@@ -219,7 +286,34 @@ Three documents, and they are split by what you need:
 - `docs/formula-design.md` — the formula genome that replaced the scalar one,
   and the four of its claims that measurement overturned.
 
-**The harness is what breaks.** Four times now the thing reporting the
+**The harness is what breaks — now well past a dozen times.** The tour's own
+harness failed nine checks across five runs and every one of them was the
+measurement rather than the thing measured. They came in four shapes, and all
+four will recur:
+
+- **A fixed millisecond wait for something only a frame can change.** A software
+  renderer under load gives about seven frames a second, so 500ms is often less
+  than one frame and every reading is of the state *before* what was asked for.
+  The tell was two different shots reporting the identical number.
+- **A metric that bends.** The angle between two orientations is `2*acos(|dot|)`,
+  which saturates at a half turn and comes back *down* — so a long leg reads as
+  doubling back and its derivative blows up. Accumulate arc length instead.
+- **A derivative over a degenerate interval.** Frame times are uneven; one step
+  in forty is 8ms where the rest are 230ms, and dividing any ordinary movement by
+  it manufactures a 28x spike in a quantity that cannot exceed 1.875. Skip steps
+  far shorter than the typical one.
+- **Not stopping the frame loop.** `sweep.js` has carried four paragraphs about
+  this for weeks and it did not occur to me that a *determinism* check needs it
+  more than a sweep does: the frame loop advances the same world, by an amount
+  that depends on how many frames the machine managed, and the feature under test
+  costs frames. Both arms differed and it read as the tour moving the world.
+
+Two rules fall out. **Instrument the disagreement rather than theorising about
+it** — printing the samples around the spike answered in one run what three runs
+of reasoning had not. And **distrust a new harness before you distrust rendered
+code that has already been looked at.**
+
+Four times before that the thing reporting the
 measurement has been wrong rather than the thing measured: a stale `fitAt`
 shadowing its replacement, `runWorld` paying one ecology step per climate tick,
 `runWorld`'s default drifting away from the frame loop's accrual, and

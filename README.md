@@ -22,7 +22,20 @@ If you want to see the change without waiting, the ×20 and ×100 controls compr
 | **scroll** or **pinch** | zoom (close in and the clouds and ring dissolve) |
 | **click / tap** | show or hide the interface |
 | **play button** or **space** | pause |
+| **rocket button** | hand the camera to a pilot and watch |
+| **what is this?** | a page explaining the world, the plants and the controls |
 | **×1 / ×20 / ×100** or **1 / 2 / 3** | time-lapse |
+
+The rocket is the one to press if you are going to leave it running. The camera
+picks somewhere to be — out where the whole world sits in space, round the dark
+side while the lit crescent widens, still while the planet turns beneath, held
+over one piece of ground, edge-on to the ring, over a pole, low down with the
+horizon across the frame and the surface running past — flies there, stays
+fifteen seconds, and then picks somewhere else. It never repeats itself and it
+never hurries: every leg leaves and arrives at rest, and it banks on to a new
+heading rather than rolling on to its back. The sun gets a vote on where it goes,
+so a low pass is over ground you can see, and often over ground going into
+evening while you watch it. Press the rocket again to take the camera back.
 
 On touch devices one finger orbits and two pinch to zoom. The page itself
 cannot be zoomed or scrolled — the interface stays a fixed size while only
