@@ -164,11 +164,6 @@ at the top of this README. Everything else is self-contained.
 Push, then set **Settings → Pages → Deploy from a branch → main / (root)**.
 There is no build step, so the page is live as soon as Pages has run.
 
-(There used to be a `publish.sh` here that did the substitution for you. It is
-gone, because the placeholder it looked for had long since been filled in with
-*this* repository's name — so it silently did nothing and left a fork pointing
-its social preview at somebody else's site.)
-
 ## License
 
 MIT. See [LICENSE](LICENSE).
