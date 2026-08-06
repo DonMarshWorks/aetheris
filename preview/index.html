@@ -1366,6 +1366,11 @@ const PARAMS = {
   /* Draw the clouds with the discard removed, so the deferred renderer can
      keep its Hidden Surface Removal. 1 is the version to beat. */
   hsr:     0,
+  /* What fraction of the canvas the cloud deck is drawn at. -1 is automatic:
+     halved when the frame rate says the machine needs it, whole otherwise. 1
+     forces the old behaviour and 0.5 forces the reduction, which is how the
+     comparison gets made. */
+  cloudres: -1,
   /* How far the adaptive resolution may go down before it gives up. It is a
      parameter rather than a constant because the machine that needs it most is
      a television that cannot be attached to a profiler, and finding the floor
@@ -4987,6 +4992,13 @@ let sheetGap = 0, lastSheet = 0, fpsNow = 60;
    on and off every second, and a planet that shimmers between two versions of
    itself is worse than either. */
 let fineOn = true;
+/* and whether the cloud deck is being drawn at half size, on the same two
+   widely-spaced thresholds and for the same reason */
+let cloudHalf = false;
+function cloudScale(){
+  return PARAMS.cloudres > 0 ? Math.min(1, Math.max(0.25, PARAMS.cloudres))
+                             : (cloudHalf ? 0.5 : 1);
+}
 /* Where a frame's milliseconds actually went, averaged over the sampling window
    the adaptive resolution already keeps. Accumulated with plain performance.now
    around each phase: GPU work is asynchronous, so `draw` is the time spent
@@ -5030,11 +5042,15 @@ function showPerf(fps){
     `gl  ${GLINFO}`,
     `    ${(canvas.width*canvas.height/1000).toFixed(0)}k px, ` +
     `${(other>0.01 ? canvas.width*canvas.height/other/1000 : 0).toFixed(0)}k px/ms unaccounted`,
-    `off: ${["noplanet","nobg","noclouds","noatmo","noring","detail","fine","hsr"]
+    /* what is NOT being drawn, and separately what is being drawn DIFFERENTLY.
+       These were one list, so `hsr` — a variant being switched ON — appeared
+       under "off:" and read as the opposite of what it meant. */
+    `off:  ${["noplanet","nobg","noclouds","noatmo","noring","detail","fine"]
              .filter(k=>k==="detail"?PARAMS.detail<=0
                        :k==="fine"?!(PARAMS.fine<0?fineOn:PARAMS.fine>0)
-                       :k==="hsr"?PARAMS.hsr
                        :PARAMS[k]).join(" ") || "nothing"}`,
+    `mode: ${[PARAMS.hsr?"hsr":"", cloudScale()<1?"half clouds":""]
+             .filter(Boolean).join("  ") || "normal"}`,
     `keys ${perfKeys.join("  ") || "(press one)"}`,
   ].join(String.fromCharCode(10));
   if(t !== perfTxt){ perfTxt = t; el.textContent = t; }
@@ -5739,6 +5755,53 @@ const CLOUD_DISCARD = "if(dens <= 0.004) discard;";
 if(CLOUD_FS.indexOf(CLOUD_DISCARD) < 0) throw new Error("cloud discard line moved");
 const cloudProg   = prog(VS_SPH, CLOUD_FS);
 const cloudProgHS = prog(VS_SPH, CLOUD_FS.replace(CLOUD_DISCARD, ""));
+
+/* A target for the cloud deck alone, at a fraction of the canvas.
+ *
+   Measured on a Fire TV, the clouds are 41% of all the pixel work in the frame
+   — 52ms of 127 — while running EIGHT noise evaluations a pixel against the
+   planet's twenty-nine. The planet branches heavily between ocean and land so
+   its count is a worst path; the clouds' eight are unconditional. Both passes
+   simply cover the disc, and there are two of them.
+
+   A cloud deck is diffuse, which is the whole reason this is allowed here and
+   would not be allowed on the planet: coastlines carry an edge that a half-
+   resolution buffer would visibly soften, and weather does not.
+
+   It needs no depth buffer. The shell is at radius 1.016, so every front-facing
+   point on it is nearer the camera than the planet surface along the same ray —
+   backface culling is the whole of the occlusion, and the pass can therefore be
+   lifted out of the main framebuffer entirely. */
+const cloudTex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, cloudTex);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,2,2,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+const cloudFBO = gl.createFramebuffer();
+gl.bindFramebuffer(gl.FRAMEBUFFER, cloudFBO);
+gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,cloudTex,0);
+gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+let cloudW = 0, cloudH = 0;
+function sizeCloudTarget(w, h){
+  if(w===cloudW && h===cloudH) return;
+  cloudW=w; cloudH=h;
+  gl.bindTexture(gl.TEXTURE_2D, cloudTex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+}
+/* The deck put back over the scene. The target holds PREMULTIPLIED colour and
+   straight alpha — which is exactly what the cloud pass's own blendFuncSeparate
+   leaves behind when it starts from a cleared, transparent buffer — so this
+   composites with ONE, ONE_MINUS_SRC_ALPHA and is exact rather than nearly
+   right. Backface culling means the shell never overlaps itself, so there is
+   only ever one layer in there to get wrong. */
+const cloudUpProg = prog(VS_QUAD, `#version 300 es
+precision highp float;
+uniform sampler2D uSrc;
+uniform vec2 uRes;
+out vec4 o;
+void main(){ o = texture(uSrc, gl_FragCoord.xy/uRes); }`);
 
 /* ---------- ring ---------- */
 const VS_RING=`#version 300 es
@@ -7425,6 +7488,10 @@ function frame(now){
       if(fineOn && fps < 20) fineOn = false;
       else if(!fineOn && fps > 32) fineOn = true;
     }
+    if(PARAMS.cloudres < 0){
+      if(!cloudHalf && fps < 20) cloudHalf = true;
+      else if(cloudHalf && fps > 32) cloudHalf = false;
+    }
     fpsNow = fps;
     if(PARAMS.perf > 0) showPerf(fps);
     PERF.sim=PERF.eco=PERF.sheet=PERF.draw=PERF.n=0;
@@ -7749,6 +7816,19 @@ function frame(now){
   gl.depthMask(false); gl.enable(gl.BLEND);
   gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
   if(!viewLock){
+  /* At less than whole size the deck goes to its own buffer first. It needs no
+     depth: backface culling is the entire occlusion here, because the shell
+     stands outside the surface and every front face of it is nearer the eye
+     than the ground under it. */
+  const cScale = cloudScale();
+  if(cScale < 1 && !PARAMS.noclouds){
+    sizeCloudTarget(Math.max(1,Math.round(canvas.width*cScale)),
+                    Math.max(1,Math.round(canvas.height*cScale)));
+    gl.bindFramebuffer(gl.FRAMEBUFFER, cloudFBO);
+    gl.viewport(0,0,cloudW,cloudH);
+    gl.disable(gl.DEPTH_TEST);
+    gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
+  }
   const cp = PARAMS.hsr ? cloudProgHS : cloudProg;
   gl.useProgram(cp);
   gl.uniform1i(cp.u.uData,0);
@@ -7763,6 +7843,25 @@ function frame(now){
   gl.uniform3fv(cp.u.uRingN, POLE);
   gl.uniform1f(cp.u.uRingFade, ringFade);
   if(!PARAMS.noclouds) gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
+  if(cScale < 1 && !PARAMS.noclouds){
+    /* Back over the scene. The buffer holds premultiplied colour and straight
+       alpha, which is what the pass above leaves when it starts from a cleared
+       transparent target, so this is an exact composite and not an approximate
+       one. */
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0,0,canvas.width,canvas.height);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.disable(gl.CULL_FACE);
+    gl.useProgram(cloudUpProg);
+    gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, cloudTex);
+    gl.uniform1i(cloudUpProg.u.uSrc, 4);
+    gl.uniform2f(cloudUpProg.u.uRes, canvas.width, canvas.height);
+    gl.bindVertexArray(quadVAO); gl.drawArrays(gl.TRIANGLES,0,3);
+    gl.activeTexture(gl.TEXTURE0);
+    /* put back exactly what the ring below expects to inherit */
+    gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+    gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+  }
   }
 
   /* Ring. Same blend and culling the clouds just left set, and the depth the
