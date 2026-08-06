@@ -7378,7 +7378,17 @@ function frame(now){
 
   /* hoisted out of the branch below because the tour needs it too, and a
      paused world hands it a zero rather than a different code path */
-  const dSpin = (!paused && !frozen) ? dt*(Math.PI*2/DAY) : 0;
+  /* The eye's clock, not the climate's. dt is clamped to 0.25s so a
+     backgrounded tab cannot hand the climate an hour in one step — and the
+     rotation was riding on that same clamped value. On a machine whose frames
+     run past 250ms this stops the angular step tracking real time: a 600ms
+     frame turns the planet by 250ms worth and the 150ms frame after it turns
+     it by the full 150, so the ground moves at a rate that has nothing to do
+     with the clock and the eye reads it as jerking. The camera has no reason
+     to be protected from a long frame; it just has to arrive somewhere sensible
+     after one, which a one-second ceiling does. */
+  const viewDt = Math.min(rawDt, 1.0);
+  const dSpin = (!paused && !frozen) ? viewDt*(Math.PI*2/DAY) : 0;
   if(dSpin){
     spin += dSpin;
     cloudDrift += dSpin*0.06;
@@ -7451,14 +7461,14 @@ function frame(now){
      below become identities while it is flying and there is no second easing
      underneath its own. It runs after updateSun because half its framings are
      chosen relative to where the sun is. */
-  tourStep(dt, dSpin);
-  CAM.dist += (CAM.tDist-CAM.dist)*Math.min(1,dt*3.0);
-  CAM.zoom += (CAM.tZoom-CAM.zoom)*Math.min(1,dt*6.0);
+  tourStep(viewDt, dSpin);
+  CAM.dist += (CAM.tDist-CAM.dist)*Math.min(1,viewDt*3.0);
+  CAM.zoom += (CAM.tZoom-CAM.zoom)*Math.min(1,viewDt*6.0);
   /* Angles ease too, and faster than the distance so a drag still feels
      attached to the finger. This is what takes the twitch out zoomed in:
      the gain was already scaled by the lens, but a magnified view magnifies
      hand tremor as well, and only smoothing answers that. */
-  qNlerp(CAM.q, CAM.tq, Math.min(1, dt*9.0), CAM.q);
+  qNlerp(CAM.q, CAM.tq, Math.min(1, viewDt*9.0), CAM.q);
   /* the held plant letting go. The sheet has to be rebuilt while it fades —
      it is rebuilt constantly anyway whenever the world is running, so this
      only costs anything at all when the world is paused. */
