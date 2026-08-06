@@ -275,6 +275,52 @@ easy to reintroduce.
   and the answer, "I'm not sure about the difference", is what made dropping
   them automatic below 20fps. The same applies to `cloudres`. Measure the cost;
   ask about the worth.
+- **Half resolution is for diffuse things only.** It works on the cloud deck
+  because weather has no edge to lose; it would not work on coastlines, and it
+  does not work on small leaves either. Individually a leaf at that range is
+  sub-pixel, but collectively the small leaves *are* the colour of the ground
+  cover — dropping them does not remove detail nobody can see, it thins
+  something everybody can.
+- **A cull is only as safe as the refresh behind it.** Skipping the hidden
+  hemisphere from the sheet costs 50% of the instances and is invisible — but
+  only because the rebuild is now continuous, so ground coming round the limb
+  has had ~37 rebuilds since it was hidden and arrives at most 2.4° late, at the
+  limb, where foreshortening hides it. Under the old 900ms rate limit the same
+  cull would have been a visible band of missing plants. The optimisation was
+  bought by the one before it.
+- **Turning the eye into the model's frame beats turning the model into the
+  eye's.** One transpose per rebuild against one dot product per node. `rot3`
+  is **column-major**, so its transpose reads across the ROWS — get it backwards
+  and you have a perfectly good rotation that culls the hemisphere being looked
+  at, and nothing anywhere throws. Same shape as the `qFromBasis` trap. The
+  check has to be a picture.
+
+**Measuring any of this**
+
+Six separate times in one day the harness was wrong rather than the thing
+measured. Every one is cheap to repeat:
+
+- **The frame loop advances the world.** Two arms that saw different numbers of
+  frames are not the same world — the continents have moved. Meter
+  `requestAnimationFrame`: one call boots the page, every frame after is handed
+  out deliberately. Without it a "cloud resolution" comparison read 4.78/255 and
+  half of it was terrain.
+- **`setSpeed(0)` stops the climate, not the ecology.** `plantDebt` goes on
+  being paid down against a wall-clock budget every frame, so a paused-looking
+  world still grows plants at a machine-dependent rate. Press the actual pause.
+- **Pin every knob that adapts before testing one that does not.** `fine`,
+  `cloudres` and `cull` all switch on frame-rate thresholds, so two arms cross
+  them at different moments. A cull comparison read 21% and the difference was
+  the weather.
+- Plus the three above: a mean over a window that may not contain the event, a
+  frame rate that cannot report below its own clamp, and an unaccounted-time
+  column that saturates at zero.
+
+Against those six, **four theories about where the time was going were wrong**:
+the sheet was cheap, the device was software-rendering, `minres` was the answer,
+and the background's overdraw was costing something. Both real findings came
+from the same two moves — grep the hot loop for what it recomputes, and turn
+passes off one at a time. Neither came from thinking about it.
 
 **JavaScript**
 

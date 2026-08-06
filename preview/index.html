@@ -1363,9 +1363,6 @@ const PARAMS = {
      the answer is to draw it last and let the planet's depth reject it, which
      costs nothing in the picture. */
   nobg:    0,
-  /* Draw the clouds with the discard removed, so the deferred renderer can
-     keep its Hidden Surface Removal. 1 is the version to beat. */
-  hsr:     0,
   /* What fraction of the canvas the cloud deck is drawn at. -1 is automatic:
      halved when the frame rate says the machine needs it, whole otherwise. 1
      forces the old behaviour and 0.5 forces the reduction, which is how the
@@ -5148,8 +5145,7 @@ function showPerf(fps){
              .filter(k=>k==="detail"?PARAMS.detail<=0
                        :k==="fine"?!(PARAMS.fine<0?fineOn:PARAMS.fine>0)
                        :PARAMS[k]).join(" ") || "nothing"}`,
-    `mode: ${[PARAMS.hsr?"hsr":"", cloudScale()<1?"half clouds":"",
-              cullOn?"far side culled":""]
+    `mode: ${[cloudScale()<1?"half clouds":"", cullOn?"far side culled":""]
              .filter(Boolean).join("  ") || "normal"}`,
     `keys ${perfKeys.join("  ") || "(press one)"}`,
   ].join(String.fromCharCode(10));
@@ -5790,20 +5786,20 @@ void main(){
 }`);
 
 /* ---------- clouds ---------- */
-/* Two builds of the same shader, one with the discard and one without.
+/* The `discard` below was suspected of being expensive and it is not.
  *
-   The discard has to be absent at COMPILE time to be worth testing, not merely
-   unreached: a tile-based deferred renderer resolves visibility before it
-   shades, and a fragment shader that might discard makes that impossible, so
-   the driver turns Hidden Surface Removal off for the pass on the strength of
-   the instruction existing at all. Toggling a branch around it at runtime
-   would prove nothing.
+   A tile-based deferred renderer resolves visibility before it shades, and a
+   fragment shader that MIGHT discard makes that impossible — so the driver
+   turns Hidden Surface Removal off for the pass on the strength of the
+   instruction existing at all. Testing that needs the instruction absent at
+   COMPILE time rather than unreached, so the shader was compiled both ways and
+   the variant selected by a parameter. Measured on the PowerVR Rogue this was
+   written for: no difference. The variant is gone; the finding is here so it is
+   not derived twice.
 
-   It was also doing almost no good where it stood — after moistAt, fbm5, fbm3
-   and ringShade, so the whole cost of the pixel had already been paid and only
-   the lighting was saved. The alpha it avoids is under half a percent, so
-   blending it instead is the same picture. */
-const CLOUD_FS = `#version 300 es
+   What the clouds ARE is a second full pass over the disc, 41% of all pixel
+   work — which is what cloudres answers. */
+const cloudProg = prog(VS_SPH, `#version 300 es
 precision highp float;
 in vec3 vObj; in vec3 vWorld;
 out vec4 o;
@@ -5860,11 +5856,7 @@ void main(){
   vec3 V = normalize(uCam-vWorld);
   float edge = smoothstep(-0.10, 0.42, dot(Nw,V));
   o = vec4(col, dens*0.86*edge*uFade);
-}`;
-const CLOUD_DISCARD = "if(dens <= 0.004) discard;";
-if(CLOUD_FS.indexOf(CLOUD_DISCARD) < 0) throw new Error("cloud discard line moved");
-const cloudProg   = prog(VS_SPH, CLOUD_FS);
-const cloudProgHS = prog(VS_SPH, CLOUD_FS.replace(CLOUD_DISCARD, ""));
+}`);
 
 /* A target for the cloud deck alone, at a fraction of the canvas.
  *
@@ -7954,7 +7946,7 @@ function frame(now){
     gl.disable(gl.DEPTH_TEST);
     gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
   }
-  const cp = PARAMS.hsr ? cloudProgHS : cloudProg;
+  const cp = cloudProg;
   gl.useProgram(cp);
   gl.uniform1i(cp.u.uData,0);
   gl.uniformMatrix4fv(cp.u.uVP,false,mVP);
