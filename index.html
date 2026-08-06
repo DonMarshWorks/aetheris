@@ -3460,7 +3460,9 @@ function emitNode(i, pass, w){
   return w;
 }
 
-function buildInstances(){
+/* The cursor a sliced rebuild carries between frames. */
+const SB = {w:0, a:0, n:0, gi:0, limbs:0, busy:false};
+function beginInstances(){
   let w=0;
   paintFor = -1;
   const WLIM=(MAXINST-2)*INST;
@@ -3502,21 +3504,14 @@ function buildInstances(){
   const _g0 = performance.now();
   orderGhosts();
   PERF.bghost += performance.now() - _g0;
-  let gi = 0;
+  SB.gi = 0;
   /* A lineage's dead, painted just under its living. They used to go down as
      one block before every plant on the planet, so a node dropped from its
      lineage's place in the order to the very back on the frame it died — the
      last identifiable step in a death. Both streams are sorted by lineage key
      ascending, so this is a merge: a lineage whose living are all gone simply
      has no counterpart in the other stream and is painted in its own place. */
-  const upTo = (key, w) => {
-    while(gi<gorderN && w<WLIM){
-      const n=GORDER[gi];
-      if(key>=0 && GHOST[n*GH_F+15] > key) break;
-      w = emitGhost(n, w); gi++;
-    }
-    return w;
-  };
+
   /* Leaves sit on top of the branches that carry them, so every branch of a
      plant goes down before any of its nodes — but per plant, not globally: one
      plant may legitimately stand over another, and flattening all the branches
@@ -3526,33 +3521,74 @@ function buildInstances(){
      order and both are stable. */
   const _o0 = performance.now();
   orderByLineage();
-  const _o1 = performance.now();
-  PERF.bsort += _o1 - _o0;
-  const limbs = PARAMS.limbs|0;
-  for(let a=0;a<orderN && w<WLIM;){
-    const key = NDRAW[ORDER[a]];
-    let b=a;
-    while(b<orderN && NDRAW[ORDER[b]]===key) b++;
-    /* everything dead that sorts at or before this lineage, including whole
-       lineages with nothing living left */
+  PERF.bsort += performance.now() - _o0;
+  SB.w = w; SB.a = 0; SB.n = orderN; SB.limbs = PARAMS.limbs|0;
+  SB.busy = true;
+}
+
+/* Everything dead that sorts at or before this lineage, including whole
+   lineages with nothing living left. The cursor lives on SB because the walk
+   can now stop between two frames and resume where it left off. */
+function upTo(key, w){
+  const WLIM=(MAXINST-2)*INST;
+  while(SB.gi<gorderN && w<WLIM){
+    const n=GORDER[SB.gi];
+    if(key>=0 && GHOST[n*GH_F+15] > key) break;
+    w = emitGhost(n, w); SB.gi++;
+  }
+  return w;
+}
+
+/* Emit until the budget runs out, reporting whether it finished.
+ *
+   The rebuild costs 326ms on a Fire TV at a hundred thousand nodes and lands
+   every third or fourth frame — which is exactly the "two frames fast, one
+   slow" that makes the motion lurch. The total work is unchanged. This is not
+   an optimisation; it is the same milliseconds spread evenly instead of
+   arriving in a lump, and that is the whole of what smoothness is.
+
+   instN and the upload are touched only on the frame it COMPLETES, so what the
+   GPU draws stays a whole consistent sheet throughout. IBUF is CPU-side and the
+   VBO holds the last finished build, so there is nothing to tear. A budget of 0
+   means finish now, which is what instHash and every non-frame caller wants. */
+function stepInstances(budgetMs){
+  if(!SB.busy) return true;
+  const WLIM=(MAXINST-2)*INST;
+  const t0 = performance.now();
+  let w = SB.w;
+  while(SB.a < SB.n && w < WLIM){
+    const key = NDRAW[ORDER[SB.a]];
+    let b=SB.a;
+    while(b<SB.n && NDRAW[ORDER[b]]===key) b++;
     w = upTo(key, w);
-    if(limbs===0){
-      for(let q=a;q<b && w<WLIM;q++){
+    if(SB.limbs===0){
+      for(let q=SB.a;q<b && w<WLIM;q++){
         const i=ORDER[q];
         w = emitNode(i, 0, w); w = emitNode(i, 1, w);
       }
     } else {
-      const first = limbs===2 ? 1 : 0;
-      for(let q=a;q<b && w<WLIM;q++) w = emitNode(ORDER[q], first, w);
-      for(let q=a;q<b && w<WLIM;q++) w = emitNode(ORDER[q], 1-first, w);
+      const first = SB.limbs===2 ? 1 : 0;
+      for(let q=SB.a;q<b && w<WLIM;q++) w = emitNode(ORDER[q], first, w);
+      for(let q=SB.a;q<b && w<WLIM;q++) w = emitNode(ORDER[q], 1-first, w);
     }
-    a=b;
+    SB.a = b;
+    /* A whole lineage at a time. The paint cache and branch-before-leaf order
+       are per node, but the DEPTH order is per lineage, and stopping inside one
+       would interleave it with the ghosts belonging to the next. */
+    if(budgetMs > 0 && performance.now()-t0 >= budgetMs){
+      SB.w = w; PERF.bemit += performance.now()-t0; return false;
+    }
   }
   /* and the dead of lineages that sort after the last living one */
   w = upTo(-1, w);
-  PERF.bemit += performance.now() - _o1;
-  instN=w/INST;
+  SB.w = w; SB.busy = false;
+  instN = w/INST;
+  PERF.bemit += performance.now()-t0;
+  return true;
 }
+
+/* the whole thing at once, for every caller that is not a frame */
+function buildInstances(){ beginInstances(); stepInstances(0); }
 
 /* The three outputs read once at birth and kept for life, so that a body is a
    permanent record of the conditions each of its nodes grew through. */
@@ -4986,6 +5022,10 @@ let SELFADE=0;
 /* How long the plant sheet must wait between rebuilds, in milliseconds, and
    zero when the machine can afford one whenever the world changes. */
 let sheetGap = 0, lastSheet = 0, fpsNow = 60;
+/* How many milliseconds of a frame the rebuild may take before it puts itself
+   away until the next one. 0 means build it whole, which is what a machine that
+   can afford it should do. */
+let sheetSlice = 0;
 /* Whether the fine octaves are currently being drawn, when PARAMS.fine leaves
    it to the frame rate. The two thresholds are far apart on purpose: a single
    one sitting near the machine's natural rate would toggle the surface detail
@@ -5015,13 +5055,14 @@ function cloudScale(){
 const PERF = {sim:0, eco:0, sheet:0, draw:0, n:0,
               xsim:0, xeco:0, xsheet:0, xdraw:0, xframe:0, sheets:0,
               sbuild:0, supload:0, sdraw:0, smip:0, sinst:0,
-              bghost:0, bsort:0, bemit:0};
+              bghost:0, bsort:0, bemit:0,
+              band:0, prox:0, fields:0, pack:0, upl:0, ticks:0, proxN:0};
 let perfTxt = "", perfKeys = [];
 const perfEl = () => document.getElementById("perf");
 function showPerf(fps){
   const el = perfEl(); if(!el) return;
   const n = Math.max(1, PERF.n);
-  const k = Math.max(1, PERF.sheets);
+  const k = Math.max(1, PERF.sheets), tk = Math.max(1, PERF.ticks);
   const pair = (sum,max) => ((sum/n).toFixed(0)+"/"+max.toFixed(0)).padStart(9);
   const other = Math.max(0, 1000/Math.max(0.01,fps)
                 - (PERF.sim+PERF.eco+PERF.sheet+PERF.draw)/n);
@@ -5034,6 +5075,9 @@ function showPerf(fps){
     `draw  ${pair(PERF.draw,PERF.xdraw)}   issuing the planet`,
     `other ${other.toFixed(0).padStart(9)}   gpu wait, browser, the rest`,
     `frame ${(1000/Math.max(0.01,fps)).toFixed(0).padStart(4)}/${PERF.xframe.toFixed(0)}   worst frame in the window`,
+    `  band ${(PERF.band/tk).toFixed(0)}  prox ${(PERF.prox/tk).toFixed(0)}` +
+    `  fields ${(PERF.fields/tk).toFixed(0)}  pack ${(PERF.pack/tk).toFixed(0)}` +
+    `  upl ${(PERF.upl/tk).toFixed(0)}  (per tick; ${PERF.ticks} ticks ${PERF.proxN} prox)`,
     `  ghost ${(PERF.bghost/k).toFixed(0)}  sort ${(PERF.bsort/k).toFixed(0)}` +
     `  emit ${(PERF.bemit/k).toFixed(0)}`,
     `  build ${(PERF.sbuild/k).toFixed(0)}  upload ${(PERF.supload/k).toFixed(0)}` +
@@ -5077,11 +5121,21 @@ function renderPlants(){
      honest version of "slow the plants down to buy frames" — the ecology is not
      slowed at all, only how often anyone is shown it. */
   const nowMs = performance.now();
-  if(sheetGap > 0 && nowMs - lastSheet < sheetGap) return;
-  lastSheet = nowMs; PERF.sheets++;
-  plantsDirty=false;
   const _b0 = performance.now();
-  buildInstances();
+  if(!SB.busy){
+    /* The rate limit only applies to STARTING one. Once the rebuild is sliced
+       it no longer needs holding back — a bounded cost every frame is what the
+       gap was trying to achieve by skipping frames entirely, and it arrives at
+       the same freshness without the stall. */
+    if(sheetSlice <= 0 && sheetGap > 0 && nowMs - lastSheet < sheetGap) return;
+    lastSheet = nowMs; PERF.sheets++;
+    plantsDirty=false;
+    beginInstances();
+  }
+  if(!stepInstances(sheetSlice)){
+    PERF.sbuild += performance.now() - _b0;
+    return;                       /* still building; the sheet on screen stands */
+  }
   const _b1 = performance.now();
   gl.bindBuffer(gl.ARRAY_BUFFER,instVBO);
   gl.bufferSubData(gl.ARRAY_BUFFER,0,IBUF,0,instN*INST);
@@ -7484,6 +7538,9 @@ function frame(now){
       dpr=Math.min(Math.min(devicePixelRatio||1,2), dpr*1.08); resize(); }
     /* how much of a frame the plant sheet may have. See renderPlants. */
     sheetGap = fps < 10 ? 900 : fps < 20 ? 450 : fps < 34 ? 200 : 0;
+    /* About a fifth of a frame. Below 34fps the rebuild is spread instead of
+       being skipped, so the gap above stops applying — see renderPlants. */
+    sheetSlice = fps < 34 ? Math.max(5, (1000/fps)*0.20) : 0;
     if(PARAMS.fine < 0){
       if(fineOn && fps < 20) fineOn = false;
       else if(!fineOn && fps > 32) fineOn = true;
@@ -7498,6 +7555,7 @@ function frame(now){
     PERF.xsim=PERF.xeco=PERF.xsheet=PERF.xdraw=PERF.xframe=PERF.sheets=0;
     PERF.sbuild=PERF.supload=PERF.sdraw=PERF.smip=0;
     PERF.bghost=PERF.bsort=PERF.bemit=0;
+    PERF.band=PERF.prox=PERF.fields=PERF.pack=PERF.upl=PERF.ticks=PERF.proxN=0;
     frameAcc=0; frameN=0; frameWall=0;
   }
 
@@ -7551,16 +7609,23 @@ function frame(now){
     simAccum = 0;
     S.time += step;
     const rows = Math.ceil(GH/10);
+    const _p0 = performance.now();
     rebuildBand(bandCursor, Math.min(GH,bandCursor+rows), S.time);
     bandCursor = (bandCursor+rows) % GH;
-    if(bandCursor===0) computeProx();
+    const _p1 = performance.now();
+    if(bandCursor===0){ computeProx(); PERF.proxN++; }
+    const _p2 = performance.now();
     stepFields(step);
+    PERF.band += _p1-_p0; PERF.prox += _p2-_p1;
+    PERF.fields += performance.now()-_p2; PERF.ticks++;
     /* The ecology needs its own clock scaled against the climate's, or the
        piece breaks at exactly the settings people use to watch it change: run
        the plants once per tick and at x100 the coastlines race away from them,
        leaving an ecology permanently chasing a world it can never catch. */
     plantDebt += ECORATE;
-    packTexture(); uploadData();
+    const _p4 = performance.now(); packTexture();
+    const _p5 = performance.now(); uploadData();
+    PERF.pack += _p5-_p4; PERF.upl += performance.now()-_p5;
     hudAcc++; if(hudAcc>=4){ hudAcc=0; updateHUD(); }
   }
   const _simd = performance.now() - _tSim;
@@ -8949,8 +9014,16 @@ window.__world = {
      the only honest way to say so is to hash what the rebuild produces on
      both sides of it and get the same number. Rebuilds first, so the hash is
      of the world as it stands rather than of whenever the sheet last ran. */
-  instHash(){
-    buildInstances();
+  /* `slice` in milliseconds builds it the way a slow machine does, a piece per
+     call, and the hash must come out the same as building it whole — that is
+     the only thing that says slicing changed nothing but when the work
+     happened. Freeze the world first or the two are not the same world. */
+  instHash(slice){
+    if(slice > 0){
+      beginInstances();
+      let guard = 0;
+      while(!stepInstances(slice) && ++guard < 100000);
+    } else buildInstances();
     let h=2166136261>>>0;
     const v=new Uint32Array(IBUF.buffer, IBUF.byteOffset, instN*INST);
     for(let k=0;k<v.length;k++){ h=(h^v[k])>>>0; h=Math.imul(h,16777619)>>>0; }
