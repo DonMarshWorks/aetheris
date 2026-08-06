@@ -1355,17 +1355,30 @@ const PARAMS = {
   noatmo:  0,       // skip the atmosphere shell
   noring:  0,       // skip the ring
   noplanet: 0,      // skip the surface itself, leaving sky and atmosphere
+  /* Skip the sky and stars. This one is not like the others: the background is
+     drawn FIRST, across the whole screen, with the depth test off — so every
+     pixel the planet then covers has been shaded twice, and a tile-based
+     deferred renderer cannot throw the first one away because there is nothing
+     in the depth buffer yet for it to be hidden behind. If this is expensive,
+     the answer is to draw it last and let the planet's depth reject it, which
+     costs nothing in the picture. */
+  nobg:    0,
   /* How far the adaptive resolution may go down before it gives up. It is a
      parameter rather than a constant because the machine that needs it most is
      a television that cannot be attached to a profiler, and finding the floor
      that machine actually wants should not cost a deploy each time. */
   minres:  0.42,
-  /* The finest surface octaves. On by default and on every machine that can
-     afford them — this is not a taste setting, it is the difference between
-     four frames a second and something watchable on hardware that turned out
-     to be rasterising in software. Exposed so the trade can be LOOKED at on
-     the device rather than argued about here. */
-  fine:    1,
+  /* The finest surface octaves. -1 is automatic and the default: they are
+     drawn wherever they can be afforded and dropped where they cannot. 0 and 1
+     force it either way, which is how the comparison was made.
+
+     Measured on a Fire TV: 60ms a frame, 4.0fps against 5.6. And asked whether
+     he could see them go, the answer was "I'm not sure about the difference" —
+     which settles it. They are detail at frequencies of 145 and 310 across a
+     disc 120 pixels wide; there is nothing there to see at that size, and 40%
+     of the frame rate is a great deal to pay for it. On a machine with the
+     pixels to show them they cost nothing worth having, so nothing changes. */
+  fine:    -1,
   perf:    0,       // 1 shows where the milliseconds go, and what keys arrive.
                     // Off by default and drawn only when on: this exists because
                     // a Fire TV cannot be attached to a profiler and guessing at
@@ -4965,6 +4978,12 @@ let SELFADE=0;
 /* How long the plant sheet must wait between rebuilds, in milliseconds, and
    zero when the machine can afford one whenever the world changes. */
 let sheetGap = 0, lastSheet = 0, fpsNow = 60;
+/* Whether the fine octaves are currently being drawn, when PARAMS.fine leaves
+   it to the frame rate. The two thresholds are far apart on purpose: a single
+   one sitting near the machine's natural rate would toggle the surface detail
+   on and off every second, and a planet that shimmers between two versions of
+   itself is worse than either. */
+let fineOn = true;
 /* Where a frame's milliseconds actually went, averaged over the sampling window
    the adaptive resolution already keeps. Accumulated with plain performance.now
    around each phase: GPU work is asynchronous, so `draw` is the time spent
@@ -5008,9 +5027,10 @@ function showPerf(fps){
     `gl  ${GLINFO}`,
     `    ${(canvas.width*canvas.height/1000).toFixed(0)}k px, ` +
     `${(other>0.01 ? canvas.width*canvas.height/other/1000 : 0).toFixed(0)}k px/ms unaccounted`,
-    `off: ${["noplanet","noclouds","noatmo","noring","detail","fine"]
+    `off: ${["noplanet","nobg","noclouds","noatmo","noring","detail","fine"]
              .filter(k=>k==="detail"?PARAMS.detail<=0
-                       :k==="fine"?!PARAMS.fine:PARAMS[k]).join(" ") || "nothing"}`,
+                       :k==="fine"?!(PARAMS.fine<0?fineOn:PARAMS.fine>0)
+                       :PARAMS[k]).join(" ") || "nothing"}`,
     `keys ${perfKeys.join("  ") || "(press one)"}`,
   ].join(String.fromCharCode(10));
   if(t !== perfTxt){ perfTxt = t; el.textContent = t; }
@@ -6506,7 +6526,8 @@ addEventListener("keydown",e=>{
   }
   /* the fine surface octaves, toggled where they can be SEEN going, because
      what they cost is a measurement and what they are worth is not */
-  else if(PARAMS.perf>0 && e.key==="8"){ PARAMS.fine = PARAMS.fine ? 0 : 1; perfTxt=""; }
+  else if(PARAMS.perf>0 && e.key==="8"){
+    PARAMS.fine = PARAMS.fine===0 ? 1 : PARAMS.fine===1 ? -1 : 0; perfTxt=""; }
   else if(!onControl && !touring() &&
           (e.key==="ArrowLeft"||e.key==="ArrowRight"||e.key==="ArrowUp"||e.key==="ArrowDown")){
     e.preventDefault();
@@ -7379,6 +7400,10 @@ function frame(now){
       dpr=Math.min(Math.min(devicePixelRatio||1,2), dpr*1.08); resize(); }
     /* how much of a frame the plant sheet may have. See renderPlants. */
     sheetGap = fps < 10 ? 900 : fps < 20 ? 450 : fps < 34 ? 200 : 0;
+    if(PARAMS.fine < 0){
+      if(fineOn && fps < 20) fineOn = false;
+      else if(!fineOn && fps > 32) fineOn = true;
+    }
     fpsNow = fps;
     if(PARAMS.perf > 0) showPerf(fps);
     PERF.sim=PERF.eco=PERF.sheet=PERF.draw=PERF.n=0;
@@ -7656,6 +7681,7 @@ function frame(now){
 
   /* background */
   gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
+  if(!PARAMS.nobg){
   gl.useProgram(bgProg);
   gl.uniform2f(bgProg.u.uRes,W,Hh);
   gl.uniformMatrix4fv(bgProg.u.uInvVP,false,mInvVP);
@@ -7665,6 +7691,7 @@ function frame(now){
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,skyTex);
   gl.uniform1i(bgProg.u.uSky,1);
   gl.bindVertexArray(quadVAO); gl.drawArrays(gl.TRIANGLES,0,3);
+  }
 
   /* planet */
   gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
@@ -7688,7 +7715,8 @@ function frame(now){
   gl.uniform1f(planetProg.u.uSolarLat,S.solarLat);
   gl.uniform1f(planetProg.u.uGT,S.globalTemp);
   gl.uniform1f(planetProg.u.uT, S.time);
-  gl.uniform1f(planetProg.u.uFine, PARAMS.fine ? 1 : 0);
+  gl.uniform1f(planetProg.u.uFine,
+               (PARAMS.fine < 0 ? fineOn : PARAMS.fine > 0) ? 1 : 0);
   gl.uniform1i(planetProg.u.uDebug, DEBUG);
   gl.uniform3fv(planetProg.u.uRingN, POLE);
   gl.uniform1f(planetProg.u.uRingFade, ringFade);
