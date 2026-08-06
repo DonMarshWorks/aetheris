@@ -234,6 +234,47 @@ easy to reintroduce.
   every instance moved in its last bit. The world was identical, the instance
   count was identical, and the buffer hash was not — which is the only reason it
   was caught, and is why `instHash()` exists.
+- **Isolate passes one at a time; do not reason about where the pixels go.**
+  Chasing a Fire TV down to 5fps, four theories were formed and *four were
+  wrong*: the sheet was cheap (a sampling window that missed the rebuild), the
+  device was software-rendering (a PowerVR — `px/ms` looked identical to
+  SwiftShader and meant nothing), `minres` was the answer (at 81k pixels there
+  was nothing left to take), and the background's full-screen overdraw was
+  costing something (it measured zero). What actually found it was `noplanet` /
+  `nobg` / `noclouds` / `noatmo` / `noring`, one per load: **the clouds were 41%
+  of all pixel work** while running eight noise evaluations a pixel against the
+  planet's twenty-nine. Two passes over the same disc, and the smaller one cost
+  nearly as much as the larger. Every switch that killed a theory cost minutes;
+  every theory acted on would have cost hours.
+- **A `discard` is not free on a tile-based renderer** — but that was a fifth
+  theory and it was also wrong. Testing it needs the instruction ABSENT at
+  compile time rather than unreached, because the driver reacts to it existing
+  at all; a runtime branch around it proves nothing. Compiling the shader both
+  ways measured no difference.
+- **Smoothness is spreading the work, not reducing it.** "Two frames fast, one
+  slow" at 100k nodes was the sheet rebuild landing every third frame and
+  costing 326ms. The fix removed no work at all: `beginInstances` /
+  `stepInstances` pay it a fifth of a frame at a time and swap the buffer only
+  when a whole one is finished. The rate limit then stops applying — `sheetGap`
+  existed to protect the frame by skipping rebuilds, and a bounded cost every
+  frame reaches the same freshness without the stall. Stop on a **lineage**
+  boundary: the paint cache and branch-before-leaf order are per node, but the
+  depth order is per lineage.
+- **The eye's clock is not the simulation's.** `dt` is clamped at 0.25s to
+  protect the climate, and the daily spin and every camera ease were riding on
+  that same clamped value — so past 4fps a 600ms frame turned the planet by
+  250ms worth and the 150ms frame after it turned it by 150, and the ground
+  moved at a rate unrelated to the clock. Uneven frames look like uneven frames;
+  uneven frames carrying uneven amounts of rotation look broken. `viewDt` is the
+  real elapsed time with a one-second ceiling. The comment at the sunlight model
+  already promised the spin "advances on wall-clock time"; the clamp had been
+  quietly making that untrue on exactly the machines that needed it.
+- **A quality reduction is the author's call, not the profiler's.** The finest
+  surface octaves cost 60ms and 40% of the frame rate on that hardware. Rather
+  than decide, they were put behind `fine` so the trade could be *looked at* —
+  and the answer, "I'm not sure about the difference", is what made dropping
+  them automatic below 20fps. The same applies to `cloudres`. Measure the cost;
+  ask about the worth.
 
 **JavaScript**
 

@@ -1371,6 +1371,18 @@ const PARAMS = {
      forces the old behaviour and 0.5 forces the reduction, which is how the
      comparison gets made. */
   cloudres: -1,
+  /* Skip nodes on the hemisphere nobody can see while building the sheet.
+     -1 is automatic and the default, on below 34fps; 0 forces it off and 1 on.
+
+     What makes this cheap rather than merely fast is the sliced rebuild. The
+     sheet is now remade continuously, about once a second, and the planet turns
+     once in two and a half minutes — so ground coming round the limb has had
+     something like thirty-seven rebuilds since it was last hidden, and the worst
+     case is a node arriving 2.4 degrees of longitude late. That happens AT the
+     limb, where foreshortening compresses those degrees into a pixel or two.
+     Under the old rate limit a rebuild could be 900ms stale on a frame that was
+     already lurching, and this would not have been safe. */
+  cull:   -1,
   /* How far the adaptive resolution may go down before it gives up. It is a
      parameter rather than a constant because the machine that needs it most is
      a television that cannot be attached to a profiler, and finding the floor
@@ -3187,7 +3199,12 @@ function cellAt(x,y,z){
    been blended with its neighbours — so the sheet is rebuilt from the live set
    each tick instead, on the GPU, where fifty thousand quads cost nothing.
    Everything the look depends on becomes a per-node attribute for free. */
-const GHOSTN = 24576, GH_F = 16;     // the fading dead, drawn but not simulated
+/* the fading dead, drawn but not simulated. 16..18 are the direction it died
+   in, kept so the hidden hemisphere's dead can be skipped with the same dot
+   product as its living — a ghost stores where it lands on the SHEET, and
+   recovering a direction from that costs two trig calls per ghost per rebuild,
+   which is the sort of thing this whole day was about not doing. */
+const GHOSTN = 24576, GH_F = 19;
 const GC = new Float32Array(3);
 const INST = 9;                                  // floats per node
 /* the markers below are extra instances beyond one per node, and this is also
@@ -3462,6 +3479,26 @@ function emitNode(i, pass, w){
 
 /* The cursor a sliced rebuild carries between frames. */
 const SB = {w:0, a:0, n:0, gi:0, limbs:0, busy:false};
+/* Where the eye stands, expressed in the nodes' own coordinates, and how far
+   round the sphere from it a node may be and still be worth drawing.
+ *
+   The nodes never move; the planet's rotation lives in uRot. So rather than
+   turn a hundred thousand node positions into world space, the eye is turned
+   into theirs — one transpose per rebuild against one dot product per node.
+   For a unit sphere with the eye at distance d, a point n is on the visible
+   side when dot(n, e) > 1/d; the margin covers the ground that will rotate in,
+   plus wherever the camera is about to fly. */
+const CULLE = new Float32Array(3);
+let cullDot = -2, cullOn = false;
+function setCull(rot, ex, ey, ez){
+  const d = Math.hypot(ex,ey,ez) || 1;
+  /* R is column-major, so its transpose reads across the rows: this is
+     R^T * e, which takes a world direction back into object space. */
+  CULLE[0] = (rot[0]*ex + rot[1]*ey + rot[2]*ez)/d;
+  CULLE[1] = (rot[3]*ex + rot[4]*ey + rot[5]*ez)/d;
+  CULLE[2] = (rot[6]*ex + rot[7]*ey + rot[8]*ez)/d;
+  cullDot = 1/Math.max(1.001, d) - 0.28;
+}
 function beginInstances(){
   let w=0;
   paintFor = -1;
@@ -3534,6 +3571,15 @@ function upTo(key, w){
   while(SB.gi<gorderN && w<WLIM){
     const n=GORDER[SB.gi];
     if(key>=0 && GHOST[n*GH_F+15] > key) break;
+    /* The dead of the far side, skipped exactly as the living are. Skipping
+       still advances the cursor: this is a merge against the living stream and
+       dropping a ghost must not drop its place in the order. */
+    if(cullOn){
+      const g=n*GH_F;
+      if(GHOST[g+16]*CULLE[0] + GHOST[g+17]*CULLE[1] + GHOST[g+18]*CULLE[2] < cullDot){
+        SB.gi++; continue;
+      }
+    }
     w = emitGhost(n, w); SB.gi++;
   }
   return w;
@@ -3562,6 +3608,14 @@ function stepInstances(budgetMs){
     while(b<SB.n && NDRAW[ORDER[b]]===key) b++;
     w = upTo(key, w);
     if(SB.limbs===0){
+      if(cullOn){
+        const ex=CULLE[0], ey=CULLE[1], ez=CULLE[2], lim=cullDot;
+        for(let q=SB.a;q<b && w<WLIM;q++){
+          const i=ORDER[q];
+          if(NPX[i]*ex + NPY[i]*ey + NPZ[i]*ez < lim) continue;
+          w = emitNode(i, 0, w); w = emitNode(i, 1, w);
+        }
+      } else
       for(let q=SB.a;q<b && w<WLIM;q++){
         const i=ORDER[q];
         w = emitNode(i, 0, w); w = emitNode(i, 1, w);
@@ -3705,6 +3759,7 @@ function ghost(i){
      freed slot has been handed to a newborn in between, which is the same
      an-array-index-is-not-an-identity trap this project has already been
      caught by once in the frontier. */
+  GHOST[g+16]=NPX[i]; GHOST[g+17]=NPY[i]; GHOST[g+18]=NPZ[i];
   GHOST[g+12]=tag(i);
   /* the lineage it belonged to, so it can be painted inside that lineage's
      place in the order rather than underneath the whole world */
@@ -5093,7 +5148,8 @@ function showPerf(fps){
              .filter(k=>k==="detail"?PARAMS.detail<=0
                        :k==="fine"?!(PARAMS.fine<0?fineOn:PARAMS.fine>0)
                        :PARAMS[k]).join(" ") || "nothing"}`,
-    `mode: ${[PARAMS.hsr?"hsr":"", cloudScale()<1?"half clouds":""]
+    `mode: ${[PARAMS.hsr?"hsr":"", cloudScale()<1?"half clouds":"",
+              cullOn?"far side culled":""]
              .filter(Boolean).join("  ") || "normal"}`,
     `keys ${perfKeys.join("  ") || "(press one)"}`,
   ].join(String.fromCharCode(10));
@@ -7541,6 +7597,7 @@ function frame(now){
     /* About a fifth of a frame. Below 34fps the rebuild is spread instead of
        being skipped, so the gap above stops applying — see renderPlants. */
     sheetSlice = fps < 34 ? Math.max(5, (1000/fps)*0.20) : 0;
+    if(PARAMS.cull < 0) cullOn = fps < 34; else cullOn = PARAMS.cull > 0;
     if(PARAMS.fine < 0){
       if(fineOn && fps < 20) fineOn = false;
       else if(!fineOn && fps > 32) fineOn = true;
@@ -7823,6 +7880,9 @@ function frame(now){
      one; standing still that is invisible, and moving, the two slide apart and
      the patch smears into bands. */
   const _tSheet = performance.now();
+  /* fixed for the whole of a rebuild, however many frames it spans, or the
+     hemisphere would move under a half-finished sheet */
+  if(!SB.busy) setCull(rot3, eye[0], eye[1], eye[2]);
   renderPlants();
   const _sheetd = performance.now() - _tSheet;
   PERF.sheet += _sheetd; if(_sheetd > PERF.xsheet) PERF.xsheet = _sheetd;
