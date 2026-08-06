@@ -1360,6 +1360,12 @@ const PARAMS = {
      a television that cannot be attached to a profiler, and finding the floor
      that machine actually wants should not cost a deploy each time. */
   minres:  0.42,
+  /* The finest surface octaves. On by default and on every machine that can
+     afford them — this is not a taste setting, it is the difference between
+     four frames a second and something watchable on hardware that turned out
+     to be rasterising in software. Exposed so the trade can be LOOKED at on
+     the device rather than argued about here. */
+  fine:    1,
   perf:    0,       // 1 shows where the milliseconds go, and what keys arrive.
                     // Off by default and drawn only when on: this exists because
                     // a Fire TV cannot be attached to a profiler and guessing at
@@ -5002,8 +5008,9 @@ function showPerf(fps){
     `gl  ${GLINFO}`,
     `    ${(canvas.width*canvas.height/1000).toFixed(0)}k px, ` +
     `${(other>0.01 ? canvas.width*canvas.height/other/1000 : 0).toFixed(0)}k px/ms unaccounted`,
-    `off: ${["noplanet","noclouds","noatmo","noring","detail"]
-             .filter(k=>k==="detail"?PARAMS.detail<=0:PARAMS[k]).join(" ") || "nothing"}`,
+    `off: ${["noplanet","noclouds","noatmo","noring","detail","fine"]
+             .filter(k=>k==="detail"?PARAMS.detail<=0
+                       :k==="fine"?!PARAMS.fine:PARAMS[k]).join(" ") || "nothing"}`,
     `keys ${perfKeys.join("  ") || "(press one)"}`,
   ].join(String.fromCharCode(10));
   if(t !== perfTxt){ perfTxt = t; el.textContent = t; }
@@ -5285,6 +5292,14 @@ uniform mat3 uRot;
 uniform vec3 uSun, uCam;
 uniform float uSea, uSolarLat, uGT, uT;
 uniform int uDebug;
+/* Whether the finest surface octaves are drawn at all. They are already held
+   back by the pixel footprint (fadeA/fadeB), but on a 1080p television at the
+   resolution floor the footprint is 0.0044 — below the knee — so they run at
+   full strength and cost twelve noise evaluations a pixel on a machine that
+   turned out to be rasterising in software. This is a UNIFORM branch, so the
+   work is genuinely skipped rather than executed and multiplied by zero, and
+   all derivatives are taken before it. */
+uniform float uFine;
 ${GLSL_NOISE}
 ${GLSL_RING}
 
@@ -5413,8 +5428,11 @@ void main(){
      fine warp is what breaks that up, and it is faded against the pixel
      footprint so it can never alias when the whole planet is in frame. */
   float wa = fbm2(d*7.0), wb = fbm2(d*7.0+vec3(19.3,4.1,-7.7));
-  float wc = fbm2(d*58.0+vec3(3.7,-8.2,5.5)), wd = fbm2(d*58.0+vec3(-11.9,2.4,7.1));
-  vec3 warp = (t1*wa + t2*wb)*0.075 + (t1*wc + t2*wd)*(0.011*fadeA);
+  vec3 warp = (t1*wa + t2*wb)*0.075;
+  if(uFine > 0.5){
+    float wc = fbm2(d*58.0+vec3(3.7,-8.2,5.5)), wd = fbm2(d*58.0+vec3(-11.9,2.4,7.1));
+    warp += (t1*wc + t2*wd)*(0.011*fadeA);
+  }
   vec4 datW = fetchSmooth(normalize(d + warp));
   float veg  = datW.g;
   float snow = datW.b;
@@ -5432,9 +5450,14 @@ void main(){
   /* and the same again on the value: the three coarse octaves shape the ice
      at planetary scale, the two fine ones give it an edge worth looking at
      close up, both held back by the footprint fades */
-  float snowEdge = snow + 0.105*fbm2(d*14.0) + 0.070*fbm2(d*30.0) + 0.030*fadeA*fbm2(d*66.0)
-                 + 0.022*fadeA*fbm2(d*145.0) + 0.013*fadeB*fbm2(d*310.0);
-  float micro2 = (0.70*gnoise(d*40.0) + 0.30*fadeA*gnoise(d*84.0+3.9))*0.5+0.5;
+  float snowEdge = snow + 0.105*fbm2(d*14.0) + 0.070*fbm2(d*30.0);
+  float micro2raw = 0.70*gnoise(d*40.0);
+  if(uFine > 0.5){
+    snowEdge += 0.030*fadeA*fbm2(d*66.0)
+              + 0.022*fadeA*fbm2(d*145.0) + 0.013*fadeB*fbm2(d*310.0);
+    micro2raw += 0.30*fadeA*gnoise(d*84.0+3.9);
+  }
+  float micro2 = micro2raw*0.5+0.5;
 
   if(land < 0.0){
     /* The shelf bands follow contours of a coarse height field, so close in
@@ -5442,7 +5465,9 @@ void main(){
        Perturbing the depth itself — the same trick and the same footprint
        fades as the ice margin — gives every band an edge instead. */
     float depth = clamp(-land*2.4, 0.0, 1.0);
-    float depthN = depth + 0.055*fadeA*fbm2(d*120.0) + 0.030*fadeB*fbm2(d*265.0);
+    float depthN = depth;
+    if(uFine > 0.5)
+      depthN += 0.055*fadeA*fbm2(d*120.0) + 0.030*fadeB*fbm2(d*265.0);
     vec3 shallow = vec3(0.115,0.400,0.435);
     vec3 midw    = vec3(0.040,0.155,0.310);
     vec3 deep    = vec3(0.009,0.045,0.130);
@@ -5538,17 +5563,21 @@ void main(){
 
   vec3 nObj;
   if(land < 0.0){
-    vec3 wv = vec3(gnoise(d*66.0+vec3(uT*0.010,0.0,4.0)),
-                   gnoise(d*66.0+vec3(0.0,uT*0.010,19.0)),
-                   gnoise(d*66.0+vec3(7.0,3.0,uT*0.010)));
+    vec3 wv = vec3(0.0);
+    if(uFine > 0.5)
+      wv = vec3(gnoise(d*66.0+vec3(uT*0.010,0.0,4.0)),
+                gnoise(d*66.0+vec3(0.0,uT*0.010,19.0)),
+                gnoise(d*66.0+vec3(7.0,3.0,uT*0.010)));
     nObj = normalize(d + wv*(0.013*fadeB));
   } else {
     vec3 m1 = vec3(gnoise(d*22.0+vec3(3.1,0.0,0.0)),
                    gnoise(d*22.0+vec3(0.0,17.7,0.0)),
                    gnoise(d*22.0+vec3(0.0,0.0,-9.4)));
-    vec3 m2 = fadeA*vec3(gnoise(d*46.0+vec3(41.0,0.0,0.0)),
-                         gnoise(d*46.0+vec3(0.0,-5.0,0.0)),
-                         gnoise(d*46.0+vec3(0.0,0.0,23.0)));
+    vec3 m2 = vec3(0.0);
+    if(uFine > 0.5)
+      m2 = fadeA*vec3(gnoise(d*46.0+vec3(41.0,0.0,0.0)),
+                      gnoise(d*46.0+vec3(0.0,-5.0,0.0)),
+                      gnoise(d*46.0+vec3(0.0,0.0,23.0)));
     float amt = (0.30 + 0.55*steep)*graze;
     nObj = normalize(d - (t1*g.x + t2*g.y)*shoreFade
                        + (m1*0.038 + m2*0.016)*amt);
@@ -6475,6 +6504,9 @@ addEventListener("keydown",e=>{
     PARAMS[k] = PARAMS[k] ? 0 : 1;
     perfTxt = "";
   }
+  /* the fine surface octaves, toggled where they can be SEEN going, because
+     what they cost is a measurement and what they are worth is not */
+  else if(PARAMS.perf>0 && e.key==="8"){ PARAMS.fine = PARAMS.fine ? 0 : 1; perfTxt=""; }
   else if(!onControl && !touring() &&
           (e.key==="ArrowLeft"||e.key==="ArrowRight"||e.key==="ArrowUp"||e.key==="ArrowDown")){
     e.preventDefault();
@@ -7634,6 +7666,7 @@ function frame(now){
   gl.uniform1f(planetProg.u.uSolarLat,S.solarLat);
   gl.uniform1f(planetProg.u.uGT,S.globalTemp);
   gl.uniform1f(planetProg.u.uT, S.time);
+  gl.uniform1f(planetProg.u.uFine, PARAMS.fine ? 1 : 0);
   gl.uniform1i(planetProg.u.uDebug, DEBUG);
   gl.uniform3fv(planetProg.u.uRingN, POLE);
   gl.uniform1f(planetProg.u.uRingFade, ringFade);
