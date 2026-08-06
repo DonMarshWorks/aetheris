@@ -1363,6 +1363,9 @@ const PARAMS = {
      the answer is to draw it last and let the planet's depth reject it, which
      costs nothing in the picture. */
   nobg:    0,
+  /* Draw the clouds with the discard removed, so the deferred renderer can
+     keep its Hidden Surface Removal. 1 is the version to beat. */
+  hsr:     0,
   /* How far the adaptive resolution may go down before it gives up. It is a
      parameter rather than a constant because the machine that needs it most is
      a television that cannot be attached to a profiler, and finding the floor
@@ -5027,9 +5030,10 @@ function showPerf(fps){
     `gl  ${GLINFO}`,
     `    ${(canvas.width*canvas.height/1000).toFixed(0)}k px, ` +
     `${(other>0.01 ? canvas.width*canvas.height/other/1000 : 0).toFixed(0)}k px/ms unaccounted`,
-    `off: ${["noplanet","nobg","noclouds","noatmo","noring","detail","fine"]
+    `off: ${["noplanet","nobg","noclouds","noatmo","noring","detail","fine","hsr"]
              .filter(k=>k==="detail"?PARAMS.detail<=0
                        :k==="fine"?!(PARAMS.fine<0?fineOn:PARAMS.fine>0)
+                       :k==="hsr"?PARAMS.hsr
                        :PARAMS[k]).join(" ") || "nothing"}`,
     `keys ${perfKeys.join("  ") || "(press one)"}`,
   ].join(String.fromCharCode(10));
@@ -5660,7 +5664,20 @@ void main(){
 }`);
 
 /* ---------- clouds ---------- */
-const cloudProg = prog(VS_SPH, `#version 300 es
+/* Two builds of the same shader, one with the discard and one without.
+ *
+   The discard has to be absent at COMPILE time to be worth testing, not merely
+   unreached: a tile-based deferred renderer resolves visibility before it
+   shades, and a fragment shader that might discard makes that impossible, so
+   the driver turns Hidden Surface Removal off for the pass on the strength of
+   the instruction existing at all. Toggling a branch around it at runtime
+   would prove nothing.
+
+   It was also doing almost no good where it stood — after moistAt, fbm5, fbm3
+   and ringShade, so the whole cost of the pixel had already been paid and only
+   the lighting was saved. The alpha it avoids is under half a percent, so
+   blending it instead is the same picture. */
+const CLOUD_FS = `#version 300 es
 precision highp float;
 in vec3 vObj; in vec3 vWorld;
 out vec4 o;
@@ -5717,7 +5734,11 @@ void main(){
   vec3 V = normalize(uCam-vWorld);
   float edge = smoothstep(-0.10, 0.42, dot(Nw,V));
   o = vec4(col, dens*0.86*edge*uFade);
-}`);
+}`;
+const CLOUD_DISCARD = "if(dens <= 0.004) discard;";
+if(CLOUD_FS.indexOf(CLOUD_DISCARD) < 0) throw new Error("cloud discard line moved");
+const cloudProg   = prog(VS_SPH, CLOUD_FS);
+const cloudProgHS = prog(VS_SPH, CLOUD_FS.replace(CLOUD_DISCARD, ""));
 
 /* ---------- ring ---------- */
 const VS_RING=`#version 300 es
@@ -7728,18 +7749,19 @@ function frame(now){
   gl.depthMask(false); gl.enable(gl.BLEND);
   gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
   if(!viewLock){
-  gl.useProgram(cloudProg);
-  gl.uniform1i(cloudProg.u.uData,0);
-  gl.uniformMatrix4fv(cloudProg.u.uVP,false,mVP);
-  gl.uniformMatrix3fv(cloudProg.u.uRot,false,rot3);
-  gl.uniform1f(cloudProg.u.uScale,1.016);
-  gl.uniform3fv(cloudProg.u.uSun,SUN);
-  gl.uniform3fv(cloudProg.u.uCam,eye);
-  gl.uniform1f(cloudProg.u.uT,S.time);
-  gl.uniform1f(cloudProg.u.uDrift,cloudDrift);
-  gl.uniform1f(cloudProg.u.uFade, smoothstep(1.55,2.50,CAM.dist));
-  gl.uniform3fv(cloudProg.u.uRingN, POLE);
-  gl.uniform1f(cloudProg.u.uRingFade, ringFade);
+  const cp = PARAMS.hsr ? cloudProgHS : cloudProg;
+  gl.useProgram(cp);
+  gl.uniform1i(cp.u.uData,0);
+  gl.uniformMatrix4fv(cp.u.uVP,false,mVP);
+  gl.uniformMatrix3fv(cp.u.uRot,false,rot3);
+  gl.uniform1f(cp.u.uScale,1.016);
+  gl.uniform3fv(cp.u.uSun,SUN);
+  gl.uniform3fv(cp.u.uCam,eye);
+  gl.uniform1f(cp.u.uT,S.time);
+  gl.uniform1f(cp.u.uDrift,cloudDrift);
+  gl.uniform1f(cp.u.uFade, smoothstep(1.55,2.50,CAM.dist));
+  gl.uniform3fv(cp.u.uRingN, POLE);
+  gl.uniform1f(cp.u.uRingFade, ringFade);
   if(!PARAMS.noclouds) gl.drawElements(gl.TRIANGLES,SPH.idx.length,gl.UNSIGNED_INT,0);
   }
 
