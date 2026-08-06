@@ -7362,8 +7362,20 @@ function frame(now){
        second, where it is drawing a quarter as many pixels — and a television is
        watched from three metres, where that is a trade worth making. */
     const floor = (fps < 12 && dpr <= 0.78) ? Math.max(0.15, PARAMS.minres) : 0.75;
+    /* Resolution was a ONE-WAY ratchet. It fell whenever the frame rate was
+       under 38 and rose only over 57 — so a machine that never reaches 57 slid
+       to the floor during its worst moment and could never climb back, however
+       much cheaper the frame afterwards became. A television sat at 0.42
+       because of a plant rebuild that has since become 4.3x faster, and nothing
+       was ever going to revisit that. 50 leaves room under a 60Hz vsync for the
+       measurement to be a little noisy and still count as headroom.
+
+       The deeper problem this does not fix: the law wants 60fps, and hardware
+       that has never once achieved 60 will always be told to go lower, so on
+       such a machine the FLOOR is the whole resolution policy. That is what
+       `minres` is for. */
     if(fps<38 && dpr>floor){ dpr=Math.max(floor,dpr*0.82); resize(); }
-    else if(fps>57 && dpr < Math.min(devicePixelRatio||1,2)-0.02){
+    else if(fps>50 && dpr < Math.min(devicePixelRatio||1,2)-0.02){
       dpr=Math.min(Math.min(devicePixelRatio||1,2), dpr*1.08); resize(); }
     /* how much of a frame the plant sheet may have. See renderPlants. */
     sheetGap = fps < 10 ? 900 : fps < 20 ? 450 : fps < 34 ? 200 : 0;
